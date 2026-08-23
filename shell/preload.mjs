@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("desktop", {
   checkUpdate: () => ipcRenderer.invoke("update:check"),
   downloadUpdate: () => ipcRenderer.invoke("update:download"),
   installUpdate: () => ipcRenderer.send("update:install"),
+  relaunch: () => ipcRenderer.send("app:relaunch"),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)

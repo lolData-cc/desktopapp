@@ -482,6 +482,18 @@ ipcMain.handle("update:check", async () => { await checkForUpdate() })
 ipcMain.handle("update:download", async () => { await downloadUpdate() })
 ipcMain.on("update:install", () => installUpdate())
 
+/** Restart the app itself. Distinct from installing an update: nothing is
+ *  replaced, the process simply comes back — which is how the boot animation
+ *  gets watched without reinstalling anything.
+ *
+ *  quit() rather than exit(): before-quit is what stops the game clock and
+ *  destroys the overlay, and skipping it would leave a click-through window
+ *  over the game with nothing behind it. */
+ipcMain.on("app:relaunch", () => {
+  app.relaunch()
+  app.quit()
+})
+
 // ── account ────────────────────────────────────────────────────────────────
 
 /** Signing in happens in the BROWSER, never here. This app must never see a

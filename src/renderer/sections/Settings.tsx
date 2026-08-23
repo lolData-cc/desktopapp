@@ -39,6 +39,18 @@ export default function Settings({ s }: { s: AppState }) {
         show 5s
       </button>
 
+      {/* Restarts the process — nothing is replaced and nothing is installed.
+          It exists because the boot animation is otherwise only watchable by
+          closing the app and starting it from a terminal. */}
+      <button
+        type="button"
+        onClick={() => window.desktop.relaunch()}
+        title="Quit and start again — the boot animation plays on the way back"
+        className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30"
+      >
+        restart
+      </button>
+
       <span className="ml-1 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/25">
         outline
       </span>

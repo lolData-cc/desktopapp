@@ -19585,6 +19585,10 @@ ipcMain.handle("update:download", async () => {
   await downloadUpdate();
 });
 ipcMain.on("update:install", () => installUpdate());
+ipcMain.on("app:relaunch", () => {
+  app3.relaunch();
+  app3.quit();
+});
 ipcMain.on("account:signin", () => {
   shell.openExternal(`${SITE}/login?desktop=1`);
 });

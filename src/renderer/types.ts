@@ -127,6 +127,7 @@ declare global {
       checkUpdate(): Promise<void>
       downloadUpdate(): Promise<void>
       installUpdate(): void
+      relaunch(): void
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void
