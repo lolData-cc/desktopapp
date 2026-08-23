@@ -1160,7 +1160,10 @@ ipcMain.handle("art:splash", async (_e, championId: string) => {
   if (splashCache.has(championId)) return splashCache.get(championId) ?? null
 
   try {
-    const res = await fetch(`https://cdn2.loldata.cc/img/champion/splash/${championId}_0.jpg`)
+    // LOADING art, not splash: it is cropped tight to the champion, where a
+    // splash is a wide scene whose background is most of the frame. Sampling a
+    // scene gives you the scene.
+    const res = await fetch(`https://cdn2.loldata.cc/img/champion/loading/${championId}_0.jpg`)
     if (!res.ok) throw new Error(String(res.status))
     const buf = Buffer.from(await res.arrayBuffer())
     const url = `data:image/jpeg;base64,${buf.toString("base64")}`

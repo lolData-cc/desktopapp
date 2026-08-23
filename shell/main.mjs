@@ -20529,7 +20529,7 @@ ipcMain.handle("art:splash", async (_e, championId) => {
   if (splashCache.has(championId))
     return splashCache.get(championId) ?? null;
   try {
-    const res = await fetch(`https://cdn2.loldata.cc/img/champion/splash/${championId}_0.jpg`);
+    const res = await fetch(`https://cdn2.loldata.cc/img/champion/loading/${championId}_0.jpg`);
     if (!res.ok)
       throw new Error(String(res.status));
     const buf = Buffer.from(await res.arrayBuffer());
