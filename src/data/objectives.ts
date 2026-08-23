@@ -19,12 +19,35 @@ export const ELDER_RESPAWN = 6 * 60
 export const ELDER_EARLIEST = 35 * 60
 const SOUL_AT = 4
 
+/** The element names the live API uses in DragonKill.DragonType. */
+export type DragonElement = "Fire" | "Earth" | "Water" | "Air" | "Hextech" | "Chemtech"
+
 export type NextObjective = {
   kind: "dragon" | "elder"
   /** Seconds remaining. Negative means it is already up. */
   inSeconds: number
   /** How many dragons have been taken in total, both teams. */
   taken: number
+  /**
+   * The element of the dragon that is COMING, or null when it cannot be known.
+   *
+   * The first two dragons are random, and only after the second does the Rift
+   * transform and fix the element of every later spawn. That transformation is
+   * not exposed anywhere — no endpoint, no event — so the element is only
+   * learned once a dragon of it has actually been killed, from the third on.
+   *
+   * Null therefore means "we genuinely do not know", and the caller must show a
+   * plain dragon rather than pick one. Guessing here would be a specific,
+   * confident, wrong icon two times out of three.
+   */
+  element: DragonElement | null
+}
+
+/** The element every remaining dragon will be, once that is knowable. */
+function lockedElement(kills: GameEvent[]): DragonElement | null {
+  const elemental = kills.filter((k) => k.DragonType && k.DragonType !== "Elder")
+  if (elemental.length < 3) return null
+  return (elemental[elemental.length - 1]!.DragonType as DragonElement) ?? null
 }
 
 /**
@@ -65,7 +88,7 @@ export function nextObjective(
 
   // Before the first one there is nothing to derive from — it is a fixed time.
   if (kills.length === 0) {
-    return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0 }
+    return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0, element: null }
   }
 
   const last = kills[kills.length - 1]!
@@ -74,10 +97,16 @@ export function nextObjective(
   if (soul) {
     // The Elder arrives on its own timer, or at 35:00 if that comes sooner.
     const due = Math.min(last.EventTime + ELDER_RESPAWN, Math.max(ELDER_EARLIEST, gameTime))
-    return { kind: "elder", inSeconds: due - gameTime, taken: kills.length }
+    // The Elder has its own art; the Rift's element does not apply to it.
+    return { kind: "elder", inSeconds: due - gameTime, taken: kills.length, element: null }
   }
 
-  return { kind: "dragon", inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime, taken: kills.length }
+  return {
+    kind: "dragon",
+    inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime,
+    taken: kills.length,
+    element: lockedElement(kills),
+  }
 }
 
 /** m:ss, floored, never negative. */

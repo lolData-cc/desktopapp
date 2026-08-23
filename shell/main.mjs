@@ -3256,6 +3256,20 @@ async function liveOwnSpells(riotId) {
   return a && b ? [a, b] : null;
 }
 var livePlayers = () => get("/playerlist");
+async function liveOwnRuneIds() {
+  const ap = await get("/activeplayer");
+  const runes = ap?.fullRunes;
+  if (!runes)
+    return [];
+  const ids = (runes.generalRunes ?? []).map((r) => r.id);
+  if (runes.keystone?.id)
+    ids.push(runes.keystone.id);
+  return ids;
+}
+async function liveOwnItemIds(riotId) {
+  const items = await get(`/playeritems?riotId=${encodeURIComponent(riotId)}`);
+  return (items ?? []).map((i) => i.itemID).filter((n) => Number.isFinite(n));
+}
 async function liveEvents() {
   const wrap = await get("/eventdata");
   return wrap?.Events ?? [];
@@ -3278,19 +3292,44 @@ async function load2() {
   const json = await res.json();
   const map = new Map;
   for (const s of Object.values(json.data)) {
-    if (!map.has(s.name))
-      map.set(s.name, s.id);
+    if (map.has(s.name))
+      continue;
+    const ammo = Number(s.maxammo ?? "-1");
+    map.set(s.name, {
+      id: s.id,
+      cooldown: s.cooldown?.[0] ?? 0,
+      charges: Number.isFinite(ammo) && ammo > 0 ? ammo : 1
+    });
   }
   byName = map;
   return map;
 }
-async function spellByName(displayName) {
+var HASTE_SOURCES = [
+  { kind: "rune", id: 8347, haste: 18, name: "Cosmic Insight" },
+  { kind: "item", id: 3158, haste: 10, name: "Ionian Boots of Lucidity" }
+];
+function summonerHaste(runeIds, itemIds) {
+  let total = 0;
+  for (const src of HASTE_SOURCES) {
+    const ids = src.kind === "rune" ? runeIds : itemIds;
+    if (ids.includes(src.id))
+      total += src.haste;
+  }
+  return total;
+}
+var applyHaste = (base, haste) => Math.round(base / (1 + haste / 100));
+async function spellByName(displayName, haste = 0) {
   if (!displayName)
     return null;
-  const id = (await load2()).get(displayName);
-  if (!id)
+  const e = (await load2()).get(displayName);
+  if (!e)
     return null;
-  return { name: displayName, icon: `${CDN2}/${patch2}/img/spell/${id}.png` };
+  return {
+    name: displayName,
+    icon: `${CDN2}/${patch2}/img/spell/${e.id}.png`,
+    cooldown: applyHaste(e.cooldown, haste),
+    charges: e.charges
+  };
 }
 
 // src/data/hud.ts
@@ -3355,6 +3394,12 @@ var DRAGON_RESPAWN = 5 * 60;
 var ELDER_RESPAWN = 6 * 60;
 var ELDER_EARLIEST = 35 * 60;
 var SOUL_AT = 4;
+function lockedElement(kills) {
+  const elemental = kills.filter((k) => k.DragonType && k.DragonType !== "Elder");
+  if (elemental.length < 3)
+    return null;
+  return elemental[elemental.length - 1].DragonType ?? null;
+}
 function soulTakenBy(events, players) {
   const teamOf = new Map;
   for (const p of players) {
@@ -3379,15 +3424,20 @@ function soulTakenBy(events, players) {
 function nextObjective(events, gameTime, players = []) {
   const kills = events.filter((e) => e.EventName === "DragonKill").sort((a, b) => a.EventTime - b.EventTime);
   if (kills.length === 0) {
-    return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0 };
+    return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0, element: null };
   }
   const last = kills[kills.length - 1];
   const soul = soulTakenBy(events, players);
   if (soul) {
     const due = Math.min(last.EventTime + ELDER_RESPAWN, Math.max(ELDER_EARLIEST, gameTime));
-    return { kind: "elder", inSeconds: due - gameTime, taken: kills.length };
+    return { kind: "elder", inSeconds: due - gameTime, taken: kills.length, element: null };
   }
-  return { kind: "dragon", inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime, taken: kills.length };
+  return {
+    kind: "dragon",
+    inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime,
+    taken: kills.length,
+    element: lockedElement(kills)
+  };
 }
 
 // shell/main.ts
@@ -3470,17 +3520,27 @@ var tick = null;
 var noticeTimer = null;
 var announced = null;
 var ownSpells = [];
+var spellHaste = -1;
 async function readOwnSpells() {
-  if (ownSpells.length)
-    return;
   const name = await liveActivePlayerName();
   if (!name)
+    return;
+  const [runes, items] = await Promise.all([
+    liveOwnRuneIds().catch(() => []),
+    liveOwnItemIds(name).catch(() => [])
+  ]);
+  const haste = summonerHaste(runes, items);
+  if (ownSpells.length && haste === spellHaste)
     return;
   const pair = await liveOwnSpells(name);
   if (!pair)
     return;
-  const resolved = await Promise.all(pair.map((n) => spellByName(n).catch(() => null)));
-  ownSpells = resolved.filter((x) => x !== null);
+  const resolved = await Promise.all(pair.map((n) => spellByName(n, haste).catch(() => null)));
+  const found = resolved.filter((x) => x !== null);
+  if (!found.length)
+    return;
+  ownSpells = found;
+  spellHaste = haste;
 }
 function dropNotice() {
   if (noticeTimer)
@@ -3489,10 +3549,10 @@ function dropNotice() {
   push({ notice: null });
   hideOverlay();
 }
-function raiseNotice(kind, inSeconds) {
+function raiseNotice(kind, inSeconds, element = null) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells } });
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells, element } });
   showOverlay();
   if (!PIN_OVERLAY)
     noticeTimer = setTimeout(dropNotice, NOTICE_MS);
@@ -3508,12 +3568,12 @@ async function readObjective() {
     return;
   const spawnAt = Math.round(stats.gameTime + next.inSeconds);
   if (PIN_OVERLAY) {
-    raiseNotice(next.kind, next.inSeconds);
+    raiseNotice(next.kind, next.inSeconds, next.element);
     return;
   }
   if (next.inSeconds <= NOTIFY_LEAD && next.inSeconds > 0 && announced !== spawnAt) {
     announced = spawnAt;
-    raiseNotice(next.kind, next.inSeconds);
+    raiseNotice(next.kind, next.inSeconds, next.element);
   }
 }
 function startGameClock() {
@@ -3521,6 +3581,7 @@ function startGameClock() {
     return;
   announced = null;
   ownSpells = [];
+  spellHaste = -1;
   readObjective();
   tick = setInterval(() => void readObjective(), POLL_MS);
 }
@@ -3530,6 +3591,7 @@ function stopGameClock() {
   tick = null;
   announced = null;
   ownSpells = [];
+  spellHaste = -1;
   dropNotice();
 }
 function createWindow() {

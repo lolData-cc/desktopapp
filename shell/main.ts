@@ -13,11 +13,11 @@ import { dirname, join } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
-import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnSpells } from "../src/live/client"
-import { spellByName, type Spell } from "../src/data/spells"
+import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnSpells, liveOwnRuneIds, liveOwnItemIds } from "../src/live/client"
+import { spellByName, summonerHaste, type Spell } from "../src/data/spells"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
-import { nextObjective } from "../src/data/objectives"
+import { nextObjective, type DragonElement } from "../src/data/objectives"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
@@ -43,6 +43,8 @@ export type AppState = {
     inSeconds: number
     raisedAt: number
     spells: Spell[]
+    /** Which dragon is coming, when that is knowable at all. */
+    element: DragonElement | null
   } | null
   /** Which ability the skill order says to level next, or null for none.
    *  Static advice: it is the order we already publish for this champion. */
@@ -169,14 +171,31 @@ let noticeTimer: ReturnType<typeof setTimeout> | null = null
 let announced: number | null = null
 let ownSpells: Spell[] = []
 
+/** The haste we last resolved the spells at, so buying boots re-reads them but
+ *  a quiet poll does not. */
+let spellHaste = -1
+
 async function readOwnSpells(): Promise<void> {
-  if (ownSpells.length) return
   const name = await liveActivePlayerName()
   if (!name) return
+
+  // Haste changes mid-game — the boots get bought — so this is not a one-shot
+  // read. It is still cheap: three small local requests, only while in a match.
+  const [runes, items] = await Promise.all([
+    liveOwnRuneIds().catch(() => []),
+    liveOwnItemIds(name).catch(() => []),
+  ])
+  const haste = summonerHaste(runes, items)
+  if (ownSpells.length && haste === spellHaste) return
+
   const pair = await liveOwnSpells(name)
   if (!pair) return
-  const resolved = await Promise.all(pair.map((n) => spellByName(n).catch(() => null)))
-  ownSpells = resolved.filter((x): x is Spell => x !== null)
+  const resolved = await Promise.all(pair.map((n) => spellByName(n, haste).catch(() => null)))
+  const found = resolved.filter((x): x is Spell => x !== null)
+  if (!found.length) return
+
+  ownSpells = found
+  spellHaste = haste
 }
 
 function dropNotice(): void {
@@ -186,9 +205,9 @@ function dropNotice(): void {
   hideOverlay()
 }
 
-function raiseNotice(kind: "dragon" | "elder", inSeconds: number): void {
+function raiseNotice(kind: "dragon" | "elder", inSeconds: number, element: DragonElement | null = null): void {
   if (noticeTimer) clearTimeout(noticeTimer)
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells } })
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells, element } })
   showOverlay()
   if (!PIN_OVERLAY) noticeTimer = setTimeout(dropNotice, NOTICE_MS)
 }
@@ -210,7 +229,7 @@ async function readObjective(): Promise<void> {
   if (PIN_OVERLAY) {
     // Keep it on screen and keep the number honest — it still shows the real
     // time to the real next objective, just without ever going away.
-    raiseNotice(next.kind, next.inSeconds)
+    raiseNotice(next.kind, next.inSeconds, next.element)
     return
   }
 
@@ -220,7 +239,7 @@ async function readObjective(): Promise<void> {
     announced !== spawnAt
   ) {
     announced = spawnAt
-    raiseNotice(next.kind, next.inSeconds)
+    raiseNotice(next.kind, next.inSeconds, next.element)
   }
 }
 
@@ -228,6 +247,7 @@ function startGameClock(): void {
   if (tick) return
   announced = null
   ownSpells = []
+  spellHaste = -1
   void readObjective()
   tick = setInterval(() => void readObjective(), POLL_MS)
 }
@@ -237,6 +257,7 @@ function stopGameClock(): void {
   tick = null
   announced = null
   ownSpells = []
+  spellHaste = -1
   dropNotice()
 }
 

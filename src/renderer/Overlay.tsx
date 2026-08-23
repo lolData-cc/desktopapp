@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { abilityBox, type Ability, type HudNudge } from "../data/hud"
+import { dragonIcon, dragonLabel } from "./dragonIcon"
+import type { DragonElement } from "../data/objectives"
 
 /**
  * The notification that sits over the game.
@@ -12,12 +14,14 @@ import { abilityBox, type Ability, type HudNudge } from "../data/hud"
  * the card is up, so what arrives is a reading, not a klaxon. The window
  * underneath is click-through, so none of this may look interactive.
  */
-type Spell = { name: string; icon: string }
+type Spell = { name: string; icon: string; cooldown: number; charges: number }
 type Notice = {
   kind: "dragon" | "elder"
   inSeconds: number
   raisedAt: number
   spells: Spell[]
+  /** Null until the Rift's element is knowable — see objectives.ts. */
+  element: DragonElement | null
 }
 type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
 type AppState = {
@@ -25,8 +29,6 @@ type AppState = {
   levelHint: Ability | null
   hud: HudPlacement
 }
-
-const DRAGON_ICON = "/img/dragon.png"
 
 const clock = (s: number) => {
   const v = Math.max(0, Math.floor(s))
@@ -126,6 +128,43 @@ function AbilityOutline({ ability, hud }: { ability: Ability; hud: HudPlacement 
   )
 }
 
+/**
+ * A spell with its cooldown LENGTH written on it.
+ *
+ * Deliberately not the game's own on-cooldown look — no dimming, no big number
+ * centred on the icon. Nothing we can read tells us whether the spell is up:
+ * Riot publishes no remaining-cooldown field and no cast event. Borrowing the
+ * visual language of "currently down" would state something we do not know.
+ *
+ * A corner plate reads as a property of the spell instead, which is what it is:
+ * how long the cooldown runs for THIS build, haste included.
+ */
+function SpellChip({ spell }: { spell: Spell }) {
+  // m:ss above a minute, not rounded minutes: haste makes these numbers
+  // untidy on purpose — Flash with Cosmic Insight is 254s, and calling that
+  // "4m" would be confidently wrong by fourteen seconds.
+  const cd = spell.cooldown
+  const text = cd >= 60 ? clock(cd) : `${cd}s`
+
+  return (
+    <span className="relative shrink-0">
+      <img
+        src={spell.icon}
+        alt={spell.name}
+        title={spell.name}
+        className="block h-9 w-9 rounded-[3px] ring-1 ring-jade/20"
+        style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.9))" }}
+      />
+      <span
+        className="absolute -bottom-[3px] left-1/2 -translate-x-1/2 rounded-[2px] px-[3px] font-jetbrains text-[9px] font-bold leading-[13px] tabular-nums text-flash"
+        style={{ background: "rgba(4,10,12,0.92)", boxShadow: "0 0 0 1px rgba(0,217,146,0.28)" }}
+      >
+        {spell.charges > 1 ? `${spell.charges}×${text}` : text}
+      </span>
+    </span>
+  )
+}
+
 function Card({ n, visible }: { n: Notice; visible: boolean }) {
   const [left, setLeft] = useState(n.inSeconds)
   const base = useRef({ at: n.raisedAt, value: n.inSeconds })
@@ -147,7 +186,7 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
 
   return (
     <div
-      className="absolute right-0 top-[13%] w-[400px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      className="absolute right-0 top-[13%] w-[440px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
       style={{
         // In from the right edge, out the same way. One movement, reversed.
         transform: visible ? "translateX(0)" : "translateX(105%)",
@@ -173,14 +212,14 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
       {/* the rail, running in off the right edge */}
       <svg
         aria-hidden
-        viewBox="0 0 400 12"
+        viewBox="0 0 440 12"
         preserveAspectRatio="none"
         className="absolute inset-x-0 top-0 h-[12px] w-full overflow-visible"
         style={{ filter: `drop-shadow(0 0 5px ${accent}88)` }}
       >
-        <path d="M 2 11 L 11 2 L 400 2" fill="none" stroke={accent} strokeWidth="1"
+        <path d="M 2 11 L 11 2 L 440 2" fill="none" stroke={accent} strokeWidth="1"
               vectorEffect="non-scaling-stroke" opacity="0.9" />
-        <rect x="318" y="-2.5" width="9" height="9" transform="rotate(45 322.5 2)" fill={accent} />
+        <rect x="358" y="-2.5" width="9" height="9" transform="rotate(45 362.5 2)" fill={accent} />
       </svg>
 
       <div
@@ -189,7 +228,7 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
       >
         <div className="flex items-center gap-3.5">
           <img
-            src={DRAGON_ICON}
+            src={dragonIcon(n.kind, n.element)}
             alt=""
             className="h-11 w-11 shrink-0"
             style={{ filter: `drop-shadow(0 0 10px ${accent}55) drop-shadow(0 2px 6px rgba(0,0,0,0.9))` }}
@@ -199,8 +238,8 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
             <p className="font-jetbrains text-[9px] uppercase tracking-[0.28em]" style={{ color: accent }}>
               lolData
             </p>
-            <p className="font-chakrapetch text-[19px] font-bold leading-tight text-flash">
-              {elder ? "Elder" : "Drake"} is spawning in{" "}
+            <p className="whitespace-nowrap font-chakrapetch text-[19px] font-bold leading-tight text-flash">
+              {dragonLabel(n.kind, n.element)} is spawning in{" "}
               <span className="tabular-nums" style={{ color: accent }}>{clock(left)}</span>
             </p>
           </div>
@@ -209,23 +248,14 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
         {n.spells.length > 0 && (
           <div className="mt-3 flex items-center gap-2.5 border-t border-jade/[0.14] pt-2.5">
             <span className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
-              your spells
+              your spells · cd
             </span>
             {n.spells.map((sp) => (
-              <span key={sp.name} className="flex items-center gap-1.5">
-                <img
-                  src={sp.icon}
-                  alt=""
-                  className="h-7 w-7 rounded-[3px] ring-1 ring-flash/15"
-                  style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.9))" }}
-                />
-                <span className="font-chakrapetch text-[12px] font-semibold text-flash/70">
-                  {sp.name}
-                </span>
-              </span>
+              <SpellChip key={sp.name} spell={sp} />
             ))}
           </div>
         )}
+
       </div>
     </div>
   )

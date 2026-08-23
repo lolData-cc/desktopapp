@@ -67,6 +67,24 @@ export async function liveOwnSpells(riotId: string): Promise<[string, string] | 
 }
 export const livePlayers = () => get<PlayerSlot[]>("/playerlist")
 
+/** Rune ids the player actually took — the only way to spot Cosmic Insight. */
+export async function liveOwnRuneIds(): Promise<number[]> {
+  const ap = await get<{
+    fullRunes?: { generalRunes?: { id: number }[]; keystone?: { id: number } }
+  }>("/activeplayer")
+  const runes = ap?.fullRunes
+  if (!runes) return []
+  const ids = (runes.generalRunes ?? []).map((r) => r.id)
+  if (runes.keystone?.id) ids.push(runes.keystone.id)
+  return ids
+}
+
+/** Item ids currently held — for the boots that shorten summoner spells. */
+export async function liveOwnItemIds(riotId: string): Promise<number[]> {
+  const items = await get<{ itemID: number }[]>(`/playeritems?riotId=${encodeURIComponent(riotId)}`)
+  return (items ?? []).map((i) => i.itemID).filter((n) => Number.isFinite(n))
+}
+
 export async function liveEvents(): Promise<GameEvent[]> {
   const wrap = await get<{ Events?: GameEvent[] }>("/eventdata")
   return wrap?.Events ?? []
