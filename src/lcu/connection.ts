@@ -169,4 +169,10 @@ export class LcuConnection {
     const { data } = await this.request<Phase>("GET", "/lol-gameflow/v1/gameflow-phase")
     return data
   }
+
+  /** The champion select as it stands right now. Null when not in one. */
+  async champSelect(): Promise<unknown | null> {
+    const { status, data } = await this.request("GET", "/lol-champ-select/v1/session")
+    return status === 200 ? data : null
+  }
 }

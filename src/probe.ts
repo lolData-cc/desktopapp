@@ -10,6 +10,7 @@
  * of turning `onChampSelect` into a real screen.
  */
 import { LcuConnection, type Phase } from "./lcu/connection"
+import { championById, currentPatch } from "./data/champions"
 
 const t = () => new Date().toTimeString().slice(0, 8)
 const log = (tag: string, msg: string) => console.log(`${t()}  ${tag.padEnd(12)} ${msg}`)
@@ -26,7 +27,18 @@ const lcu = new LcuConnection({
     const phase = await lcu.phase()
     lastPhase = phase
     log("PHASE", phase ?? "unknown")
-    console.log("\n  waiting for events — open a lobby or start a champion select\n")
+
+    // Read what is already true; do not wait for it to change. Events fire on
+    // CHANGES only, so attaching in the middle of a champion select — which is
+    // most of the time, since people open the app after the queue has popped —
+    // would leave it blind until somebody locked in.
+    if (phase === "ChampSelect") {
+      const session = await lcu.champSelect()
+      if (session) await onChampSelect(session)
+      else log("CHAMPSELECT", "in select, but the session is still empty")
+    }
+
+    console.log("\n  attached — waiting for changes\n")
   },
 
   onDisconnect: () => log("CLOSED", "client went away — waiting for it to come back"),
@@ -46,14 +58,14 @@ const lcu = new LcuConnection({
 
     // Champion select: the moment our data is worth the most.
     if (e.uri === "/lol-champ-select/v1/session") {
-      onChampSelect(e.data)
+      void onChampSelect(e.data)
       return
     }
   },
 })
 
 /** Everything we need to ask the box for a build is in this payload. */
-function onChampSelect(data: unknown): void {
+async function onChampSelect(data: unknown): Promise<void> {
   const s = data as any
   if (!s?.myTeam) return
 
@@ -61,13 +73,25 @@ function onChampSelect(data: unknown): void {
   if (!me) return
 
   const picked = (t: any[]) => t.filter((p) => p.championId > 0).length
+  const champ = await championById(me.championId)
+
+  // assignedPosition is empty in customs and blind pick — the client only fills
+  // it in queues that assign roles. Not a failure; it means we have to infer the
+  // role or ask, rather than assume the field will be there.
+  const role = me.assignedPosition || "(none — custom or blind)"
 
   log(
     "CHAMPSELECT",
-    `my pick=${me.championId || "—"} role=${me.assignedPosition || "—"} · ` +
-      `allies locked ${picked(s.myTeam)}/${s.myTeam.length} · ` +
-      `enemies locked ${picked(s.theirTeam ?? [])}/${(s.theirTeam ?? []).length}`
+    `${champ ? `${champ.name} (${champ.slug})` : "not picked yet"} · role ${role} · ` +
+      `allies ${picked(s.myTeam)}/${s.myTeam.length} · ` +
+      `enemies ${picked(s.theirTeam ?? [])}/${(s.theirTeam ?? []).length}`
   )
+
+  if (champ) {
+    // This is the hand-off: from here the champion is one our own endpoints
+    // already answer for, so the next step is a fetch, not more client parsing.
+    log("→ BOX", `would request /api/champion/build for ${champ.slug} on patch ${await currentPatch()}`)
+  }
 }
 
 // ── run ────────────────────────────────────────────────────────────────────
