@@ -74,5 +74,5 @@ protocols:
 # CDN is where everything else already lives.
 publish:
   - provider: generic
-    url: https://cdn.loldata.cc/desktop
+    url: https://cdn2.loldata.cc/desktopapp
     channel: latest

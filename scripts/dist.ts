@@ -7,9 +7,14 @@
  * occasionally. Nothing about the build is wrong, the folder just is not a
  * place a build can safely write.
  *
- * So artifacts go to LOCALAPPDATA, which nothing syncs. The path is printed
- * rather than assumed, because a build whose output you cannot find is a build
- * that did not happen.
+ * So artifacts go to a folder in the user profile, outside OneDrive. NOT to
+ * LOCALAPPDATA, which was the first attempt: files written there by the build's
+ * child processes were not visible to the rest of the machine, so the release
+ * appeared to succeed and produced a directory nobody else could open. This
+ * location was checked from outside the build before being chosen.
+ *
+ * The path is printed rather than assumed, because a build whose output you
+ * cannot find is a build that did not happen.
  *
  * Pass architectures through: `bun run dist -- --ia32` and so on. x64 is the
  * default and the only one that ships — League requires 64-bit Windows, so an
@@ -19,12 +24,8 @@ import { spawnSync } from "node:child_process"
 import { mkdirSync } from "node:fs"
 import { join } from "node:path"
 
-const base =
-  process.env.LOCALAPPDATA ??
-  process.env.XDG_CACHE_HOME ??
-  join(process.env.HOME ?? ".", ".cache")
-
-const out = join(base, "loldata-desktop-release")
+const home = process.env.USERPROFILE ?? process.env.HOME ?? "."
+const out = join(home, "loldata-releases")
 mkdirSync(out, { recursive: true })
 
 const passthrough = process.argv.slice(2)

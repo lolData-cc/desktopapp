@@ -31,14 +31,20 @@ Uploading the `.exe` without `latest.yml` means new users get the new version an
 existing users never hear about it. Uploading `latest.yml` without the `.exe`
 means every installed app offers an update that 404s. They go up together.
 
-The output goes to `%LOCALAPPDATA%\loldata-desktop-release`, **not** into the
-project. This repository lives under OneDrive, which locks files while it syncs
-them; packaging extracts several hundred Electron binaries and then renames the
-directory, and OneDrive makes that rename fail with `EPERM` every time.
+The output goes to `%USERPROFILE%\loldata-releases`, **not** into the project.
+
+Two reasons, both learned the hard way:
+
+- This repository lives under OneDrive, which locks files while it syncs them.
+  Packaging extracts several hundred Electron binaries and then renames the
+  directory, and OneDrive makes that rename fail with `EPERM` every time.
+- `%LOCALAPPDATA%` was the first alternative and was worse: the build succeeded
+  and produced a folder that was not visible to the rest of the machine. A
+  release you cannot open is harder to notice than one that failed.
 
 ## Where it goes
 
-`https://cdn.loldata.cc/desktop/` — matching `publish.url` in
+`https://cdn2.loldata.cc/desktopapp/` — matching `publish.url` in
 `electron-builder.yml`. The app asks for `latest.yml` there on every start.
 
 Both the download page and the app read the version from that one file, so
