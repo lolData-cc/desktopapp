@@ -3,6 +3,7 @@ import { resolvePage, type Perk, type Style } from "../../data/perks"
 import { CDN, type AppState } from "../types"
 import { championById } from "../../data/champions"
 import Scoreboard from "./Scoreboard"
+import DsPanel from "../DsPanel"
 
 /** What the client's phase means to a person. The raw names are Riot's
  *  vocabulary; nobody outside the codebase should have to read "PreEndOfGame". */
@@ -22,20 +23,20 @@ const PHASE_COPY: Record<string, { title: string; sub: string }> = {
 
 export function Waiting() {
   return (
-    <div className="hud rise relative w-full max-w-[420px] overflow-hidden px-8 py-12 text-center">
-      <span aria-hidden className="sweep pointer-events-none absolute inset-x-0 top-0 h-[2px]" />
-
+    <DsPanel className="rise w-full max-w-[460px]" eyebrow="standby">
+      <div className="px-8 py-11">
       <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.3em] text-jade/50">
         no client
       </p>
-      <h1 className="mt-3 font-chakrapetch text-[26px] font-bold leading-tight">
+      <h1 className="mt-2.5 font-chakrapetch text-[30px] font-bold leading-none tracking-tight">
         Open League
       </h1>
-      <p className="mx-auto mt-2 max-w-[34ch] font-chakrapetch text-[13px] leading-relaxed text-flash/40">
-        This attaches on its own the moment the client is running. Nothing to
-        press.
+      <span aria-hidden className="mt-4 block h-px w-full bg-jade/[0.16]" />
+      <p className="mt-3 max-w-[38ch] font-chakrapetch text-[13px] leading-relaxed text-flash/40">
+        This attaches on its own the moment the client is running. Nothing to press.
       </p>
-    </div>
+      </div>
+    </DsPanel>
   )
 }
 
@@ -49,7 +50,8 @@ export function Attached({ s }: { s: AppState }) {
 
   return (
     <div className="flex w-full max-w-[560px] flex-col">
-    <div className="hud relative w-full px-9 py-10">
+    <DsPanel className="w-full" eyebrow="client">
+      <div className="px-9 py-10">
 
       {/* the phase, keyed so every change replays the entrance */}
       <div key={s.phase ?? "none"} className="rise">
@@ -59,6 +61,9 @@ export function Attached({ s }: { s: AppState }) {
         <h1 className="mt-2.5 font-chakrapetch text-[30px] font-bold leading-none tracking-tight">
           {copy.title}
         </h1>
+        {/* the rule under the head, as the notification has: it is what turns a
+            title and a body into a card that was designed. */}
+        <span aria-hidden className="mt-4 block h-px w-full bg-jade/[0.16]" />
       </div>
 
       {sel && (
@@ -93,7 +98,8 @@ export function Attached({ s }: { s: AppState }) {
 
       {sel?.champion && <RunePanel s={s} />}
       <RuneImportNotice imp={s.runeImport} />
-    </div>
+      </div>
+    </DsPanel>
 
     {/* Only when there is no champion select to think about: in champ select
         the rune page is the thing that matters, and a season record below it
