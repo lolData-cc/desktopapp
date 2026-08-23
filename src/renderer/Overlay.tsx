@@ -201,8 +201,8 @@ function Badge({
         color: solid ? "#040a0c" : colour,
         background: solid ? colour : "rgba(4,10,12,0.88)",
         boxShadow: solid
-          ? "0 2px 6px rgba(0,0,0,0.9)"
-          : `inset 0 0 0 1px ${colour}99, 0 2px 6px rgba(0,0,0,0.9)`,
+          ? "0 2px 7px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.75)"
+          : `inset 0 0 0 1px ${colour}99, 0 2px 7px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.75)`,
       }}
     >
       {text}
