@@ -69,6 +69,23 @@ export const liveActivePlayerName = () => get<string>("/activeplayername")
 
 export const livePlayers = () => get<PlayerSlot[]>("/playerlist")
 
+/** Your own gold and inventory. Yours only — the scoreboard shows everyone's
+ *  items, but this is the pair the shop decisions are made from. */
+export async function liveOwnPurse(riotId: string): Promise<{
+  gold: number
+  items: { itemID: number; count?: number }[]
+} | null> {
+  const [ap, items] = await Promise.all([
+    get<{ currentGold?: number }>("/activeplayer"),
+    get<{ itemID: number; count?: number }[]>(`/playeritems?riotId=${encodeURIComponent(riotId)}`),
+  ])
+  if (!ap) return null
+  return {
+    gold: Math.max(0, Math.floor(ap.currentGold ?? 0)),
+    items: (items ?? []).filter((i) => Number.isFinite(i?.itemID)),
+  }
+}
+
 export async function liveEvents(): Promise<GameEvent[]> {
   const wrap = await get<{ Events?: GameEvent[] }>("/eventdata")
   return wrap?.Events ?? []

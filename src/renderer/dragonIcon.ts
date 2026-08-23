@@ -71,13 +71,16 @@ const LABEL: Record<DragonElement, string> = {
  * correct one: their element is random and nothing exposes it, so a specific
  * icon would be a confident guess that is wrong most of the time.
  */
-export function dragonIcon(kind: "dragon" | "elder", element: DragonElement | null): string {
+/** `kind` is the notice kind, which now includes non-dragon notices. Anything
+ *  that is not an elder falls to the plain dragon rather than being refused —
+ *  the caller that passes "item" never renders the result. */
+export function dragonIcon(kind: string, element: DragonElement | null): string {
   if (kind === "elder") return elder
   return element ? BY_ELEMENT[element] : generic
 }
 
 /** "Infernal Drake" once known, plain "Drake" while it is not. */
-export function dragonLabel(kind: "dragon" | "elder", element: DragonElement | null): string {
+export function dragonLabel(kind: string, element: DragonElement | null): string {
   if (kind === "elder") return "Elder Dragon"
   return element ? LABEL[element] : "Drake"
 }

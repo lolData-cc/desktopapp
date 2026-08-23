@@ -19157,6 +19157,18 @@ function get(path) {
 var liveGameStats = () => get("/gamestats");
 var liveActivePlayerName = () => get("/activeplayername");
 var livePlayers = () => get("/playerlist");
+async function liveOwnPurse(riotId) {
+  const [ap, items] = await Promise.all([
+    get("/activeplayer"),
+    get(`/playeritems?riotId=${encodeURIComponent(riotId)}`)
+  ]);
+  if (!ap)
+    return null;
+  return {
+    gold: Math.max(0, Math.floor(ap.currentGold ?? 0)),
+    items: (items ?? []).filter((i) => Number.isFinite(i?.itemID))
+  };
+}
 async function liveEvents() {
   const wrap = await get("/eventdata");
   return wrap?.Events ?? [];
@@ -19381,6 +19393,286 @@ async function teamGold(players, myTeam) {
   return out;
 }
 
+// src/data/affordability.ts
+var CDN3 = "https://cdn2.loldata.cc";
+var FALLBACK_PATCH3 = "16.16.1";
+var tree = null;
+var loading2 = null;
+async function load4() {
+  if (tree)
+    return tree;
+  if (loading2)
+    return loading2;
+  loading2 = (async () => {
+    let patch2 = FALLBACK_PATCH3;
+    const marker = await fetch(`${CDN3}/_current_version.txt`).catch(() => null);
+    if (marker?.ok)
+      patch2 = (await marker.text()).trim() || FALLBACK_PATCH3;
+    const res = await fetch(`${CDN3}/${patch2}/data/en_US/item.json`);
+    if (!res.ok)
+      throw new Error(`item data ${res.status}`);
+    const json = await res.json();
+    const map = new Map;
+    for (const [id, it] of Object.entries(json.data)) {
+      map.set(Number(id), {
+        total: it.gold?.total ?? 0,
+        from: (it.from ?? []).map(Number),
+        name: it.name
+      });
+    }
+    tree = map;
+    return map;
+  })();
+  try {
+    return await loading2;
+  } finally {
+    loading2 = null;
+  }
+}
+var takeFromBag = (bag, id) => {
+  const n = bag.get(id) ?? 0;
+  if (n <= 0)
+    return false;
+  bag.set(id, n - 1);
+  return true;
+};
+function remaining(id, bag, nodes) {
+  const node = nodes.get(id);
+  if (!node)
+    return 0;
+  if (takeFromBag(bag, id))
+    return 0;
+  const parts = node.from;
+  if (!parts.length)
+    return node.total;
+  const partsTotal = parts.reduce((n, p) => n + (nodes.get(p)?.total ?? 0), 0);
+  const combine = Math.max(0, node.total - partsTotal);
+  return combine + parts.reduce((n, p) => n + remaining(p, bag, nodes), 0);
+}
+async function costToComplete(itemId, inventory2, gold) {
+  const nodes = await load4();
+  const node = nodes.get(itemId);
+  if (!node)
+    return null;
+  const bag = new Map;
+  for (const it of inventory2) {
+    bag.set(it.itemID, (bag.get(it.itemID) ?? 0) + Math.max(1, it.count ?? 1));
+  }
+  const left = remaining(itemId, bag, nodes);
+  return {
+    item: itemId,
+    name: node.name,
+    full: node.total,
+    remaining: left,
+    gold,
+    affordable: gold >= left
+  };
+}
+var warmItemTree = () => void load4().catch(() => {
+  return;
+});
+
+// src/data/champClass.ts
+var CDN4 = "https://cdn2.loldata.cc";
+var FALLBACK_PATCH4 = "16.16.1";
+var byKey = null;
+var loading3 = null;
+function damageOf(attack = 0, magic = 0) {
+  if (attack >= magic + 2)
+    return "AD";
+  if (magic >= attack + 2)
+    return "AP";
+  return null;
+}
+var rangeOf = (range = 0) => range >= 300 ? "Ranged" : "Melee";
+async function load5() {
+  if (byKey)
+    return byKey;
+  if (loading3)
+    return loading3;
+  loading3 = (async () => {
+    let patch2 = FALLBACK_PATCH4;
+    const marker = await fetch(`${CDN4}/_current_version.txt`).catch(() => null);
+    if (marker?.ok)
+      patch2 = (await marker.text()).trim() || FALLBACK_PATCH4;
+    const res = await fetch(`${CDN4}/${patch2}/data/en_US/champion.json`);
+    if (!res.ok)
+      throw new Error(`champion data ${res.status}`);
+    const json = await res.json();
+    const map = new Map;
+    for (const c of Object.values(json.data)) {
+      const cats = [...c.tags ?? []];
+      const dmg = damageOf(c.info?.attack, c.info?.magic);
+      if (dmg)
+        cats.push(dmg);
+      cats.push(rangeOf(c.stats?.attackrange));
+      map.set(Number(c.key), { id: c.id, name: c.name, key: Number(c.key), categories: cats });
+    }
+    byKey = map;
+    return map;
+  })();
+  try {
+    return await loading3;
+  } finally {
+    loading3 = null;
+  }
+}
+async function classifyAll(keys) {
+  const table = await load5();
+  return keys.map((k) => table.get(k)).filter((c) => !!c);
+}
+var HEAVY_CC = new Set([
+  "Amumu",
+  "Sejuani",
+  "Maokai",
+  "Zac",
+  "Skarner",
+  "Vi",
+  "JarvanIV",
+  "MonkeyKing",
+  "Hecarim",
+  "Gragas",
+  "Nunu",
+  "Rammus",
+  "Warwick",
+  "Volibear",
+  "Sett",
+  "Ornn",
+  "Malphite",
+  "Sion",
+  "Galio",
+  "Poppy",
+  "Gnar",
+  "Chogath",
+  "Trundle",
+  "Shen",
+  "Jax",
+  "Renekton",
+  "Pantheon",
+  "Riven",
+  "Camille",
+  "Diana",
+  "Kennen",
+  "Fiddlesticks",
+  "Nocturne",
+  "Elise",
+  "Rell",
+  "KSante",
+  "Mordekaiser",
+  "Nautilus",
+  "Lillia",
+  "Annie",
+  "Veigar",
+  "Syndra",
+  "Lissandra",
+  "Cassiopeia",
+  "TwistedFate",
+  "Taliyah",
+  "Ahri",
+  "Lux",
+  "Neeko",
+  "Zoe",
+  "Orianna",
+  "Ryze",
+  "Anivia",
+  "Brand",
+  "Zyra",
+  "Swain",
+  "Seraphine",
+  "Leona",
+  "Thresh",
+  "Blitzcrank",
+  "Pyke",
+  "Rakan",
+  "Alistar",
+  "Braum",
+  "Nami",
+  "Sona",
+  "Bard",
+  "Renata",
+  "Zilean",
+  "Lulu",
+  "Morgana",
+  "Ashe",
+  "Varus",
+  "Jhin",
+  "Senna"
+].map((s) => s.toLowerCase()));
+var CC_HEAVY_AT = 3;
+var isHeavyCC = (championId) => HEAVY_CC.has(championId.toLowerCase());
+var ccCarriers = (champs) => champs.filter((c) => isHeavyCC(c.id));
+
+// src/data/compAdvice.ts
+var API3 = "https://api2.loldata.cc";
+function compShapes(enemyCategories) {
+  const counts = new Map;
+  for (const cats of enemyCategories) {
+    for (const c of new Set(cats))
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  return [...counts.entries()].filter(([, n]) => n >= 2).map(([cls, count]) => ({ cls, count })).sort((a, b) => b.count - a.count);
+}
+var graphFor = (champion, role, shapes) => ({
+  subject: { champion, ...role ? { role } : {} },
+  constraints: [],
+  categories: shapes.map((s) => ({ side: "enemy", cls: s.cls, min: s.count })),
+  filters: { scope: "current_patch" },
+  output: { kind: "stats" }
+});
+async function post(path, body, signal) {
+  try {
+    const res = await fetch(`${API3}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal
+    });
+    if (!res.ok)
+      return null;
+    const json = await res.json();
+    return json?.error ? null : json;
+  } catch {
+    return null;
+  }
+}
+var MIN_COHORT = 400;
+var MIN_SLOT_GAMES = 150;
+async function buildForComp(champion, role, shapes, signal) {
+  let use = [...shapes];
+  for (;; ) {
+    const data = await post("/api/explorer/buildpath", graphFor(champion, role, use), signal);
+    if (!data)
+      return null;
+    if (data.cohortGames >= MIN_COHORT || use.length === 0) {
+      return {
+        slots: pickPath(data.slots),
+        cohortGames: data.cohortGames,
+        baseline: data.baseline,
+        patch: data.patch,
+        applied: use
+      };
+    }
+    use = use.slice(0, -1);
+  }
+}
+function pickPath(slots) {
+  const path = [];
+  const used = new Set;
+  for (const options of slots) {
+    const next = options.find((o) => !used.has(o.item));
+    if (!next || next.games < MIN_SLOT_GAMES)
+      break;
+    used.add(next.item);
+    path.push(next);
+  }
+  return path;
+}
+function describeShapes(shapes) {
+  if (!shapes.length)
+    return "no strong comp pattern";
+  return shapes.map((s) => `${s.count}+ ${s.cls.toLowerCase()}`).join(", ");
+}
+
 // shell/main.ts
 var __dirname2 = dirname2(fileURLToPath(import.meta.url));
 var DEV_URL2 = process.env.VITE_DEV_SERVER_URL;
@@ -19393,6 +19685,8 @@ var state = {
   patch: null,
   select: null,
   notice: null,
+  matchup: null,
+  matchupLoading: false,
   gold: null,
   levelHint: null,
   runes: null,
@@ -19438,7 +19732,10 @@ var lcu = new LcuConnection({
     if (phase === "ChampSelect")
       await readSelect(await lcu.champSelect());
   },
-  onDisconnect: () => push({ client: "waiting", summoner: null, ranked: null, matches: null, phase: null, select: null }),
+  onDisconnect: () => {
+    lastEnemyKey = "";
+    push({ client: "waiting", summoner: null, ranked: null, matches: null, phase: null, select: null });
+  },
   onEvent: (e) => {
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
       const phase = e.data;
@@ -19483,6 +19780,38 @@ async function readProfile() {
   ]);
   push({ ranked, matches });
 }
+var matchupFetch = null;
+var lastEnemyKey = "";
+async function readMatchup(champion, role, enemyIds) {
+  const key = `${champion?.key ?? 0}:${role ?? ""}:${[...enemyIds].sort().join(",")}`;
+  if (key === lastEnemyKey)
+    return;
+  lastEnemyKey = key;
+  matchupFetch?.abort();
+  if (!champion || enemyIds.length < 3)
+    return push({ matchup: null, matchupLoading: false });
+  const ctl = new AbortController;
+  matchupFetch = ctl;
+  push({ matchupLoading: true });
+  const enemies = await classifyAll(enemyIds).catch(() => []);
+  const shapes = compShapes(enemies.map((e) => e.categories));
+  const cc = ccCarriers(enemies);
+  const advice = await buildForComp(champion.name, role, shapes, ctl.signal).catch(() => null);
+  if (ctl.signal.aborted)
+    return;
+  push({
+    matchupLoading: false,
+    matchup: advice ? {
+      slots: advice.slots,
+      cohortGames: advice.cohortGames,
+      applied: advice.applied,
+      shapeLabel: describeShapes(advice.applied),
+      ccNames: cc.map((c) => c.name),
+      ccHeavy: cc.length >= CC_HEAVY_AT,
+      patch: advice.patch
+    } : null
+  });
+}
 async function readSelect(data) {
   const s = data;
   if (!s?.myTeam)
@@ -19496,6 +19825,8 @@ async function readSelect(data) {
   const role = me.assignedPosition || null;
   if (champion?.key !== state.select?.champion?.key)
     readRunes(champion, role);
+  const enemyIds = theirTeam.map((p) => Number(p.championId)).filter((id) => Number.isFinite(id) && id > 0);
+  readMatchup(champion, role, enemyIds);
   push({
     select: {
       champion,
@@ -19540,13 +19871,40 @@ function dropNotice() {
   push({ notice: null });
   syncOverlay();
 }
-function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS) {
+function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } });
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item } });
   syncOverlay();
   if (!state.pinned)
     noticeTimer = setTimeout(dropNotice, ms);
+}
+var announcedItems = new Set;
+async function readShop(riotId) {
+  const build = state.matchup?.slots;
+  if (!riotId || !build?.length)
+    return;
+  const purse = await liveOwnPurse(riotId).catch(() => null);
+  if (!purse)
+    return;
+  const owned = new Set(purse.items.map((i) => i.itemID));
+  const nextIndex = build.findIndex((s) => !owned.has(s.item));
+  if (nextIndex < 0)
+    return;
+  const next = build[nextIndex];
+  if (announcedItems.has(next.item))
+    return;
+  const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null);
+  if (!cost?.affordable)
+    return;
+  announcedItems.add(next.item);
+  raiseNotice("item", 0, null, { ours: [], theirs: [] }, NOTICE_MS, {
+    id: next.item,
+    name: cost.name,
+    cost: cost.remaining,
+    index: nextIndex + 1,
+    total: build.length
+  });
 }
 async function readObjective() {
   const stats = await liveGameStats();
@@ -19562,6 +19920,7 @@ async function readObjective() {
     return;
   const tally = dragonTally(events, players ?? [], me);
   const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null;
+  readShop(me);
   const gold = await teamGold(players ?? [], myTeam).catch(() => null);
   if (gold) {
     push({ gold });
@@ -19581,6 +19940,8 @@ function startGameClock() {
   if (tick)
     return;
   warmItemCosts();
+  warmItemTree();
+  announcedItems = new Set;
   announced = null;
   readObjective();
   tick = setInterval(() => void readObjective(), POLL_MS);

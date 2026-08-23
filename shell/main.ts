@@ -22,12 +22,13 @@ import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
 import { linkFromArgv, linkKind, parseAuthLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
-import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName } from "../src/live/client"
+import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnPurse } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
 import { dragonTally, nextObjective, type DragonElement, type DragonTally } from "../src/data/objectives"
 import { teamGold, type TeamGold } from "../src/data/teamGold"
 import { warmItemCosts } from "../src/data/itemCost"
+import { costToComplete, warmItemTree } from "../src/data/affordability"
 import { classifyAll, ccCarriers, CC_HEAVY_AT } from "../src/data/champClass"
 import { buildForComp, compShapes, describeShapes, type BuildSlot, type CompShape } from "../src/data/compAdvice"
 
@@ -56,14 +57,16 @@ export type AppState = {
    *  Null the rest of the time — the overlay is a notification now, not a
    *  panel that lives on screen for the whole match. */
   notice: {
-    kind: "dragon" | "elder"
+    kind: "dragon" | "elder" | "item"
     /** Seconds remaining AT THE MOMENT it was raised; the renderer ticks down. */
     inSeconds: number
     raisedAt: number
     /** Which dragon is coming, when that is knowable at all. */
     element: DragonElement | null
-    /** Who has taken which drakes so far. */
+    /** Who has taken which drakes so far. Empty for an item notice. */
     tally: DragonTally
+    /** Set only on an item notice: what just became affordable. */
+    item?: { id: number; name: string; cost: number; index: number; total: number }
   } | null
   /** What to build against the team you are actually facing, worked out in
    *  champion select — where the comp is known and there is still time to act
@@ -203,8 +206,10 @@ const lcu = new LcuConnection({
     if (phase === "ChampSelect") await readSelect(await lcu.champSelect())
   },
 
-  onDisconnect: () =>
-    push({ client: "waiting", summoner: null, ranked: null, matches: null, phase: null, select: null }),
+  onDisconnect: () => {
+    lastEnemyKey = ""
+    push({ client: "waiting", summoner: null, ranked: null, matches: null, phase: null, select: null })
+  },
 
   onEvent: (e) => {
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
@@ -264,6 +269,56 @@ async function readProfile(): Promise<void> {
   push({ ranked, matches })
 }
 
+/**
+ * The build for the team you are about to face, worked out in champion select.
+ *
+ * Here rather than in game, and deliberately: the comp is already known, there
+ * is still time to act on it, and the query takes seconds — which champion
+ * select has and a teamfight does not.
+ *
+ * Recomputed only when the ENEMY side changes. The session fires on every
+ * hover, timer tick and summoner swap, and each run is a multi-second query
+ * against millions of games.
+ */
+let matchupFetch: AbortController | null = null
+let lastEnemyKey = ""
+
+async function readMatchup(champion: Champion | null, role: string | null, enemyIds: number[]): Promise<void> {
+  const key = `${champion?.key ?? 0}:${role ?? ""}:${[...enemyIds].sort().join(",")}`
+  if (key === lastEnemyKey) return
+  lastEnemyKey = key
+
+  matchupFetch?.abort()
+  if (!champion || enemyIds.length < 3) return push({ matchup: null, matchupLoading: false })
+
+  const ctl = new AbortController()
+  matchupFetch = ctl
+  push({ matchupLoading: true })
+
+  const enemies = await classifyAll(enemyIds).catch(() => [])
+  const shapes = compShapes(enemies.map((e) => e.categories))
+  const cc = ccCarriers(enemies)
+
+  const advice = await buildForComp(champion.name, role, shapes, ctl.signal).catch(() => null)
+  if (ctl.signal.aborted) return
+
+  push({
+    matchupLoading: false,
+    matchup: advice
+      ? {
+          slots: advice.slots,
+          cohortGames: advice.cohortGames,
+          applied: advice.applied,
+          shapeLabel: describeShapes(advice.applied),
+          ccNames: cc.map((c) => c.name),
+          // The backend's own threshold, not a new one invented here.
+          ccHeavy: cc.length >= CC_HEAVY_AT,
+          patch: advice.patch,
+        }
+      : null,
+  })
+}
+
 async function readSelect(data: unknown): Promise<void> {
   const s = data as any
   if (!s?.myTeam) return push({ select: null })
@@ -279,6 +334,13 @@ async function readSelect(data: unknown): Promise<void> {
   // Only refetch when the pick actually changed — champ select emits a session
   // update on every hover, timer tick and summoner swap.
   if (champion?.key !== state.select?.champion?.key) void readRunes(champion, role)
+
+  // Locked-in enemies only: a hovered pick is not a commitment, and querying on
+  // every hover would mean a multi-second job per twitch of someone's mouse.
+  const enemyIds = theirTeam
+    .map((p: any) => Number(p.championId))
+    .filter((id: number) => Number.isFinite(id) && id > 0)
+  void readMatchup(champion, role, enemyIds)
 
   push({
     select: {
@@ -376,19 +438,59 @@ function dropNotice(): void {
 }
 
 function raiseNotice(
-  kind: "dragon" | "elder",
+  kind: "dragon" | "elder" | "item",
   inSeconds: number,
   element: DragonElement | null,
   tally: DragonTally,
-  ms: number = NOTICE_MS
+  ms: number = NOTICE_MS,
+  item?: { id: number; name: string; cost: number; index: number; total: number }
 ): void {
   if (noticeTimer) clearTimeout(noticeTimer)
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } })
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item } })
 
   // A notice arriving during another's exit cancels the pending hide, so the
   // window does not disappear out from under the new one.
   syncOverlay()
   if (!state.pinned) noticeTimer = setTimeout(dropNotice, ms)
+}
+
+/**
+ * The item the active build says to buy next, once it can be bought.
+ *
+ * Fires ONCE per item. A notification that repeats every two seconds while you
+ * stand on the fountain deciding is not a reminder, it is nagging — and the
+ * moment worth marking is the crossing, not the state.
+ *
+ * Owning the item is what advances the build, so buying it silently arms the
+ * next one rather than needing anything to be dismissed.
+ */
+let announcedItems = new Set<number>()
+
+async function readShop(riotId: string | null): Promise<void> {
+  const build = state.matchup?.slots
+  if (!riotId || !build?.length) return
+
+  const purse = await liveOwnPurse(riotId).catch(() => null)
+  if (!purse) return
+
+  const owned = new Set(purse.items.map((i) => i.itemID))
+  const nextIndex = build.findIndex((s) => !owned.has(s.item))
+  if (nextIndex < 0) return                       // the build is finished
+
+  const next = build[nextIndex]!
+  if (announcedItems.has(next.item)) return
+
+  const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null)
+  if (!cost?.affordable) return
+
+  announcedItems.add(next.item)
+  raiseNotice("item", 0, null, { ours: [], theirs: [] }, NOTICE_MS, {
+    id: next.item,
+    name: cost.name,
+    cost: cost.remaining,
+    index: nextIndex + 1,
+    total: build.length,
+  })
 }
 
 async function readObjective(): Promise<void> {
@@ -407,6 +509,8 @@ async function readObjective(): Promise<void> {
 
   // Same read, no extra request: /playerlist already carries every inventory.
   const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null
+  void readShop(me)
+
   const gold = await teamGold(players ?? [], myTeam).catch(() => null)
   if (gold) {
     push({ gold })
@@ -439,6 +543,8 @@ function startGameClock(): void {
   // The price table is 1MB and only needed once; fetch it as the game starts
   // rather than in the middle of the first scoreboard read.
   warmItemCosts()
+  warmItemTree()
+  announcedItems = new Set()
   announced = null
   void readObjective()
   tick = setInterval(() => void readObjective(), POLL_MS)

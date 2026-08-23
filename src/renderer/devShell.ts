@@ -276,6 +276,32 @@ const SCENES: Record<string, unknown> = {
     matches: null,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
+  // la notifica dell'oggetto acquistabile
+  item: {
+    client: "attached",
+    summoner: { name: "yuumi45", tag: "EU1", level: 104, puuid: "p", iconId: 3150 },
+    phase: "InProgress",
+    patch: "16.16.1",
+    select: null,
+    notice: {
+      kind: "item", inSeconds: 0, raisedAt: Date.now(), element: null,
+      tally: { ours: [], theirs: [] },
+      item: { id: 6653, name: "Liandry's Torment", cost: 2600, index: 1, total: 3 },
+    },
+    gold: null,
+    levelHint: null,
+    pinned: false,
+    canUpdate: false,
+    update: { state: "idle", version: "0.0.2" },
+    runes: null,
+    runeImport: { state: "idle" },
+    account: null,
+    ranked: null,
+    matches: null,
+    matchup: null,
+    matchupLoading: false,
+    hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
+  },
 }
 
 export function installDevShell(): void {
