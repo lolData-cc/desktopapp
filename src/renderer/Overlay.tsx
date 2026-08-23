@@ -185,23 +185,6 @@ function TopRightGold({ g, hud }: { g: TeamGold; hud: HudPlacement }) {
         }}
       />
 
-      {/* The game rules its strip off along the bottom with a thin teal line
-          that fades out to the left. Ours picks that line up and carries it the
-          rest of the way, on the same fade — without it the ground stops in
-          mid-air and the join is obvious however soft the tint is. */}
-      <span
-        className="absolute inset-x-0 bottom-0"
-        style={{
-          height: Math.max(1, box.height * 0.028),
-          background:
-            "linear-gradient(90deg," +
-            " rgba(16,190,162,0) 0%," +
-            " rgba(16,190,162,0.05) 30%," +
-            " rgba(16,190,162,0.18) 58%," +
-            " rgba(16,190,162,0.34) 80%," +
-            " rgba(16,190,162,0.46) 100%)",
-        }}
-      />
 
       <div
         className="absolute inset-y-0 right-0 flex items-center justify-end gap-[0.14em]"
