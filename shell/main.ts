@@ -14,6 +14,7 @@ import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
+import { createSplash, dismissSplash } from "./splash"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -393,7 +394,14 @@ function createWindow(): void {
     },
   })
 
-  win.once("ready-to-show", () => win?.show())
+  // Deliberately NOT shown here. The splash decides when, so the two are
+  // handed over in the same moment instead of one appearing over the other.
+  win.once("ready-to-show", () =>
+    dismissSplash(() => {
+      win?.show()
+      win?.focus()
+    })
+  )
 
   // External links open in the browser, never inside the app window.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -610,6 +618,13 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
+    // First, and before anything that can be slow: the window that says the app
+    // is starting has to be the first thing on screen, not the last. Everything
+    // below it — the protocol claim, the HUD read, the client connection — is
+    // work the user should be watching an animation through, not a blank
+    // desktop.
+    createSplash()
+
     // Claim loldata:// so the website's button has something to reach. In dev the
     // executable is Electron itself, so the script path has to travel with it or
     // the link would launch a bare Electron with nothing loaded.

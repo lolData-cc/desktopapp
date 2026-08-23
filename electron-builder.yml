@@ -37,6 +37,7 @@ files:
   - shell/main.mjs
   - shell/preload.mjs
   - build/icon.png
+  - build/splash.html
   - package.json
 
 win:

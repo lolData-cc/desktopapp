@@ -18345,9 +18345,9 @@ var require_main2 = __commonJS((exports) => {
 });
 
 // shell/main.ts
-import { app as app3, BrowserWindow as BrowserWindow2, ipcMain, screen as screen2, shell } from "electron";
+import { app as app3, BrowserWindow as BrowserWindow3, ipcMain, screen as screen2, shell } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname as dirname2, join as join3, resolve } from "node:path";
+import { dirname as dirname2, join as join4, resolve } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -18701,6 +18701,65 @@ async function ensureProtocol(protocol, electronClaimed, launch) {
   return await keyExists(protocol) ? { ok: true, via: "registry", command: parts } : { ok: false, via: "none" };
 }
 
+// shell/splash.ts
+import { BrowserWindow as BrowserWindow2 } from "electron";
+import { join as join2 } from "node:path";
+var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
+var MIN_VISIBLE_MS = 1500;
+var MAX_VISIBLE_MS = 6000;
+var splash = null;
+var shownAt = 0;
+var closing = false;
+function createSplash() {
+  splash = new BrowserWindow2({
+    width: 340,
+    height: 240,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    center: true,
+    show: false,
+    webPreferences: { nodeIntegration: false, contextIsolation: true }
+  });
+  splash.loadFile(join2(__dirname, "../build/splash.html"));
+  splash.once("ready-to-show", () => {
+    shownAt = Date.now();
+    splash?.showInactive();
+  });
+  splash.on("closed", () => {
+    splash = null;
+  });
+  return splash;
+}
+function dismissSplash(reveal) {
+  if (closing)
+    return;
+  closing = true;
+  const elapsed = shownAt ? Date.now() - shownAt : 0;
+  const wait = Math.max(0, Math.min(MIN_VISIBLE_MS - elapsed, MAX_VISIBLE_MS));
+  setTimeout(() => {
+    const done = () => {
+      reveal();
+      if (splash && !splash.isDestroyed())
+        splash.destroy();
+      splash = null;
+    };
+    if (!splash || splash.isDestroyed())
+      return done();
+    splash.webContents.executeJavaScript("document.body.classList.add('leaving')").catch(() => {
+      return;
+    });
+    setTimeout(done, 260);
+  }, wait);
+}
+
 // shell/updater.ts
 var import_electron_updater = __toESM(require_main2(), 1);
 import { app } from "electron";
@@ -18845,9 +18904,9 @@ async function championRunes(championKey, championName, role, signal) {
 // shell/prefs.ts
 import { app as app2 } from "electron";
 import { readFile as readFile2, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join as join2 } from "node:path";
+import { dirname, join as join3 } from "node:path";
 var cache2 = null;
-var file = () => join2(app2.getPath("userData"), "preferences.json");
+var file = () => join3(app2.getPath("userData"), "preferences.json");
 async function load2() {
   if (cache2)
     return cache2;
@@ -19449,23 +19508,26 @@ function stopGameClock() {
   dropNotice();
 }
 function createWindow() {
-  win = new BrowserWindow2({
+  win = new BrowserWindow3({
     width: 1280,
     height: 840,
     minWidth: 1040,
     minHeight: 700,
-    icon: join3(__dirname2, "../build/icon.png"),
+    icon: join4(__dirname2, "../build/icon.png"),
     show: false,
     frame: false,
     backgroundColor: "#040A0C",
     webPreferences: {
-      preload: join3(__dirname2, "preload.mjs"),
+      preload: join4(__dirname2, "preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
     }
   });
-  win.once("ready-to-show", () => win?.show());
+  win.once("ready-to-show", () => dismissSplash(() => {
+    win?.show();
+    win?.focus();
+  }));
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -19473,7 +19535,7 @@ function createWindow() {
   if (DEV_URL2)
     win.loadURL(DEV_URL2);
   else
-    win.loadFile(join3(__dirname2, "../dist/index.html"));
+    win.loadFile(join4(__dirname2, "../dist/index.html"));
 }
 ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
@@ -19619,13 +19681,14 @@ if (!gotLock) {
     handleLink(url);
   });
   app3.whenReady().then(async () => {
+    createSplash();
     const dev = process.defaultApp && process.argv.length >= 2;
     const launch = dev ? { exe: process.execPath, args: [resolve(process.argv[1])] } : { exe: process.execPath, args: [] };
     const claimed = dev ? app3.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app3.setAsDefaultProtocolClient(PROTOCOL);
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
     console.log("[link] %s:// ok=%s via=%s%s", PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : "");
     createWindow();
-    createOverlay(join3(__dirname2, "preload.mjs"));
+    createOverlay(join4(__dirname2, "preload.mjs"));
     const hud = await readHudSettings();
     push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
     const saved = await readSession();
@@ -19650,6 +19713,6 @@ app3.on("window-all-closed", () => {
     app3.quit();
 });
 app3.on("activate", () => {
-  if (BrowserWindow2.getAllWindows().length === 0)
+  if (BrowserWindow3.getAllWindows().length === 0)
     createWindow();
 });
