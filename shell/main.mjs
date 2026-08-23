@@ -20522,26 +20522,6 @@ async function applyPage(champion, patch2, page) {
 ipcMain.handle("profile:refresh", async () => {
   await readProfile();
 });
-var splashCache = new Map;
-ipcMain.handle("art:splash", async (_e, championId) => {
-  if (!/^[A-Za-z0-9]{1,32}$/.test(championId))
-    return null;
-  if (splashCache.has(championId))
-    return splashCache.get(championId) ?? null;
-  try {
-    const res = await fetch(`https://cdn2.loldata.cc/img/champion/loading/${championId}_0.jpg`);
-    if (!res.ok)
-      throw new Error(String(res.status));
-    const buf = Buffer.from(await res.arrayBuffer());
-    const url = `data:image/jpeg;base64,${buf.toString("base64")}`;
-    splashCache.set(championId, url);
-    return url;
-  } catch (e) {
-    console.log("[art] splash %s failed: %s", championId, e?.message);
-    splashCache.set(championId, null);
-    return null;
-  }
-});
 ipcMain.handle("settings:set", async (_e, patch2) => {
   const settings = await writeSettings(patch2);
   if ("launchAtLogin" in patch2) {
