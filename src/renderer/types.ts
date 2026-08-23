@@ -48,6 +48,7 @@ export type AppSettings = {
   launchAtLogin: boolean
   smartBuild: boolean
   goldReadout: boolean
+  loadingBoard: boolean
   objectiveNotices: boolean
   buildNotices: boolean
 }

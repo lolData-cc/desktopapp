@@ -34,7 +34,7 @@ import { dragonTally, nextObjective, type DragonElement, type DragonTally } from
 import { teamGold, type TeamGold } from "../src/data/teamGold"
 import { warmItemCosts, inventoryValue } from "../src/data/itemCost"
 import { costToComplete, warmItemTree } from "../src/data/affordability"
-import { classifyAll, ccCarriers, CC_HEAVY_AT, type ChampInfo } from "../src/data/champClass"
+import { classify, classifyAll, ccCarriers, CC_HEAVY_AT, type ChampInfo } from "../src/data/champClass"
 import { bootsIds, allItems } from "../src/data/itemCatalog"
 import { nextBest, inventoryKey, type NextBest } from "../src/data/smartBuild"
 import { buildForComp, compShapes, describeShapes, type BuildSlot, type CompShape } from "../src/data/compAdvice"
@@ -164,6 +164,14 @@ export type AppState = {
   goldBar?: boolean
   settings: AppSettings
   /**
+   * The ten players, while the LOADING SCREEN is up.
+   *
+   * ⚠️ A different source from `scoreboard`, and it has to be: the Live Client
+   * Data API does not answer until the player is in the world, so during
+   * loading the only roster available comes from the client's own session.
+   */
+  loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
+  /**
    * The champion we last played, taken from the live game rather than from
    * match history.
    *
@@ -215,6 +223,7 @@ let state: AppState = {
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
+  loading: null,
   lastPlayed: null,
   region: null,
   finalBoard: null,
@@ -238,6 +247,7 @@ function push(patch: Partial<AppState>): void {
     // Withheld here rather than in the overlay, so "off" also means the window
     // is not kept alive for something nobody asked to see.
     gold: state.settings.goldReadout || goldVisible ? state.gold : null,
+    loading: state.settings.loadingBoard ? state.loading : null,
   })
 
   // The overlay is only ever on screen during a match. Tying it to the phase
@@ -299,6 +309,7 @@ const lcu = new LcuConnection({
           ? {}
           : {
               scoreboard: null,
+              loading: null,
               ...(state.scoreboard
                 ? { finalBoard: { ours: state.scoreboard.ours, theirs: state.scoreboard.theirs } }
                 : {}),
@@ -541,7 +552,8 @@ function overlayWanted(): boolean {
   // Gold alone is enough now: the top-right readout is permanent during a game,
   // and only the wide Tab bar answers to the hotkey.
   const wantsGold = state.gold !== null && (state.settings.goldReadout || goldVisible)
-  return state.notice !== null || wantsGold || state.levelHint !== null
+  const wantsLoading = state.loading !== null && state.settings.loadingBoard
+  return state.notice !== null || wantsGold || wantsLoading || state.levelHint !== null
 }
 
 function syncOverlay(): void {
@@ -902,12 +914,84 @@ async function readShop(
 }
 
 /**
+ * The roster, while the loading screen is up.
+ *
+ * Read ONCE per game rather than per tick: the ten players do not change, and
+ * the rank lookup behind it is ten network calls.
+ */
+let loadingFor = ""
+
+async function readLoading(): Promise<void> {
+  const puuid = state.summoner?.puuid
+  if (!puuid) return
+
+  const roster = await lcu.gameRoster(puuid).catch(() => null)
+  if (!roster) return
+
+  const stamp = [...roster.allies, ...roster.enemies].map((p) => p.puuid).join(",")
+  if (stamp === loadingFor) return
+  loadingFor = stamp
+
+  const resolve = (entries: typeof roster.allies): Promise<LoadingPlayer[]> =>
+    Promise.all(
+      entries.map(async (e) => {
+        const champ = e.championKey ? await classify(e.championKey).catch(() => null) : null
+        return {
+          name: e.name || "-",
+          championId: champ?.id ?? null,
+          championKey: e.championKey,
+          rank: null as string | null,
+        }
+      })
+    )
+
+  const allies = await resolve(roster.allies)
+  const enemies = await resolve(roster.enemies)
+  push({ loading: { allies, enemies } })
+  console.log("[loading] allies: %s | enemies: %s",
+    allies.map((a) => `${a.name}=${a.championId}`).join(" "),
+    enemies.map((a) => `${a.name}=${a.championId}`).join(" "))
+
+  // Ranks come after: ten lookups, and the cards are useful without them.
+  const ids = [...roster.allies, ...roster.enemies]
+    .filter((e) => e.name && e.tag)
+    .map((e) => `${e.name}#${e.tag}`)
+  if (!ids.length || !state.region) return
+
+  const ranks = await lookupRanks(ids, state.region).catch(
+    () => ({}) as Record<string, string | null>
+  )
+  const withRank = (list: LoadingPlayer[], entries: typeof roster.allies) =>
+    list.map((p, i) => {
+      const e = entries[i]
+      const id = e && e.name && e.tag ? `${e.name}#${e.tag}` : null
+      return { ...p, rank: id ? ranks[id] ?? null : null }
+    })
+
+  push({
+    loading: {
+      allies: withRank(allies, roster.allies),
+      enemies: withRank(enemies, roster.enemies),
+    },
+  })
+}
+
+/**
  * One player, as a scoreboard row.
  *
  * Assembled in the shell rather than in the interface because the gold figure
  * needs the item price table, and doing that lookup ten times per poll inside
  * React would be ten times the work for the same answer.
  */
+/** One card on the loading screen. */
+export type LoadingPlayer = {
+  name: string
+  championId: string | null
+  championKey: number
+  /** Filled in after the rank lookup returns; null while it is in flight. */
+  rank: string | null
+}
+
 export type LivePlayer = {
   name: string
   /** Full "Name#TAG" — the rank lookup needs the tag, the card does not. */
@@ -944,7 +1028,10 @@ export type LivePlayer = {
  */
 async function readGame(): Promise<void> {
   const stats = await liveGameStats()
-  if (!stats) return
+  // ⚠️ Not an error — this is the LOADING SCREEN. The phase says the game is
+  // running and the game itself is not answering yet, and that pair is the only
+  // way to tell loading from playing: there is no "Loading" gameflow phase.
+  if (!stats) return void readLoading()
 
   const [events, players, me] = await Promise.all([
     liveEvents(),
@@ -1233,7 +1320,10 @@ ipcMain.handle("profile:refresh", async () => { await readProfile() })
  */
 const rankCache = new Map<string, string | null>()
 
-ipcMain.handle("ranks:get", async (_e, riotIds: string[], region: string | null) => {
+async function lookupRanks(
+  riotIds: string[],
+  region: string | null
+): Promise<Record<string, string | null>> {
   const out: Record<string, string | null> = {}
   if (!region || !Array.isArray(riotIds)) return out
 
@@ -1270,7 +1360,11 @@ ipcMain.handle("ranks:get", async (_e, riotIds: string[], region: string | null)
   )
 
   return out
-})
+}
+
+ipcMain.handle("ranks:get", async (_e, riotIds: string[], region: string | null) =>
+  lookupRanks(Array.isArray(riotIds) ? riotIds : [], region)
+)
 
 /**
  * A champion's 3D model, cached on disk.

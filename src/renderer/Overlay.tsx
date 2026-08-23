@@ -5,6 +5,7 @@ import { goldBarBox } from "../data/scoreboard"
 import { shortGold, type TeamGold } from "../data/teamGold"
 import { dragonIcon, dragonLabel, elementGlyph, elementName, soulLabel } from "./dragonIcon"
 import { topRightBox } from "../data/topRight"
+import { loadingCards } from "../data/loadingScreen"
 import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
 
 /**
@@ -42,8 +43,16 @@ type Notice = {
   }
 }
 type HudPlacement = { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
+type LoadingPlayer = {
+  name: string
+  championId: string | null
+  championKey: number
+  rank: string | null
+}
+
 type AppState = {
   gold: TeamGold | null
+  loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
   goldBar?: boolean
   notice: Notice | null
   levelHint: Ability | null
@@ -68,6 +77,7 @@ export default function Overlay() {
   // not toggled, and stripping data to control presentation is what made the
   // shop notices silently unreachable earlier.
   const [goldBar, setGoldBar] = useState(false)
+  const [loading, setLoading] = useState<AppState["loading"]>(null)
 
   useEffect(() => {
     const report = () =>
@@ -89,6 +99,7 @@ export default function Overlay() {
       setHud(s.hud ?? null)
       setGold(s.gold ?? null)
       setGoldBar(s.goldBar === true)
+      setLoading(s.loading ?? null)
     }
     void window.desktop.getState().then(apply as never)
     return window.desktop.onState(apply as never)
@@ -99,6 +110,7 @@ export default function Overlay() {
       {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
       {gold && goldBar && <GoldBar g={gold} />}
       {gold && hud && <TopRightGold g={gold} hud={hud} />}
+      {loading && <LoadingBoard board={loading} />}
       {/* keyed on the notice so each one ASSEMBLES; without this React would
           reuse the element and the second notification would simply appear. */}
       {notice && <Card key={notice.raisedAt} n={notice} visible={visible} />}
@@ -123,6 +135,102 @@ export default function Overlay() {
  * built from six players presented as if it were from ten is a wrong number
  * nobody could check.
  */
+/**
+ * The loading screen, annotated.
+ *
+ * Thirty to sixty seconds of a fixed picture, which is the one stretch of a
+ * game with nothing to distract from and everything still to decide. The cards
+ * are always in the same place — the loading screen does NOT respond to the HUD
+ * Scale slider, so unlike the in-game overlay this is a function of resolution
+ * alone.
+ *
+ * ⚠️ The champion NAME is drawn on every card on purpose, and it is not
+ * decoration. This feature rests on an assumption that has never been tested:
+ * that the order of the client's teamOne/teamTwo lists matches the order of the
+ * portraits on screen. If it does not, the name will sit over the wrong face
+ * and be obvious in one glance — where a rank alone would be silently wrong,
+ * which is far worse than being visibly wrong.
+ *
+ * Ranks arrive after the names, because they are ten network lookups.
+ */
+function LoadingBoard({ board }: { board: NonNullable<AppState["loading"]> }) {
+  const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
+
+  useEffect(() => {
+    const onResize = () => setScreen({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
+
+  const boxes = loadingCards(screen)
+  const rows = [...board.allies, ...board.enemies]
+
+  return (
+    <>
+      {boxes.map((box, i) => {
+        const p = rows[i]
+        if (!p) return null
+        const accent = box.ally ? "#00d992" : "#ff6286"
+
+        return (
+          <div
+            key={i}
+            className="ds-in pointer-events-none absolute"
+            style={{
+              left: box.left,
+              top: box.top,
+              width: box.width,
+              // Only the strip, not the whole card: the art underneath is the
+              // reason the player is looking at this screen.
+              height: Math.round(box.height * 0.14),
+              animationDelay: `${i * 40}ms`,
+            }}
+          >
+            {/* the ground, feathered so no plate edge shows over the art */}
+            <span
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(4,10,12,0.86) 0%, rgba(4,10,12,0.66) 62%, rgba(4,10,12,0) 100%)",
+              }}
+            />
+
+            {/* the bracket: a rule with one turned end, per side */}
+            <span
+              className="absolute inset-x-0 top-0 h-px"
+              style={{ background: accent, opacity: 0.8, boxShadow: `0 0 6px ${accent}66` }}
+            />
+            <span
+              className="absolute top-0 h-[9px] w-[9px] rotate-45"
+              style={{
+                background: accent,
+                [box.ally ? "left" : "right"]: -4,
+                transform: "translateY(-4px) rotate(45deg)",
+              } as React.CSSProperties}
+            />
+
+            <div className="relative flex h-full flex-col justify-center px-2.5"
+                 style={{ textShadow: "0 1px 4px rgba(0,0,0,0.95)" }}>
+              <p
+                className="truncate font-chakrapetch font-bold uppercase leading-none tracking-[0.1em]"
+                style={{ fontSize: Math.round(box.height * 0.042), color: accent }}
+              >
+                {p.rank ?? "unranked"}
+              </p>
+              <p
+                className="truncate font-jetbrains uppercase leading-none tracking-[0.16em] text-flash/45"
+                style={{ fontSize: Math.round(box.height * 0.026), marginTop: 3 }}
+              >
+                {p.championId ?? p.name}
+              </p>
+            </div>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 /**
  * The gold lead, as one more field of the game's own top-right strip.
  *

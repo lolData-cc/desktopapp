@@ -18583,6 +18583,24 @@ class LcuConnection {
     const platform = String(data ?? "").toLowerCase();
     return PLATFORM_REGION[platform] ?? (platform || null);
   }
+  async gameRoster(myPuuid) {
+    const { data } = await this.request("GET", "/lol-gameflow/v1/session");
+    const one = data?.gameData?.teamOne;
+    const two = data?.gameData?.teamTwo;
+    if (!Array.isArray(one) || !Array.isArray(two))
+      return null;
+    const read = (p) => ({
+      championKey: Number(p?.championId ?? 0),
+      name: p?.gameName ?? p?.summonerName ?? "",
+      tag: p?.tagLine ?? "",
+      puuid: String(p?.puuid ?? "")
+    });
+    const mine = one.some((p) => p?.puuid && p.puuid === myPuuid);
+    return {
+      allies: (mine ? one : two).map(read),
+      enemies: (mine ? two : one).map(read)
+    };
+  }
   async phase() {
     const { data } = await this.request("GET", "/lol-gameflow/v1/gameflow-phase");
     return data;
@@ -18960,6 +18978,7 @@ var DEFAULT_SETTINGS = {
   launchAtLogin: false,
   smartBuild: false,
   goldReadout: true,
+  loadingBoard: true,
   objectiveNotices: true,
   buildNotices: true
 };
@@ -19657,6 +19676,9 @@ async function load5() {
     loading3 = null;
   }
 }
+async function classify(championKey) {
+  return (await load5()).get(championKey) ?? null;
+}
 async function classifyAll(keys) {
   const table = await load5();
   return keys.map((k) => table.get(k)).filter((c) => !!c);
@@ -19987,6 +20009,7 @@ var state = {
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
+  loading: null,
   lastPlayed: null,
   region: null,
   finalBoard: null,
@@ -20000,7 +20023,8 @@ function push(patch2) {
   sendOverlay("state", {
     ...state,
     goldBar: goldVisible,
-    gold: state.settings.goldReadout || goldVisible ? state.gold : null
+    gold: state.settings.goldReadout || goldVisible ? state.gold : null,
+    loading: state.settings.loadingBoard ? state.loading : null
   });
   if (state.phase !== before) {
     if (state.phase === "InProgress" || state.phase === "Reconnect")
@@ -20044,6 +20068,7 @@ var lcu = new LcuConnection({
         ...phase === "ChampSelect" ? {} : { select: null },
         ...phase === "InProgress" || phase === "Reconnect" ? {} : {
           scoreboard: null,
+          loading: null,
           ...state.scoreboard ? { finalBoard: { ours: state.scoreboard.ours, theirs: state.scoreboard.theirs } } : {}
         }
       });
@@ -20176,7 +20201,8 @@ var GOLD_HOTKEY = "Alt+O";
 var goldVisible = false;
 function overlayWanted() {
   const wantsGold = state.gold !== null && (state.settings.goldReadout || goldVisible);
-  return state.notice !== null || wantsGold || state.levelHint !== null;
+  const wantsLoading = state.loading !== null && state.settings.loadingBoard;
+  return state.notice !== null || wantsGold || wantsLoading || state.levelHint !== null;
 }
 function syncOverlay() {
   if (overlayWanted()) {
@@ -20395,10 +20421,51 @@ async function readShop(riotId, championId, enemies) {
     total: build.length
   });
 }
+var loadingFor = "";
+async function readLoading() {
+  const puuid = state.summoner?.puuid;
+  if (!puuid)
+    return;
+  const roster = await lcu.gameRoster(puuid).catch(() => null);
+  if (!roster)
+    return;
+  const stamp = [...roster.allies, ...roster.enemies].map((p) => p.puuid).join(",");
+  if (stamp === loadingFor)
+    return;
+  loadingFor = stamp;
+  const resolve2 = (entries) => Promise.all(entries.map(async (e) => {
+    const champ = e.championKey ? await classify(e.championKey).catch(() => null) : null;
+    return {
+      name: e.name || "-",
+      championId: champ?.id ?? null,
+      championKey: e.championKey,
+      rank: null
+    };
+  }));
+  const allies = await resolve2(roster.allies);
+  const enemies = await resolve2(roster.enemies);
+  push({ loading: { allies, enemies } });
+  console.log("[loading] allies: %s | enemies: %s", allies.map((a) => `${a.name}=${a.championId}`).join(" "), enemies.map((a) => `${a.name}=${a.championId}`).join(" "));
+  const ids = [...roster.allies, ...roster.enemies].filter((e) => e.name && e.tag).map((e) => `${e.name}#${e.tag}`);
+  if (!ids.length || !state.region)
+    return;
+  const ranks = await lookupRanks(ids, state.region).catch(() => ({}));
+  const withRank = (list, entries) => list.map((p, i) => {
+    const e = entries[i];
+    const id = e && e.name && e.tag ? `${e.name}#${e.tag}` : null;
+    return { ...p, rank: id ? ranks[id] ?? null : null };
+  });
+  push({
+    loading: {
+      allies: withRank(allies, roster.allies),
+      enemies: withRank(enemies, roster.enemies)
+    }
+  });
+}
 async function readGame() {
   const stats = await liveGameStats();
   if (!stats)
-    return;
+    return void readLoading();
   const [events, players, me] = await Promise.all([
     liveEvents(),
     livePlayers(),
@@ -20580,7 +20647,7 @@ ipcMain.handle("profile:refresh", async () => {
   await readProfile();
 });
 var rankCache = new Map;
-ipcMain.handle("ranks:get", async (_e, riotIds, region) => {
+async function lookupRanks(riotIds, region) {
   const out = {};
   if (!region || !Array.isArray(riotIds))
     return out;
@@ -20611,7 +20678,8 @@ ipcMain.handle("ranks:get", async (_e, riotIds, region) => {
     }
   }));
   return out;
-});
+}
+ipcMain.handle("ranks:get", async (_e, riotIds, region) => lookupRanks(Array.isArray(riotIds) ? riotIds : [], region));
 var MODEL_DIR = () => join4(app3.getPath("userData"), "models");
 ipcMain.handle("model:get", async (_e, championId, key) => {
   if (!/^[A-Za-z0-9]{1,32}$/.test(championId))

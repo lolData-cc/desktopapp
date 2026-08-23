@@ -40,6 +40,12 @@ export default function Preferences({ s }: { s: AppState }) {
             note="A chevron and a number beside the kill counter, in the game's own HUD row. Alt+O still summons the wider bar over the scoreboard."
           />
           <Toggle
+            on={v.loadingBoard}
+            onChange={(on) => set({ loadingBoard: on })}
+            label="Ranks on the loading screen"
+            note="The rank of all ten players over their cards while the game loads — pre-game information, on the one screen where there is time to read it."
+          />
+          <Toggle
             on={v.objectiveNotices}
             onChange={(on) => set({ objectiveNotices: on })}
             label="Dragon and Baron warnings"

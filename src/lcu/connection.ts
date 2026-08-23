@@ -23,6 +23,14 @@ const PLATFORM_REGION: Record<string, string> = {
   sg2: "sg", th2: "th", tw2: "tw", vn2: "vn", me1: "me",
 }
 
+/** One player in a game being loaded. */
+export type RosterEntry = {
+  championKey: number
+  name: string
+  tag: string
+  puuid: string
+}
+
 export type Phase =
   | "None" | "Lobby" | "Matchmaking" | "ReadyCheck" | "ChampSelect"
   | "GameStart" | "InProgress" | "Reconnect" | "WaitingForStats"
@@ -182,6 +190,43 @@ export class LcuConnection {
     )
     const platform = String(data ?? "").toLowerCase()
     return PLATFORM_REGION[platform] ?? (platform || null)
+  }
+
+  /**
+   * The roster of the game being loaded.
+   *
+   * ⚠️ The Live Client Data API is NOT up during the loading screen — it starts
+   * answering once the player is in the world — so this is the only source for
+   * who is in the game while that screen is on. The session itself only exists
+   * during a game flow; it 404s from an idle client, which is why the caller
+   * treats a null as "not in a game" rather than as a fault.
+   *
+   * teamOne is ORDER and teamTwo is CHAOS, always. Which of them is OURS has to
+   * be worked out from the puuid — the loading screen puts your own team on
+   * top whichever side you are on.
+   */
+  async gameRoster(myPuuid: string): Promise<{
+    allies: RosterEntry[]
+    enemies: RosterEntry[]
+  } | null> {
+    const { data } = await this.request<any>("GET", "/lol-gameflow/v1/session")
+    const one = data?.gameData?.teamOne
+    const two = data?.gameData?.teamTwo
+    if (!Array.isArray(one) || !Array.isArray(two)) return null
+
+    const read = (p: any): RosterEntry => ({
+      championKey: Number(p?.championId ?? 0),
+      // Newer clients split the riot id; older ones only have summonerName.
+      name: p?.gameName ?? p?.summonerName ?? "",
+      tag: p?.tagLine ?? "",
+      puuid: String(p?.puuid ?? ""),
+    })
+
+    const mine = one.some((p: any) => p?.puuid && p.puuid === myPuuid)
+    return {
+      allies: (mine ? one : two).map(read),
+      enemies: (mine ? two : one).map(read),
+    }
   }
 
   async phase(): Promise<Phase | null> {

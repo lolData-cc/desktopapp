@@ -82,6 +82,8 @@ export type AppSettings = {
   smartBuild: boolean
   /** The gold lead in the game's top-right strip. */
   goldReadout: boolean
+  /** Ranks over the ten cards on the loading screen. */
+  loadingBoard: boolean
   /** Dragon and Baron warnings. */
   objectiveNotices: boolean
   /** "X is purchasable", boots advice, the opening build. */
@@ -92,6 +94,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   smartBuild: false,
   goldReadout: true,
+  loadingBoard: true,
   objectiveNotices: true,
   buildNotices: true,
 }
