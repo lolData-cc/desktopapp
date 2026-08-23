@@ -164,18 +164,42 @@ function TopRightGold({ g, hud }: { g: TeamGold; hud: HudPlacement }) {
       className="pointer-events-none absolute"
       style={{ left: box.fadeLeft, top: box.top, width: box.fadeWidth, height: box.height }}
     >
-      {/* The strip's ground, carried on to the left and fading to nothing. The
-          right end matches the game's tint; the left end must reach FULL
-          transparency inside this box or a vertical seam shows over the map. */}
+      {/* The strip's ground, carried on to the left and fading to nothing.
+          Deliberately FAINT: by this far left the game's own ground has already
+          thinned to almost nothing, so anything that reads as a panel is a
+          panel. The stops ease in rather than ramping — a linear fade has a
+          visible knee where it leaves zero, and that knee is the edge we are
+          trying not to draw. The left end must reach FULL transparency inside
+          this box or a vertical seam shows over the map. */}
       <span
         className="absolute inset-0"
         style={{
           background:
             "linear-gradient(90deg," +
             " rgba(6,26,32,0) 0%," +
-            " rgba(6,26,32,0.30) 42%," +
-            " rgba(6,26,32,0.62) 78%," +
-            " rgba(6,26,32,0.70) 100%)",
+            " rgba(6,26,32,0.02) 24%," +
+            " rgba(6,26,32,0.07) 45%," +
+            " rgba(6,26,32,0.15) 64%," +
+            " rgba(6,26,32,0.25) 82%," +
+            " rgba(6,26,32,0.32) 100%)",
+        }}
+      />
+
+      {/* The game rules its strip off along the bottom with a thin teal line
+          that fades out to the left. Ours picks that line up and carries it the
+          rest of the way, on the same fade — without it the ground stops in
+          mid-air and the join is obvious however soft the tint is. */}
+      <span
+        className="absolute inset-x-0 bottom-0"
+        style={{
+          height: Math.max(1, box.height * 0.028),
+          background:
+            "linear-gradient(90deg," +
+            " rgba(16,190,162,0) 0%," +
+            " rgba(16,190,162,0.05) 30%," +
+            " rgba(16,190,162,0.18) 58%," +
+            " rgba(16,190,162,0.34) 80%," +
+            " rgba(16,190,162,0.46) 100%)",
         }}
       />
 

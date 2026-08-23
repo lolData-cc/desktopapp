@@ -29,6 +29,8 @@ export type TopRightModel = {
    * gap.
    */
   killsLeftInHeights: number
+  /** The strip's top edge, in strip heights from the top of the screen. */
+  topInHeights: number
   /** The gap the game leaves between two components, in strip heights. */
   gapInHeights: number
   /** How far our own readout is, in strip heights — chevron plus four digits. */
@@ -40,13 +42,18 @@ export type TopRightModel = {
 export const DEFAULT_TOP_RIGHT: TopRightModel = {
   heightAt0: 26 / 1080,
   heightAt1: 38 / 1080,
-  // Still an estimate, not a measurement: the first guess (8.9) was reported as
-  // landing ON the kill counter, so this is that guess moved left far enough to
-  // clear it. Replace it with whatever the nudge settles on.
-  killsLeftInHeights: 12.4,
+  // Settled against a real 1920x1080 screen at HUD 85: the estimate of 12.4 was
+  // nudged -58px, which is 1.6 strip heights at that scale. Expressed in heights
+  // it holds at other resolutions and slider positions, which a pixel would not.
+  killsLeftInHeights: 14.0,
+  /** The strip's top edge, in strip heights from the top of the screen. The
+   *  same alignment put it 2px high of zero. */
+  topInHeights: -0.055,
   gapInHeights: 0.34,
   widthInHeights: 2.5,
-  fadeInHeights: 4.5,
+  // A long fade: the game's own ground has already thinned to almost nothing by
+  // here, so ours has to arrive gradually or the join reads as a panel edge.
+  fadeInHeights: 7.5,
 }
 
 /** Strip height in pixels for a given slider position. Linear between the ends,
@@ -96,7 +103,7 @@ export function topRightBox(
 
   return {
     left,
-    top: nudge.y * screen.height,
+    top: model.topInHeights * height + nudge.y * screen.height,
     width,
     height,
     fadeLeft: left - fadeWidth,
