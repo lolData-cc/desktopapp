@@ -136,6 +136,8 @@ function GoldBar({ g }: { g: TeamGold }) {
         }}
       />
 
+      <Frame edge="top" />
+
       <div className="relative flex items-center gap-2.5" style={{ textShadow: "0 1px 5px rgba(0,0,0,0.95)" }}>
         <span className="w-[52px] shrink-0 text-right font-chakrapetch text-[15px] font-bold tabular-nums text-jade">
           {shortGold(g.ours)}
@@ -180,6 +182,58 @@ function GoldBar({ g }: { g: TeamGold }) {
           </span>
         )}
       </p>
+
+      <Frame edge="bottom" />
+    </div>
+  )
+}
+
+/**
+ * The bracket above and below the gold bar.
+ *
+ * The side notification's ornament is asymmetric because it ARRIVES from an
+ * edge — the rail runs in from one side and turns once. A centred readout asks
+ * the opposite: the same vocabulary, mirrored, so nothing pulls the eye off
+ * centre.
+ *
+ * Built as two fixed-size brackets with hairlines stretching between them,
+ * rather than one stretched SVG. A path scaled with preserveAspectRatio="none"
+ * distorts its diagonals, and this bar's width changes with the screen — the
+ * turns would be shallow on a wide monitor and steep on a narrow one.
+ */
+function Frame({ edge }: { edge: "top" | "bottom" }) {
+  const flip = edge === "bottom"
+  const accent = "rgba(0,217,146,0.5)"
+
+  const bracket = (mirror: boolean) => (
+    <svg
+      width="26"
+      height="9"
+      viewBox="0 0 26 9"
+      aria-hidden
+      className="shrink-0 overflow-visible"
+      style={{ transform: `${mirror ? "scaleX(-1)" : ""} ${flip ? "scaleY(-1)" : ""}`.trim() || undefined }}
+    >
+      {/* a mark, a run, and one turn inward — the notification's grammar */}
+      <rect x="0" y="1.2" width="5" height="5" fill={accent} transform="rotate(45 2.5 3.7)" />
+      <path
+        d="M 7 4 L 20 4 L 25 9"
+        fill="none"
+        stroke={accent}
+        strokeWidth="1"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+
+  return (
+    <div className={`relative flex items-center gap-2 ${flip ? "mt-1.5" : "mb-1.5"}`} aria-hidden>
+      {bracket(false)}
+      <span
+        className="h-px flex-1"
+        style={{ background: `linear-gradient(90deg, ${accent}, transparent 46%, transparent 54%, ${accent})` }}
+      />
+      {bracket(true)}
     </div>
   )
 }
