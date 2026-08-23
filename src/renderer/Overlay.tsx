@@ -189,51 +189,57 @@ function GoldBar({ g }: { g: TeamGold }) {
 }
 
 /**
- * The bracket above and below the gold bar.
+ * The shoulder above and below the gold bar.
  *
- * The side notification's ornament is asymmetric because it ARRIVES from an
- * edge — the rail runs in from one side and turns once. A centred readout asks
- * the opposite: the same vocabulary, mirrored, so nothing pulls the eye off
- * centre.
+ * One continuous profile per side rather than separate marks: a low tail
+ * outside, a diagonal rise, then a plateau running toward the centre, and the
+ * whole thing mirrored. The break in the middle is where the numbers live —
+ * the shape brackets them instead of underlining them.
  *
- * Built as two fixed-size brackets with hairlines stretching between them,
- * rather than one stretched SVG. A path scaled with preserveAspectRatio="none"
- * distorts its diagonals, and this bar's width changes with the screen — the
- * turns would be shallow on a wide monitor and steep on a narrow one.
+ * The side notification's rail is asymmetric because it ARRIVES from an edge.
+ * A centred readout asks the opposite, so this is the same grammar with nothing
+ * pulling the eye off centre.
+ *
+ * ⚠️ Only the PLATEAU stretches. The shoulder is a fixed-size SVG because a
+ * path scaled with preserveAspectRatio="none" distorts its diagonals, and this
+ * bar's width follows the screen — the rise would be a shallow ramp on a wide
+ * monitor and a cliff on a narrow one. The plateau is a plain hairline aligned
+ * to the shoulder's own flat, which is the one part that can be any length.
  */
 function Frame({ edge }: { edge: "top" | "bottom" }) {
   const flip = edge === "bottom"
-  const accent = "rgba(0,217,146,0.5)"
+  const accent = "rgba(0,217,146,0.55)"
 
-  const bracket = (mirror: boolean) => (
-    <svg
-      width="26"
-      height="9"
-      viewBox="0 0 26 9"
-      aria-hidden
-      className="shrink-0 overflow-visible"
-      style={{ transform: `${mirror ? "scaleX(-1)" : ""} ${flip ? "scaleY(-1)" : ""}`.trim() || undefined }}
-    >
-      {/* a mark, a run, and one turn inward — the notification's grammar */}
-      <rect x="0" y="1.2" width="5" height="5" fill={accent} transform="rotate(45 2.5 3.7)" />
+  // The flat sits at y=3.5 so a 1px stroke covers 3-4 exactly, which is where
+  // the plateau hairline lands with its 3px offset. Half a pixel out and the
+  // join shows as a step.
+  const shoulder = (mirror: boolean) => (
+    <svg width="58" height="18" viewBox="0 0 58 18" aria-hidden
+         className="shrink-0 overflow-visible"
+         style={mirror ? { transform: "scaleX(-1)" } : undefined}>
       <path
-        d="M 7 4 L 20 4 L 25 9"
+        d="M 0 15.5 L 15 15.5 L 30 3.5 L 58 3.5"
         fill="none"
         stroke={accent}
         strokeWidth="1"
+        strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
     </svg>
   )
 
   return (
-    <div className={`relative flex items-center gap-2 ${flip ? "mt-1.5" : "mb-1.5"}`} aria-hidden>
-      {bracket(false)}
-      <span
-        className="h-px flex-1"
-        style={{ background: `linear-gradient(90deg, ${accent}, transparent 46%, transparent 54%, ${accent})` }}
-      />
-      {bracket(true)}
+    <div
+      aria-hidden
+      className={`relative flex h-[18px] items-start ${flip ? "mt-1" : "mb-1"}`}
+      style={flip ? { transform: "scaleY(-1)" } : undefined}
+    >
+      {shoulder(false)}
+      <span className="mt-[3px] h-px flex-1" style={{ background: accent }} />
+      {/* the break the numbers sit in */}
+      <span className="w-[72px] shrink-0" />
+      <span className="mt-[3px] h-px flex-1" style={{ background: accent }} />
+      {shoulder(true)}
     </div>
   )
 }
