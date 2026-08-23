@@ -28,6 +28,8 @@ import { readHudSettings } from "../src/live/hudConfig"
 import { dragonTally, nextObjective, type DragonElement, type DragonTally } from "../src/data/objectives"
 import { teamGold, type TeamGold } from "../src/data/teamGold"
 import { warmItemCosts } from "../src/data/itemCost"
+import { classifyAll, ccCarriers, CC_HEAVY_AT } from "../src/data/champClass"
+import { buildForComp, compShapes, describeShapes, type BuildSlot, type CompShape } from "../src/data/compAdvice"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
@@ -63,6 +65,24 @@ export type AppState = {
     /** Who has taken which drakes so far. */
     tally: DragonTally
   } | null
+  /** What to build against the team you are actually facing, worked out in
+   *  champion select — where the comp is known and there is still time to act
+   *  on it. Null until the enemy side has locked in. */
+  matchup: {
+    slots: BuildSlot[]
+    cohortGames: number
+    /** The comp shapes the advice was actually narrowed by. */
+    applied: CompShape[]
+    shapeLabel: string
+    /** Enemy champions bringing hard CC, and whether that reaches the
+     *  threshold at which tenacity is usually worth it. */
+    ccNames: string[]
+    ccHeavy: boolean
+    patch: string
+  } | null
+  /** True while the query is running — it takes seconds, and champion select
+   *  does not wait. */
+  matchupLoading: boolean
   /** What each side is carrying, summed from the inventories the scoreboard
    *  shows. Null outside a game. */
   gold: TeamGold | null
@@ -120,6 +140,8 @@ let state: AppState = {
   patch: null,
   select: null,
   notice: null,
+  matchup: null,
+  matchupLoading: false,
   gold: null,
   levelHint: null,
   runes: null,
