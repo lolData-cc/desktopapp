@@ -18705,15 +18705,15 @@ async function ensureProtocol(protocol, electronClaimed, launch) {
 import { BrowserWindow as BrowserWindow2 } from "electron";
 import { join as join2 } from "node:path";
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
-var MIN_VISIBLE_MS = 1500;
+var MIN_VISIBLE_MS = 2300;
 var MAX_VISIBLE_MS = 6000;
 var splash = null;
 var shownAt = 0;
 var closing = false;
 function createSplash() {
   splash = new BrowserWindow2({
-    width: 340,
-    height: 240,
+    width: 420,
+    height: 340,
     transparent: true,
     frame: false,
     resizable: false,
@@ -18728,7 +18728,9 @@ function createSplash() {
     show: false,
     webPreferences: { nodeIntegration: false, contextIsolation: true }
   });
-  splash.loadFile(join2(__dirname, "../build/splash.html"));
+  const file = join2(__dirname, "../build/splash.html");
+  splash.webContents.on("did-fail-load", (_e, code, desc) => console.error("[splash] FAILED to load: %s %s", code, desc));
+  splash.loadFile(file).catch((e) => console.error("[splash] loadFile threw:", e?.message));
   splash.once("ready-to-show", () => {
     shownAt = Date.now();
     splash?.showInactive();
