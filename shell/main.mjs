@@ -3225,6 +3225,94 @@ function destroyOverlay() {
   overlay = null;
 }
 
+// src/lcu/runes.ts
+var PAGE_MARKER = "LolData";
+var pageName = (champion, patch2) => `${champion} - ${PAGE_MARKER} ${patch2}`;
+var isOurs = (name) => name.toLowerCase().includes(PAGE_MARKER.toLowerCase());
+function toSelectedPerkIds(page) {
+  const ids = [...page.primary, ...page.secondary, ...page.shards];
+  if (ids.length !== 9 || ids.some((id) => !Number.isFinite(id) || id <= 0)) {
+    throw new Error(`a rune page needs 9 valid perks, got ${ids.length}`);
+  }
+  return ids;
+}
+async function listPages(lcu) {
+  const { data } = await lcu.request("GET", "/lol-perks/v1/pages");
+  return data ?? [];
+}
+async function inventory(lcu) {
+  const { data } = await lcu.request("GET", "/lol-perks/v1/inventory");
+  return data;
+}
+async function importPage(lcu, champion, patch2, page) {
+  const selectedPerkIds = toSelectedPerkIds(page);
+  const name = pageName(champion, patch2);
+  const pages = await listPages(lcu);
+  const ourOld = pages.filter((p) => isOurs(p.name) && p.isDeletable);
+  const inv = await inventory(lcu);
+  const room = inv?.canAddCustomPage ?? false;
+  if (!room && ourOld.length === 0) {
+    return {
+      ok: false,
+      reason: "no-room",
+      pages: pages.map((p) => ({ id: p.id, name: p.name }))
+    };
+  }
+  for (const old of ourOld) {
+    await lcu.request("DELETE", `/lol-perks/v1/pages/${old.id}`).catch(() => {
+      return;
+    });
+  }
+  const created = await lcu.request("POST", "/lol-perks/v1/pages", {
+    name,
+    primaryStyleId: page.primaryStyle,
+    subStyleId: page.subStyle,
+    selectedPerkIds,
+    current: true
+  });
+  if (created.status >= 300 || !created.data?.id) {
+    return {
+      ok: false,
+      reason: "failed",
+      status: created.status,
+      message: created.data?.message ?? "the client rejected the page"
+    };
+  }
+  await lcu.request("PUT", "/lol-perks/v1/currentpage", created.data.id).catch(() => {
+    return;
+  });
+  return { ok: true, pageId: created.data.id, replaced: ourOld.length > 0 };
+}
+
+// src/data/runeSource.ts
+var API = "https://api2.loldata.cc";
+async function popularRunes(championKey, championName, role, signal) {
+  const res = await fetch(`${API}/api/champion/build`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ champKey: championKey, champion: championName, role: role ?? undefined }),
+    signal
+  });
+  if (!res.ok)
+    return null;
+  const data = await res.json();
+  const page = data.preciseRunes?.pages?.[0];
+  if (!page)
+    return null;
+  const complete = page.primary?.length === 4 && page.secondary?.length === 2 && page.shards?.length === 3;
+  if (!complete)
+    return null;
+  const sample = data.preciseRunes?.sample ?? 0;
+  const games = page.games ?? 0;
+  return {
+    page,
+    games,
+    winrate: page.winrate ?? 0,
+    share: sample > 0 ? games / sample * 100 : 0,
+    role
+  };
+}
+
 // src/live/client.ts
 import { request as httpsRequest2 } from "node:https";
 var PORT = 2999;
@@ -3420,6 +3508,8 @@ var state = {
   select: null,
   notice: null,
   levelHint: null,
+  runes: null,
+  runeImport: { state: "idle" },
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null }
 };
@@ -3464,6 +3554,21 @@ var lcu = new LcuConnection({
       readSelect(e.data);
   }
 });
+var runeFetch = null;
+async function readRunes(champion, role) {
+  runeFetch?.abort();
+  if (!champion)
+    return push({ runes: null, runeImport: { state: "idle" } });
+  const ctl = new AbortController;
+  runeFetch = ctl;
+  const suggestion = await popularRunes(champion.key, champion.name, role, ctl.signal).catch(() => null);
+  if (ctl.signal.aborted)
+    return;
+  push({
+    runes: suggestion ? { ...suggestion, pageName: pageName(champion.name, state.patch ?? "") } : null,
+    runeImport: { state: "idle" }
+  });
+}
 async function readSelect(data) {
   const s = data;
   if (!s?.myTeam)
@@ -3473,10 +3578,14 @@ async function readSelect(data) {
     return push({ select: null });
   const locked = (t) => t.filter((p) => p.championId > 0).length;
   const theirTeam = s.theirTeam ?? [];
+  const champion = await championById(me.championId);
+  const role = me.assignedPosition || null;
+  if (champion?.key !== state.select?.champion?.key)
+    readRunes(champion, role);
   push({
     select: {
-      champion: await championById(me.championId),
-      role: me.assignedPosition || null,
+      champion,
+      role,
       allies: { locked: locked(s.myTeam), total: s.myTeam.length },
       enemies: { locked: locked(theirTeam), total: theirTeam.length }
     }
@@ -3596,6 +3705,25 @@ ipcMain.on("overlay:report", (_e, info) => {
   console.log("[hud] overlay viewport %dx%d dpr=%s | display bounds %dx%d at (%d,%d) scale=%s | physical %dx%d", info.w, info.h, info.dpr, d.bounds.width, d.bounds.height, d.bounds.x, d.bounds.y, d.scaleFactor, Math.round(d.bounds.width * d.scaleFactor), Math.round(d.bounds.height * d.scaleFactor));
   const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud);
   console.log("[hud] scale=%s → Q drawn at css (%d,%d) %dpx → physical (%d,%d) %dpx", state.hud.scale, Math.round(box.left), Math.round(box.top), Math.round(box.size), Math.round(box.left * info.dpr), Math.round(box.top * info.dpr), Math.round(box.size * info.dpr));
+});
+ipcMain.handle("runes:import", async () => {
+  const r = state.runes;
+  const champ = state.select?.champion;
+  if (!r || !champ)
+    return;
+  push({ runeImport: { state: "working" } });
+  try {
+    const result = await importPage(lcu, champ.name, state.patch ?? "", r.page);
+    if (result.ok) {
+      push({ runeImport: { state: "done", name: r.pageName, replaced: result.replaced } });
+    } else if (result.reason === "no-room") {
+      push({ runeImport: { state: "no-room", pages: result.pages } });
+    } else {
+      push({ runeImport: { state: "error", message: result.message } });
+    }
+  } catch (e) {
+    push({ runeImport: { state: "error", message: e?.message ?? "import failed" } });
+  }
 });
 ipcMain.on("overlay:pin", (_e, on) => {
   push({ pinned: on });

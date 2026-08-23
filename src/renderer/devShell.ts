@@ -23,6 +23,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   lobby: {
@@ -34,6 +36,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   select: {
@@ -50,6 +54,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   game: {
@@ -61,6 +67,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // the state the whole feature exists for
@@ -79,6 +87,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   elder: {
@@ -96,6 +106,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // From the third dragon on the element is knowable — this is that case.
@@ -115,6 +127,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // three ours, the next drake ends it — the live case
@@ -130,6 +144,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // the same brink, on the wrong side of it
@@ -145,6 +161,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    runes: null,
+    runeImport: { state: "idle" },
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
 }

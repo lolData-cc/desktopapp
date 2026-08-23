@@ -250,3 +250,36 @@ body {
   .ds-out .ds-eyebrow, .ds-out .ds-head, .ds-out .ds-rule, .ds-out .ds-late,
   .ds-out .ds-slot { animation: none; }
 }
+
+/* The one button in this app that DOES something to the client, so it is the
+   only one that looks like a button rather than a control. A left rail and a
+   fill — no outline, and nothing pale. */
+.act-btn {
+  position: relative;
+  overflow: hidden;
+  color: var(--jade);
+  background: rgba(0, 217, 146, 0.10);
+  box-shadow: inset 2px 0 0 0 var(--jade);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.act-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(0, 217, 146, 0.22), transparent);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.act-btn:hover { background: rgba(0, 217, 146, 0.17); }
+.act-btn:hover::after { transform: translateX(100%); }
+.act-btn:disabled {
+  color: rgba(215, 216, 217, 0.35);
+  background: rgba(215, 216, 217, 0.05);
+  box-shadow: inset 2px 0 0 0 rgba(215, 216, 217, 0.2);
+  cursor: default;
+}
+.act-btn:disabled::after { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .act-btn::after { display: none; }
+}

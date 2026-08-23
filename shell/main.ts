@@ -13,6 +13,8 @@ import { dirname, join } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
+import { importPage, pageName } from "../src/lcu/runes"
+import { popularRunes, type RuneSuggestion } from "../src/data/runeSource"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
@@ -49,6 +51,16 @@ export type AppState = {
   /** Which ability the skill order says to level next, or null for none.
    *  Static advice: it is the order we already publish for this champion. */
   levelHint: "Q" | "W" | "E" | "R" | null
+  /** The page loldata would run on the picked champion, and how it went for
+   *  the people who ran it. Null until a champion is locked in. */
+  runes: (RuneSuggestion & { pageName: string }) | null
+  /** What happened the last time the player asked to import it. */
+  runeImport:
+    | { state: "idle" }
+    | { state: "working" }
+    | { state: "done"; name: string; replaced: boolean }
+    | { state: "no-room"; pages: { id: number; name: string }[] }
+    | { state: "error"; message: string }
   /** Debug only: hold the overlay on screen instead of letting it expire.
    *  Runtime rather than a build constant, so the notification behaviour can be
    *  inspected without a rebuild — and so it can never be left on by accident
@@ -71,6 +83,8 @@ let state: AppState = {
   select: null,
   notice: null,
   levelHint: null,
+  runes: null,
+  runeImport: { state: "idle" },
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null },
 }
@@ -125,6 +139,26 @@ const lcu = new LcuConnection({
   },
 })
 
+/** Cancels a fetch still in flight when the pick changes again. */
+let runeFetch: AbortController | null = null
+
+async function readRunes(champion: Champion | null, role: string | null): Promise<void> {
+  runeFetch?.abort()
+  if (!champion) return push({ runes: null, runeImport: { state: "idle" } })
+
+  const ctl = new AbortController()
+  runeFetch = ctl
+  const suggestion = await popularRunes(champion.key, champion.name, role, ctl.signal).catch(() => null)
+  if (ctl.signal.aborted) return
+
+  push({
+    runes: suggestion
+      ? { ...suggestion, pageName: pageName(champion.name, state.patch ?? "") }
+      : null,
+    runeImport: { state: "idle" },
+  })
+}
+
 async function readSelect(data: unknown): Promise<void> {
   const s = data as any
   if (!s?.myTeam) return push({ select: null })
@@ -135,12 +169,18 @@ async function readSelect(data: unknown): Promise<void> {
   const locked = (t: any[]) => t.filter((p) => p.championId > 0).length
   const theirTeam = s.theirTeam ?? []
 
+  const champion = await championById(me.championId)
+  const role = me.assignedPosition || null
+  // Only refetch when the pick actually changed — champ select emits a session
+  // update on every hover, timer tick and summoner swap.
+  if (champion?.key !== state.select?.champion?.key) void readRunes(champion, role)
+
   push({
     select: {
-      champion: await championById(me.championId),
+      champion,
       // Empty in customs and blind pick — the client only fills it for queues
       // that assign roles, so the interface has to cope with not knowing.
-      role: me.assignedPosition || null,
+      role,
       allies: { locked: locked(s.myTeam), total: s.myTeam.length },
       enemies: { locked: locked(theirTeam), total: theirTeam.length },
     },
@@ -328,6 +368,26 @@ ipcMain.on("overlay:report", (_e, info: { w: number; h: number; dpr: number }) =
 })
 
 /** Debug: hold the overlay open, or let it behave like a notification again. */
+ipcMain.handle("runes:import", async () => {
+  const r = state.runes
+  const champ = state.select?.champion
+  if (!r || !champ) return
+
+  push({ runeImport: { state: "working" } })
+  try {
+    const result = await importPage(lcu, champ.name, state.patch ?? "", r.page)
+    if (result.ok) {
+      push({ runeImport: { state: "done", name: r.pageName, replaced: result.replaced } })
+    } else if (result.reason === "no-room") {
+      push({ runeImport: { state: "no-room", pages: result.pages } })
+    } else {
+      push({ runeImport: { state: "error", message: result.message } })
+    }
+  } catch (e) {
+    push({ runeImport: { state: "error", message: (e as Error)?.message ?? "import failed" } })
+  }
+})
+
 ipcMain.on("overlay:pin", (_e, on: boolean) => {
   push({ pinned: on })
   if (on) void readObjective()

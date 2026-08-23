@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("desktop", {
   close: () => ipcRenderer.send("win:close"),
   pinOverlay: (on) => ipcRenderer.send("overlay:pin", on),
   demoOverlay: () => ipcRenderer.send("overlay:demo"),
+  importRunes: () => ipcRenderer.invoke("runes:import"),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)

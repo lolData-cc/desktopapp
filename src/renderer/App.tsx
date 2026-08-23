@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { ABILITIES, type Ability, type HudNudge } from "../data/hud"
+import { resolvePage, type Perk, type Style } from "../data/perks"
 
 /** Mirrors the shell's AppState. Kept structural on purpose — the renderer is
  *  meant to be portable to a different shell without editing this file. */
@@ -16,6 +17,20 @@ type AppState = {
     enemies: { locked: number; total: number }
   } | null
   levelHint: Ability | null
+  runes: {
+    page: { keystone: number; primaryStyle: number; primary: number[]; subStyle: number; secondary: number[]; shards: number[] }
+    games: number
+    winrate: number
+    share: number
+    role: string | null
+    pageName: string
+  } | null
+  runeImport:
+    | { state: "idle" }
+    | { state: "working" }
+    | { state: "done"; name: string; replaced: boolean }
+    | { state: "no-room"; pages: { id: number; name: string }[] }
+    | { state: "error"; message: string }
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; source: string | null }
 }
@@ -29,6 +44,7 @@ declare global {
       close(): void
       pinOverlay(on: boolean): void
       demoOverlay(): void
+      importRunes(): Promise<void>
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void
@@ -293,6 +309,111 @@ function Attached({ s }: { s: AppState }) {
             <Count label="enemies" v={sel.enemies} />
           </div>
         </div>
+      )}
+
+      {sel?.champion && <RunePanel s={s} />}
+    </div>
+  )
+}
+
+/**
+ * The page loldata would run, and one button to put it in the client.
+ *
+ * The numbers are the site's, from the same endpoint the Build tab reads, so
+ * the app is not a second opinion — it is the site with a shorter path to the
+ * client.
+ *
+ * It says POPULAR rather than BEST, because that is what the data is: the page
+ * most people play. Those are often the same and sometimes not, and the label
+ * should not quietly claim the stronger one.
+ */
+function RunePanel({ s }: { s: AppState }) {
+  const r = s.runes
+  const [art, setArt] = useState<{ perks: (Perk | null)[]; primary: Style | null; secondary: Style | null } | null>(null)
+
+  useEffect(() => {
+    if (!r) return setArt(null)
+    let alive = true
+    const ids = [...r.page.primary, ...r.page.secondary, ...r.page.shards]
+    void resolvePage(ids, r.page.primaryStyle, r.page.subStyle)
+      .then((a) => { if (alive) setArt(a) })
+      .catch(() => { if (alive) setArt(null) })
+    return () => { alive = false }
+  }, [r?.pageName, r?.page.keystone])
+
+  if (!r) return null
+  const imp = s.runeImport
+
+  return (
+    <div className="rise mt-6 border-t border-jade/[0.12] pt-5">
+      <div className="flex items-baseline gap-2.5">
+        <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-jade/55">
+          most played page
+        </p>
+        <p className="font-jetbrains text-[9px] tabular-nums text-flash/30">
+          {r.share >= 1 ? `${Math.round(r.share)}% of games` : "rarely played"} ·{" "}
+          {r.winrate.toFixed(1)}% wr · {r.games.toLocaleString()} games
+        </p>
+      </div>
+
+      <div className="mt-3.5 flex items-center gap-4">
+        <div className="flex items-center gap-1.5">
+          {art?.primary && (
+            <img src={art.primary.icon} alt={art.primary.name} title={art.primary.name} className="h-5 w-5 opacity-70" />
+          )}
+          {art?.perks.slice(0, 4).map((p, i) => (
+            <img
+              key={p?.id ?? i}
+              src={p?.icon}
+              alt={p?.name ?? ""}
+              title={p?.name ?? ""}
+              // the keystone is the decision; the rest are the consequences
+              className={i === 0 ? "h-8 w-8" : "h-[22px] w-[22px] opacity-85"}
+            />
+          ))}
+        </div>
+
+        <span aria-hidden className="h-6 w-px bg-jade/12" />
+
+        <div className="flex items-center gap-1.5">
+          {art?.secondary && (
+            <img src={art.secondary.icon} alt={art.secondary.name} title={art.secondary.name} className="h-5 w-5 opacity-70" />
+          )}
+          {art?.perks.slice(4, 6).map((p, i) => (
+            <img key={p?.id ?? i} src={p?.icon} alt={p?.name ?? ""} title={p?.name ?? ""} className="h-[22px] w-[22px] opacity-85" />
+          ))}
+          {art?.perks.slice(6, 9).map((p, i) => (
+            <img key={p?.id ?? `s${i}`} src={p?.icon} alt={p?.name ?? ""} title={p?.name ?? ""} className="ml-0.5 h-[15px] w-[15px] opacity-70" />
+          ))}
+        </div>
+
+        <button
+          type="button"
+          disabled={imp.state === "working"}
+          onClick={() => void window.desktop.importRunes()}
+          className="act-btn ml-auto h-8 w-[112px] shrink-0 rounded-[3px] font-chakrapetch text-[12px] font-bold uppercase tracking-[0.12em]"
+        >
+          {imp.state === "working" ? "setting" : imp.state === "done" ? "imported" : "import"}
+        </button>
+      </div>
+
+      {/* One line under the button, and only when there is something to say. */}
+      {imp.state !== "idle" && imp.state !== "working" && (
+        <p className="mt-3 font-jetbrains text-[9.5px] leading-relaxed text-flash/40">
+          {imp.state === "done" ? (
+            <>
+              saved as <span className="text-jade">{imp.name}</span>
+              {imp.replaced ? " · replaced the previous loldata page" : ""}
+            </>
+          ) : imp.state === "no-room" ? (
+            <>
+              <span className="text-citrine">no free rune page slot.</span> delete one in the
+              client and press import again — we will not remove a page you made.
+            </>
+          ) : (
+            <span className="text-citrine">{imp.message}</span>
+          )}
+        </p>
       )}
     </div>
   )
