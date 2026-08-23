@@ -43,8 +43,9 @@ export default function Builds({ s }: { s: AppState }) {
       {builds.length === 0 ? (
         <div className="grid flex-1 place-items-center px-8 text-center">
           <p className="max-w-[46ch] font-chakrapetch text-[13px] leading-relaxed text-flash/35">
-            Lock a champion in and the app works out a build against the enemy comp.
-            Save it here and it drives the in-game notices — you will be told when the
+            Import runes from the site, or lock a champion in and let the app work
+            out a build against the enemy comp. Either one saves a profile here, and
+            an enabled profile drives the in-game notices — you will be told when the
             next item becomes affordable.
           </p>
         </div>
@@ -101,6 +102,13 @@ function Row({
       </div>
 
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        {/* A rune import creates a profile with no items yet. Saying so beats
+            an empty gap, which reads as something failing to load. */}
+        {b.items.length === 0 && (
+          <span className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
+            runes only · items fill in at champion select
+          </span>
+        )}
         {b.items.map((id, i) => (
           <img
             key={`${id}-${i}`}

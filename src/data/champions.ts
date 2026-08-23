@@ -46,6 +46,23 @@ async function load(): Promise<Map<number, Champion>> {
 }
 
 /** Null for 0 or an unknown id — 0 is what the client sends for "not picked". */
+/**
+ * By display name, which is what a rune import knows.
+ *
+ * ⚠️ The name and the ddragon id are NOT the same for every champion — "Lee
+ * Sin" is "LeeSin", "Kai'Sa" is "Kaisa". Using the name as the id would break
+ * the icon and every endpoint keyed on it, for exactly the champions whose
+ * names have punctuation.
+ */
+export async function championByName(name: string): Promise<Champion | null> {
+  if (!name) return null
+  const key = name.trim().toLowerCase()
+  for (const c of (await load()).values()) {
+    if (c.name.toLowerCase() === key || c.slug.toLowerCase() === key) return c
+  }
+  return null
+}
+
 export async function championById(id: number): Promise<Champion | null> {
   if (!id) return null
   return (await load()).get(id) ?? null

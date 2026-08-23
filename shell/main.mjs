@@ -18590,6 +18590,16 @@ async function load() {
   cache = map;
   return map;
 }
+async function championByName(name) {
+  if (!name)
+    return null;
+  const key = name.trim().toLowerCase();
+  for (const c of (await load()).values()) {
+    if (c.name.toLowerCase() === key || c.slug.toLowerCase() === key)
+      return c;
+  }
+  return null;
+}
 async function championById(id) {
   if (!id)
     return null;
@@ -20108,6 +20118,7 @@ async function applyPage(champion, patch2, page) {
     console.log("[runes] %s → %s", champion, result.ok ? "imported" : result.reason);
     if (result.ok) {
       await rememberChoice(champion, signatureOf(page));
+      await profileFromRunes(champion, patch2, signatureOf(page));
       push({ runeImport: { state: "done", name: pageName(champion, patch2), replaced: result.replaced } });
     } else if (result.reason === "no-room") {
       push({ runeImport: { state: "no-room", pages: result.pages } });
@@ -20136,6 +20147,25 @@ var GOLD_DEMOS = [
   null
 ];
 var goldDemo = -1;
+async function profileFromRunes(championName, patch2, runes) {
+  const champ = await championByName(championName).catch(() => null);
+  if (!champ)
+    return;
+  const existing = await buildFor(champ.slug).catch(() => null);
+  await saveBuild({
+    championId: champ.slug,
+    championName: champ.name,
+    championKey: champ.key,
+    role: existing?.role ?? null,
+    items: existing?.items ?? [],
+    runes,
+    enabled: existing?.enabled ?? true,
+    source: existing?.source ?? "site",
+    savedAt: Date.now(),
+    patch: patch2 || existing?.patch || null
+  });
+  await pushBuilds();
+}
 async function pushBuilds() {
   push({ builds: await listBuilds().catch(() => []) });
 }

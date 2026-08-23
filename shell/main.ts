@@ -11,7 +11,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from "elec
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
-import { championById, currentPatch, type Champion } from "../src/data/champions"
+import { championById, championByName, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
 import { createSplash, dismissSplash } from "./splash"
@@ -753,6 +753,11 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
       // the website. This is the whole point: champ select must not then put
       // the most played page back over a deliberate choice.
       await rememberChoice(champion, signatureOf(page))
+      // …and make it a PROFILE, so it appears in Builds. Importing runes for a
+      // champion is a decision about that champion, and it used to leave no
+      // trace anywhere the player could see — the section stayed empty and the
+      // import looked like it had done nothing.
+      await profileFromRunes(champion, patch, signatureOf(page))
       push({ runeImport: { state: "done", name: pageName(champion, patch), replaced: result.replaced } })
     } else if (result.reason === "no-room") {
       push({ runeImport: { state: "no-room", pages: result.pages } })
@@ -797,6 +802,38 @@ const GOLD_DEMOS: (TeamGold | null)[] = [
   null,                                                              // off
 ]
 let goldDemo = -1
+
+/**
+ * Turn an imported rune page into a saved profile.
+ *
+ * Keeps any items already saved for that champion: a rune import is about the
+ * runes, and quietly clearing a build the player had kept would be losing their
+ * work to do them a favour. A profile with runes and no items yet is a valid
+ * one — it fills in the first time champion select works a build out.
+ *
+ * The champion is resolved by NAME because that is all an import carries, and
+ * the ddragon id it needs is not always the same string: "Lee Sin" is "LeeSin".
+ */
+async function profileFromRunes(championName: string, patch: string, runes: string): Promise<void> {
+  const champ = await championByName(championName).catch(() => null)
+  if (!champ) return
+
+  const existing = await buildFor(champ.slug).catch(() => null)
+  await saveBuild({
+    championId: champ.slug,
+    championName: champ.name,
+    championKey: champ.key,
+    role: existing?.role ?? null,
+    items: existing?.items ?? [],
+    runes,
+    // An existing profile keeps whatever the player set it to.
+    enabled: existing?.enabled ?? true,
+    source: existing?.source ?? "site",
+    savedAt: Date.now(),
+    patch: patch || existing?.patch || null,
+  })
+  await pushBuilds()
+}
 
 async function pushBuilds(): Promise<void> {
   push({ builds: await listBuilds().catch(() => []) })
