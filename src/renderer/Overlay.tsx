@@ -233,17 +233,32 @@ function LoadingBoard({
                 the same path the summoner page uses. Not the client's mini
                 crest and not a community mirror: one rank should not look like
                 two different things across our own products. */}
-            <img
-              src={p.rank ? `${RANKS}/${p.rank.tier}.png` : `${RANKS}/unranked.png`}
-              alt=""
-              className="relative"
-              style={{ width: box.width * 0.46, height: box.width * 0.46, objectFit: "contain" }}
-              onError={(e) => {
-                // A missing emblem should leave a gap, not a broken-image glyph
-                // over someone's champion.
-                ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
-              }}
-            />
+            {p.rank ? (
+              <img
+                src={`${RANKS}/${p.rank.tier}.png`}
+                alt=""
+                className="relative"
+                style={{ width: box.width * 0.46, height: box.width * 0.46, objectFit: "contain" }}
+                onError={(e) => {
+                  // A missing emblem leaves a gap rather than a broken-image
+                  // glyph over someone's champion.
+                  ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
+                }}
+              />
+            ) : (
+              // No emblem request for an unranked player: cdn2/ranks has no
+              // unranked.png — the site uses a local file for that — so asking
+              // would be a guaranteed 404 on every card of every new account.
+              <span
+                aria-hidden
+                className="relative rotate-45"
+                style={{
+                  width: box.width * 0.1,
+                  height: box.width * 0.1,
+                  boxShadow: `inset 0 0 0 1px ${accent}55`,
+                }}
+              />
+            )}
 
             <div
               className="relative flex flex-col items-center"
