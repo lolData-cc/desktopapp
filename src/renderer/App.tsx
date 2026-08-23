@@ -169,7 +169,6 @@ function Account({ s }: { s: AppState | null }) {
             onClick={() => setOpen(false)}
           />
           <div className="hud absolute right-0 top-[calc(100%+6px)] z-40 w-[248px] px-4 py-4">
-            <span className="tick-b" />
 
             <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.24em] text-flash/25">
               league account

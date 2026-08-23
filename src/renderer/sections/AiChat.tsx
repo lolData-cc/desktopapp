@@ -166,8 +166,6 @@ function Gate({
   return (
     <div className="grid h-full place-items-center px-8">
       <div className="hud relative max-w-[420px] px-8 py-9 text-center">
-        <span className="tick-b" />
-        <span className="tick-c" />
         <p className="font-jetbrains text-[9px] uppercase tracking-[0.3em] text-jade/50">loldata ai</p>
         <h3 className="mt-3 font-chakrapetch text-[21px] font-bold leading-tight">{title}</h3>
         <p className="mx-auto mt-3 max-w-[38ch] font-chakrapetch text-[13px] leading-relaxed text-flash/40">

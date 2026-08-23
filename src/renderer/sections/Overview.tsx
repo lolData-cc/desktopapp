@@ -21,8 +21,6 @@ const PHASE_COPY: Record<string, { title: string; sub: string }> = {
 export function Waiting() {
   return (
     <div className="hud rise relative w-full max-w-[420px] overflow-hidden px-8 py-12 text-center">
-      <span className="tick-b" />
-      <span className="tick-c" />
       <span aria-hidden className="sweep pointer-events-none absolute inset-x-0 top-0 h-[2px]" />
 
       <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.3em] text-jade/50">
@@ -45,8 +43,6 @@ export function Attached({ s }: { s: AppState }) {
 
   return (
     <div className="hud relative w-full max-w-[560px] px-9 py-10">
-      <span className="tick-b" />
-      <span className="tick-c" />
 
       {/* the phase, keyed so every change replays the entrance */}
       <div key={s.phase ?? "none"} className="rise">

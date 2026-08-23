@@ -44,30 +44,16 @@ body {
 /* ── the main panel ───────────────────────────────────────────────────────
    Corner ticks instead of a full border: the frame is implied, which keeps the
    panel from reading as a box drawn around the content. */
+/* A surface, and ONLY a surface.
+   It used to set position:relative, which beat Tailwind's `absolute` purely by
+   coming later in the stylesheet — so the account menu fell into normal flow
+   and was drawn 79px above the window, where the frame cut it off. A class that
+   styles a panel should not also decide where the panel lives; every user of
+   .hud already declares its own positioning. */
 .hud {
-  position: relative;
   background: linear-gradient(180deg, rgba(0, 217, 146, 0.028), rgba(0, 217, 146, 0.008));
   border-radius: 4px;
 }
-.hud::before,
-.hud::after,
-.hud > .tick-b,
-.hud > .tick-c {
-  content: "";
-  position: absolute;
-  width: 13px;
-  height: 13px;
-  border-color: rgba(0, 217, 146, 0.45);
-  pointer-events: none;
-}
-/* Width and style only. `border-top: 1px solid` is a SHORTHAND: it resets the
-   colour to currentColor and quietly threw away the jade set above, which is
-   how the ticks ended up drawn in near-white — the one border colour the design
-   system forbids. */
-.hud::before { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; border-style: solid none none solid; }
-.hud::after { top: 0; right: 0; border-top-width: 1px; border-right-width: 1px; border-style: solid solid none none; }
-.hud > .tick-b { bottom: 0; left: 0; border-bottom-width: 1px; border-left-width: 1px; border-style: none none solid solid; }
-.hud > .tick-c { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; border-style: none solid solid none; }
 
 /* ── state changes ────────────────────────────────────────────────────────
    Everything that swaps does it the same way, so the app has one motion
@@ -303,3 +289,21 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ds-enter, .ds-row { animation: none; }
 }
+
+/* Scrollbars.
+   The default is a light track that reads as a white line down a dark panel —
+   the one colour the design system does not use. Sized narrow and coloured from
+   the palette, so a long list looks like part of the app rather than like the
+   operating system leaking through. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 217, 146, 0.28) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 217, 146, 0.22);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 217, 146, 0.38); }
+::-webkit-scrollbar-corner { background: transparent; }
