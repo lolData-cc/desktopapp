@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CDN, CDRAGON, isPremium, type AppState } from "./types"
+import { CDN, CDRAGON, isPremium, planBadge, type AppState } from "./types"
 import { Attached, Waiting } from "./sections/Overview"
 import Matches from "./sections/Matches"
 import Champions from "./sections/Champions"
@@ -131,6 +131,7 @@ function Account({ s }: { s: AppState | null }) {
   const summoner = s?.summoner
   const account = s?.account
   const patch = s?.patch ?? "16.16.1"
+  const badge = planBadge(account?.tier)
 
   return (
     <div className="relative">
@@ -151,14 +152,17 @@ function Account({ s }: { s: AppState | null }) {
         <span className="max-w-[130px] truncate font-chakrapetch text-[12px] font-bold text-flash/75">
           {summoner?.name ?? "Not signed in"}
         </span>
-        {account && (
-          <span
-            className={`rounded-[2px] px-1 font-jetbrains text-[8px] uppercase tracking-[0.14em] ${
-              isPremium(account.tier) ? "bg-jade/15 text-jade" : "bg-flash/[0.07] text-flash/40"
-            }`}
-          >
-            {account.tier ?? "free"}
-          </span>
+        {/* The crest rather than the word. It is the same badge the site puts
+            on a premium profile, and it reads at a glance where a four-letter
+            word had to be parsed. Free shows nothing — the menu says it. */}
+        {badge && (
+          <img
+            src={badge}
+            alt={account?.tier ?? ""}
+            title={`${account?.tier} plan`}
+            className="h-[19px] w-auto shrink-0"
+            style={{ filter: "drop-shadow(0 0 6px rgba(0,217,146,0.35))" }}
+          />
         )}
       </button>
 
@@ -197,9 +201,12 @@ function Account({ s }: { s: AppState | null }) {
               <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.24em] text-flash/25">
                 loldata account
               </p>
-              <p className="mt-1 truncate font-chakrapetch text-[13px] text-flash/70">
-                {account?.email ?? (account ? "signed in" : "signed out")}
-              </p>
+              <div className="mt-1 flex items-center gap-2">
+                {badge && <img src={badge} alt="" className="h-[22px] w-auto shrink-0" />}
+                <p className="min-w-0 truncate font-chakrapetch text-[13px] text-flash/70">
+                  {account?.email ?? (account ? "signed in" : "signed out")}
+                </p>
+              </div>
 
               <button
                 type="button"

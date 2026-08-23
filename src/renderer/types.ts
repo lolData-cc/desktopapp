@@ -138,6 +138,19 @@ declare global {
 export const isPremium = (tier: string | null | undefined): boolean =>
   tier === "premium" || tier === "elite"
 
+/**
+ * The plan crest, from the site's own badge set — the same image a premium
+ * profile shows there, so the two surfaces mark a plan the same way.
+ *
+ * Null for the free tier: a badge meaning "no plan" is a contradiction, and the
+ * account menu already says which plan it is in words.
+ */
+export function planBadge(tier: string | null | undefined): string | null {
+  if (tier === "elite") return `${CDN}/img/badge/loldata-plans/Elite.png`
+  if (tier === "premium") return `${CDN}/img/badge/loldata-plans/Premium.png`
+  return null
+}
+
 /** Riot's queue ids, as words. Unknown ones say so instead of guessing. */
 export const QUEUE_NAME: Record<number, string> = {
   400: "Draft Pick",
