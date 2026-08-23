@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* The website's ground, exactly. The app should feel like the site moved onto
+   the desktop, not like a second product wearing its colours. */
+:root {
+  --ink: #040a0c;
+  --ink-2: #070f11;
+  --line: rgba(0, 217, 146, 0.12);
+  --jade: #00d992;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: #d7d8d9;
+  font-family: "Chakra Petch", sans-serif;
+  overflow: hidden;              /* the window is the frame; nothing scrolls the shell */
+  user-select: none;
+  cursor: default;
+}
+
+/* Frameless window: this is what the user grabs to move it. Buttons inside must
+   opt back out, or they become part of the drag handle and stop being clickable. */
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* ── the field behind everything ──────────────────────────────────────────
+   The homepage's dot grid, masked to a soft pool so it reads as atmosphere
+   rather than as a texture with edges. */
+.dot-field {
+  background-image: radial-gradient(rgba(0, 217, 146, 0.75) 1px, transparent 1px);
+  background-size: 26px 26px;
+  opacity: 0.05;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 42%, #000 8%, transparent 68%);
+  mask-image: radial-gradient(ellipse at 50% 42%, #000 8%, transparent 68%);
+}
+
+/* ── the main panel ───────────────────────────────────────────────────────
+   Corner ticks instead of a full border: the frame is implied, which keeps the
+   panel from reading as a box drawn around the content. */
+.hud {
+  position: relative;
+  background: linear-gradient(180deg, rgba(0, 217, 146, 0.028), rgba(0, 217, 146, 0.008));
+  border-radius: 4px;
+}
+.hud::before,
+.hud::after,
+.hud > .tick-b,
+.hud > .tick-c {
+  content: "";
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-color: rgba(0, 217, 146, 0.45);
+  pointer-events: none;
+}
+/* Width and style only. `border-top: 1px solid` is a SHORTHAND: it resets the
+   colour to currentColor and quietly threw away the jade set above, which is
+   how the ticks ended up drawn in near-white — the one border colour the design
+   system forbids. */
+.hud::before { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; border-style: solid none none solid; }
+.hud::after { top: 0; right: 0; border-top-width: 1px; border-right-width: 1px; border-style: solid solid none none; }
+.hud > .tick-b { bottom: 0; left: 0; border-bottom-width: 1px; border-left-width: 1px; border-style: none none solid solid; }
+.hud > .tick-c { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; border-style: none solid solid none; }
+
+/* ── state changes ────────────────────────────────────────────────────────
+   Everything that swaps does it the same way, so the app has one motion
+   vocabulary rather than a different idea per screen. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+.rise { animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* The waiting state: one line sweeping a panel, slowly. It is the only thing
+   moving while nothing is happening, which is the point. */
+@keyframes sweep {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(2100%); opacity: 0; }
+}
+.sweep {
+  animation: sweep 3.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  background: linear-gradient(180deg, transparent, rgba(0, 217, 146, 0.55), transparent);
+}
+
+/* A live connection breathes; a missing one does not. */
+@keyframes beat {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 217, 146, 0.5); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 4px rgba(0, 217, 146, 0); }
+}
+.beat { animation: beat 2.4s ease-in-out infinite; }
+
+.win-btn {
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.win-btn:hover { background: rgba(0, 217, 146, 0.10); color: var(--jade); }
+.win-btn.danger:hover { background: rgba(255, 98, 134, 0.14); color: #ff6286; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .sweep, .beat { animation: none; }
+  .sweep { opacity: 0.35; }
+}
