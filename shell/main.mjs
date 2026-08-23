@@ -2899,9 +2899,9 @@ var require_websocket_server = __commonJS((exports, module) => {
 });
 
 // shell/main.ts
-import { app, BrowserWindow as BrowserWindow2, ipcMain, screen as screen2, shell } from "electron";
+import { app as app2, BrowserWindow as BrowserWindow2, ipcMain, screen as screen2, shell } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, join as join2, resolve } from "node:path";
+import { dirname as dirname2, join as join3, resolve } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -3255,6 +3255,9 @@ async function ensureProtocol(protocol, electronClaimed, launch) {
 
 // src/lcu/runes.ts
 var PAGE_MARKER = "LolData";
+function signatureOf(p) {
+  return `${p.primaryStyle}:${p.subStyle}:${[...p.primary, ...p.secondary, ...p.shards].join(",")}`;
+}
 var pageName = (champion, patch2) => `${champion} - ${PAGE_MARKER} ${patch2}`;
 var isOurs = (name) => name.toLowerCase().includes(PAGE_MARKER.toLowerCase());
 function toSelectedPerkIds(page) {
@@ -3314,7 +3317,8 @@ async function importPage(lcu, champion, patch2, page) {
 
 // src/data/runeSource.ts
 var API = "https://api2.loldata.cc";
-async function popularRunes(championKey, championName, role, signal) {
+var VARIANT_LABEL = ["Most Popular", "2nd Most Popular", "Alternative", "Off-Meta", "Niche"];
+async function championRunes(championKey, championName, role, signal) {
   const res = await fetch(`${API}/api/champion/build`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -3324,21 +3328,45 @@ async function popularRunes(championKey, championName, role, signal) {
   if (!res.ok)
     return null;
   const data = await res.json();
-  const page = data.preciseRunes?.pages?.[0];
-  if (!page)
-    return null;
-  const complete = page.primary?.length === 4 && page.secondary?.length === 2 && page.shards?.length === 3;
-  if (!complete)
-    return null;
   const sample = data.preciseRunes?.sample ?? 0;
-  const games = page.games ?? 0;
-  return {
+  const variants = (data.preciseRunes?.pages ?? []).filter((p) => p.primary?.length === 4 && p.secondary?.length === 2 && p.shards?.length === 3).map((page, i) => ({
     page,
-    games,
+    games: page.games ?? 0,
     winrate: page.winrate ?? 0,
-    share: sample > 0 ? games / sample * 100 : 0,
-    role
-  };
+    share: sample > 0 ? (page.games ?? 0) / sample * 100 : 0,
+    label: VARIANT_LABEL[i] ?? `Build ${i + 1}`
+  }));
+  return variants.length ? { variants, role } : null;
+}
+
+// shell/prefs.ts
+import { app } from "electron";
+import { readFile as readFile2, writeFile, mkdir } from "node:fs/promises";
+import { dirname, join as join2 } from "node:path";
+var cache2 = null;
+var file = () => join2(app.getPath("userData"), "preferences.json");
+async function load2() {
+  if (cache2)
+    return cache2;
+  try {
+    const raw = await readFile2(file(), "utf8");
+    const parsed = JSON.parse(raw);
+    cache2 = { chosen: parsed?.chosen ?? {} };
+  } catch {
+    cache2 = { chosen: {} };
+  }
+  return cache2;
+}
+async function chosenFor(champion) {
+  return (await load2()).chosen[champion.toLowerCase()] ?? null;
+}
+async function rememberChoice(champion, signature) {
+  const store = await load2();
+  store.chosen[champion.toLowerCase()] = signature;
+  try {
+    await mkdir(dirname(file()), { recursive: true });
+    await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
+  } catch {}
 }
 
 // src/lcu/deepLink.ts
@@ -3458,7 +3486,7 @@ function abilityBox(ability, screen2, hud) {
 }
 
 // src/live/hudConfig.ts
-import { readFile as readFile2 } from "node:fs/promises";
+import { readFile as readFile3 } from "node:fs/promises";
 var CONFIG_PATHS = [
   "C:/Riot Games/League of Legends/Config/game.cfg",
   "C:/Program Files/Riot Games/League of Legends/Config/game.cfg",
@@ -3470,7 +3498,7 @@ async function readHudSettings() {
   for (const path of CONFIG_PATHS) {
     let text;
     try {
-      text = await readFile2(path, "utf8");
+      text = await readFile3(path, "utf8");
     } catch {
       continue;
     }
@@ -3586,7 +3614,7 @@ function nextObjective(events, gameTime, players = [], mapTerrain) {
 }
 
 // shell/main.ts
-var __dirname2 = dirname(fileURLToPath(import.meta.url));
+var __dirname2 = dirname2(fileURLToPath(import.meta.url));
 var DEV_URL2 = process.env.VITE_DEV_SERVER_URL;
 var state = {
   client: "waiting",
@@ -3649,11 +3677,20 @@ async function readRunes(champion, role) {
     return push({ runes: null, runeImport: { state: "idle" } });
   const ctl = new AbortController;
   runeFetch = ctl;
-  const suggestion = await popularRunes(champion.key, champion.name, role, ctl.signal).catch(() => null);
+  const suggestion = await championRunes(champion.key, champion.name, role, ctl.signal).catch(() => null);
   if (ctl.signal.aborted)
     return;
+  if (!suggestion)
+    return push({ runes: null, runeImport: { state: "idle" } });
+  const want = await chosenFor(champion.name);
+  const found = want ? suggestion.variants.findIndex((v) => signatureOf(v.page) === want) : -1;
   push({
-    runes: suggestion ? { ...suggestion, pageName: pageName(champion.name, state.patch ?? "") } : null,
+    runes: {
+      variants: suggestion.variants,
+      chosen: found >= 0 ? found : 0,
+      remembered: found >= 0,
+      pageName: pageName(champion.name, state.patch ?? "")
+    },
     runeImport: { state: "idle" }
   });
 }
@@ -3759,7 +3796,7 @@ function createWindow() {
     frame: false,
     backgroundColor: "#040A0C",
     webPreferences: {
-      preload: join2(__dirname2, "preload.mjs"),
+      preload: join3(__dirname2, "preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -3773,7 +3810,7 @@ function createWindow() {
   if (DEV_URL2)
     win.loadURL(DEV_URL2);
   else
-    win.loadFile(join2(__dirname2, "../dist/index.html"));
+    win.loadFile(join3(__dirname2, "../dist/index.html"));
 }
 ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
@@ -3800,6 +3837,7 @@ async function applyPage(champion, patch2, page) {
     const result = await importPage(lcu, champion, patch2, page);
     console.log("[runes] %s → %s", champion, result.ok ? "imported" : result.reason);
     if (result.ok) {
+      await rememberChoice(champion, signatureOf(page));
       push({ runeImport: { state: "done", name: pageName(champion, patch2), replaced: result.replaced } });
     } else if (result.reason === "no-room") {
       push({ runeImport: { state: "no-room", pages: result.pages } });
@@ -3810,12 +3848,18 @@ async function applyPage(champion, patch2, page) {
     push({ runeImport: { state: "error", message: e?.message ?? "import failed" } });
   }
 }
+ipcMain.on("runes:choose", (_e, index) => {
+  const r = state.runes;
+  if (!r || index < 0 || index >= r.variants.length)
+    return;
+  push({ runes: { ...r, chosen: index }, runeImport: { state: "idle" } });
+});
 ipcMain.handle("runes:import", async () => {
   const r = state.runes;
   const champ = state.select?.champion;
   if (!r || !champ)
     return;
-  await applyPage(champ.name, state.patch ?? "", r.page);
+  await applyPage(champ.name, state.patch ?? "", r.variants[r.chosen].page);
 });
 async function handleLink(raw) {
   if (!raw)
@@ -3857,26 +3901,26 @@ ipcMain.on("overlay:demo", async () => {
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
 });
-var gotLock = app.requestSingleInstanceLock();
+var gotLock = app2.requestSingleInstanceLock();
 if (!gotLock) {
-  app.quit();
+  app2.quit();
 } else {
-  app.on("second-instance", (_e, argv) => {
+  app2.on("second-instance", (_e, argv) => {
     console.log("[link] second-instance argv=%s", JSON.stringify(argv));
     handleLink(linkFromArgv(argv));
   });
-  app.on("open-url", (e, url) => {
+  app2.on("open-url", (e, url) => {
     e.preventDefault();
     handleLink(url);
   });
-  app.whenReady().then(async () => {
+  app2.whenReady().then(async () => {
     const dev = process.defaultApp && process.argv.length >= 2;
     const launch = dev ? { exe: process.execPath, args: [resolve(process.argv[1])] } : { exe: process.execPath, args: [] };
-    const claimed = dev ? app.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app.setAsDefaultProtocolClient(PROTOCOL);
+    const claimed = dev ? app2.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app2.setAsDefaultProtocolClient(PROTOCOL);
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
     console.log("[link] %s:// ok=%s via=%s%s", PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : "");
     createWindow();
-    createOverlay(join2(__dirname2, "preload.mjs"));
+    createOverlay(join3(__dirname2, "preload.mjs"));
     const hud = await readHudSettings();
     push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
     await lcu.start();
@@ -3884,17 +3928,17 @@ if (!gotLock) {
     handleLink(linkFromArgv(process.argv));
   });
 }
-app.on("before-quit", () => {
+app2.on("before-quit", () => {
   stopGameClock();
   destroyOverlay();
 });
-app.on("window-all-closed", () => {
+app2.on("window-all-closed", () => {
   lcu.stop();
   destroyOverlay();
   if (process.platform !== "darwin")
-    app.quit();
+    app2.quit();
 });
-app.on("activate", () => {
+app2.on("activate", () => {
   if (BrowserWindow2.getAllWindows().length === 0)
     createWindow();
 });

@@ -9,20 +9,34 @@
  * the most popular one is simply the first. Popular is not the same as best,
  * and the app says which it is showing rather than implying they are the same
  * thing.
+ *
+ * ALL of them are returned, not just the first. The site offers the same five
+ * and lets you pick; an app that only knew about the most played one would
+ * overwrite a deliberate choice every time champ select came round.
  */
 import type { BuildPage } from "../lcu/runes"
 
 const API = "https://api2.loldata.cc"
 
-export type RuneSuggestion = {
+export type RuneVariant = {
   page: BuildPage
   /** Games behind this exact page, for saying how well attested it is. */
   games: number
   winrate: number
   /** Of the champion's total sample, so "88% of Nami players" is sayable. */
   share: number
+  /** The site's own words for these, so the two surfaces agree. */
+  label: string
+}
+
+export type RuneSuggestion = {
+  variants: RuneVariant[]
   role: string | null
 }
+
+/** Identical to the website's, deliberately — the same page must not be called
+ *  one thing there and another here. */
+const VARIANT_LABEL = ["Most Popular", "2nd Most Popular", "Alternative", "Off-Meta", "Niche"]
 
 type BuildResponse = {
   preciseRunes?: {
@@ -37,7 +51,7 @@ type BuildResponse = {
  * back short of its nine perks. Writing an incomplete page to the client is
  * worse than not writing one.
  */
-export async function popularRunes(
+export async function championRunes(
   championKey: number,
   championName: string,
   role: string | null,
@@ -54,21 +68,19 @@ export async function popularRunes(
   if (!res.ok) return null
 
   const data = (await res.json()) as BuildResponse
-  const page = data.preciseRunes?.pages?.[0]
-  if (!page) return null
-
-  const complete =
-    page.primary?.length === 4 && page.secondary?.length === 2 && page.shards?.length === 3
-  if (!complete) return null
-
   const sample = data.preciseRunes?.sample ?? 0
-  const games = page.games ?? 0
 
-  return {
-    page,
-    games,
-    winrate: page.winrate ?? 0,
-    share: sample > 0 ? (games / sample) * 100 : 0,
-    role,
-  }
+  const variants = (data.preciseRunes?.pages ?? [])
+    // A page short of its nine perks is dropped rather than half-written to the
+    // client, and dropping it here keeps the labels aligned with the site's.
+    .filter((p) => p.primary?.length === 4 && p.secondary?.length === 2 && p.shards?.length === 3)
+    .map((page, i) => ({
+      page,
+      games: page.games ?? 0,
+      winrate: page.winrate ?? 0,
+      share: sample > 0 ? ((page.games ?? 0) / sample) * 100 : 0,
+      label: VARIANT_LABEL[i] ?? `Build ${i + 1}`,
+    }))
+
+  return variants.length ? { variants, role } : null
 }

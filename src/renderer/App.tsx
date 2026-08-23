@@ -18,11 +18,15 @@ type AppState = {
   } | null
   levelHint: Ability | null
   runes: {
-    page: { keystone: number; primaryStyle: number; primary: number[]; subStyle: number; secondary: number[]; shards: number[] }
-    games: number
-    winrate: number
-    share: number
-    role: string | null
+    variants: {
+      page: { keystone: number; primaryStyle: number; primary: number[]; subStyle: number; secondary: number[]; shards: number[] }
+      games: number
+      winrate: number
+      share: number
+      label: string
+    }[]
+    chosen: number
+    remembered: boolean
     pageName: string
   } | null
   runeImport:
@@ -45,6 +49,7 @@ declare global {
       pinOverlay(on: boolean): void
       demoOverlay(): void
       importRunes(): Promise<void>
+      chooseRunes(index: number): void
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void
@@ -360,38 +365,53 @@ function RuneImportNotice({ imp }: { imp: AppState["runeImport"] }) {
  */
 function RunePanel({ s }: { s: AppState }) {
   const r = s.runes
+  const v = r?.variants[r.chosen]
   const [art, setArt] = useState<{ perks: (Perk | null)[]; primary: Style | null; secondary: Style | null } | null>(null)
 
   useEffect(() => {
-    if (!r) return setArt(null)
+    if (!v) return setArt(null)
     let alive = true
-    const ids = [...r.page.primary, ...r.page.secondary, ...r.page.shards]
-    void resolvePage(ids, r.page.primaryStyle, r.page.subStyle)
+    const ids = [...v.page.primary, ...v.page.secondary, ...v.page.shards]
+    void resolvePage(ids, v.page.primaryStyle, v.page.subStyle)
       .then((a) => { if (alive) setArt(a) })
       .catch(() => { if (alive) setArt(null) })
     return () => { alive = false }
-  }, [r?.pageName, r?.page.keystone])
+  }, [v?.page.keystone, v?.label])
 
-  if (!r) return null
+  if (!r || !v) return null
   const imp = s.runeImport
 
   return (
     <div className="rise mt-6 border-t border-jade/[0.12] pt-5">
-      <div className="flex items-baseline gap-2.5">
-        <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-jade/55">
-          most played page
-        </p>
-        <p className="font-jetbrains text-[9px] tabular-nums text-flash/30">
-          {r.share >= 1 ? `${Math.round(r.share)}% of games` : "rarely played"} ·{" "}
-          {r.winrate.toFixed(1)}% wr · {r.games.toLocaleString()} games
-        </p>
+      {/* The same five the site offers, in the same order and the same words.
+          Knowing only the most played page is what let champ select overwrite a
+          choice made on the website. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {r.variants.map((variant, i) => (
+          <button
+            key={variant.label}
+            type="button"
+            onClick={() => window.desktop.chooseRunes(i)}
+            className={`win-btn rounded-[3px] px-2 py-1 text-left ${i === r.chosen ? "bg-jade/[0.13]" : ""}`}
+          >
+            <span className={`block font-jetbrains text-[8.5px] uppercase tracking-[0.14em] ${i === r.chosen ? "text-jade" : "text-flash/30"}`}>
+              {variant.label}
+            </span>
+            <span className={`block font-chakrapetch text-[11px] font-bold tabular-nums ${i === r.chosen ? "text-flash/85" : "text-flash/40"}`}>
+              {variant.winrate.toFixed(1)}%
+            </span>
+          </button>
+        ))}
       </div>
 
-      <div className="mt-3.5 flex items-center gap-4">
+      <p className="mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30">
+        {r.remembered && r.chosen !== 0 && <span className="text-jade/70">your last choice · </span>}
+        {v.share >= 1 ? `${Math.round(v.share)}% of games` : "rarely played"} · {v.games.toLocaleString()} games
+      </p>
+
+      <div className="mt-3 flex items-center gap-4">
         <div className="flex items-center gap-1.5">
-          {art?.primary && (
-            <img src={art.primary.icon} alt={art.primary.name} title={art.primary.name} className="h-5 w-5 opacity-70" />
-          )}
+          {art?.primary && <img src={art.primary.icon} alt={art.primary.name} title={art.primary.name} className="h-5 w-5 opacity-70" />}
           {art?.perks.slice(0, 4).map((p, i) => (
             <img
               key={p?.id ?? i}
@@ -407,9 +427,7 @@ function RunePanel({ s }: { s: AppState }) {
         <span aria-hidden className="h-6 w-px bg-jade/12" />
 
         <div className="flex items-center gap-1.5">
-          {art?.secondary && (
-            <img src={art.secondary.icon} alt={art.secondary.name} title={art.secondary.name} className="h-5 w-5 opacity-70" />
-          )}
+          {art?.secondary && <img src={art.secondary.icon} alt={art.secondary.name} title={art.secondary.name} className="h-5 w-5 opacity-70" />}
           {art?.perks.slice(4, 6).map((p, i) => (
             <img key={p?.id ?? i} src={p?.icon} alt={p?.name ?? ""} title={p?.name ?? ""} className="h-[22px] w-[22px] opacity-85" />
           ))}
@@ -427,7 +445,6 @@ function RunePanel({ s }: { s: AppState }) {
           {imp.state === "working" ? "setting" : imp.state === "done" ? "imported" : "import"}
         </button>
       </div>
-
     </div>
   )
 }

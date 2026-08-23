@@ -32,6 +32,28 @@ import type { LcuConnection } from "./connection"
  */
 export const PAGE_MARKER = "LolData"
 
+/**
+ * A page reduced to what it IS, for recognising the same one later.
+ *
+ * Deliberately not an index: variant order is a popularity ranking that moves
+ * between patches, so "the fourth one" means a different page next week. The
+ * runes do not move.
+ *
+ * Pure, and kept out of the preferences module so it does not drag Electron in
+ * and become untestable outside the app.
+ */
+export type PageSignature = string
+
+export function signatureOf(p: {
+  primaryStyle: number
+  subStyle: number
+  primary: number[]
+  secondary: number[]
+  shards: number[]
+}): PageSignature {
+  return `${p.primaryStyle}:${p.subStyle}:${[...p.primary, ...p.secondary, ...p.shards].join(",")}`
+}
+
 export const pageName = (champion: string, patch: string) =>
   `${champion} - ${PAGE_MARKER} ${patch}`
 

@@ -15,7 +15,8 @@ import { championById, currentPatch, type Champion } from "../src/data/champions
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
-import { popularRunes, type RuneSuggestion } from "../src/data/runeSource"
+import { championRunes, type RuneVariant } from "../src/data/runeSource"
+import { chosenFor, rememberChoice, signatureOf } from "./prefs"
 import { linkFromArgv, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
@@ -53,9 +54,19 @@ export type AppState = {
   /** Which ability the skill order says to level next, or null for none.
    *  Static advice: it is the order we already publish for this champion. */
   levelHint: "Q" | "W" | "E" | "R" | null
-  /** The page loldata would run on the picked champion, and how it went for
-   *  the people who ran it. Null until a champion is locked in. */
-  runes: (RuneSuggestion & { pageName: string }) | null
+  /** Every page loldata publishes for the picked champion — the same five the
+   *  site offers — and which one is selected. Null until a champion is locked
+   *  in. */
+  runes: {
+    variants: RuneVariant[]
+    /** Defaults to the most played, unless this player already chose another
+     *  for this champion, here or on the website. */
+    chosen: number
+    /** True when `chosen` came from a previous choice rather than the default,
+     *  so the interface can say so instead of looking arbitrary. */
+    remembered: boolean
+    pageName: string
+  } | null
   /** What happened the last time the player asked to import it. */
   runeImport:
     | { state: "idle" }
@@ -150,13 +161,23 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
 
   const ctl = new AbortController()
   runeFetch = ctl
-  const suggestion = await popularRunes(champion.key, champion.name, role, ctl.signal).catch(() => null)
+  const suggestion = await championRunes(champion.key, champion.name, role, ctl.signal).catch(() => null)
   if (ctl.signal.aborted) return
+  if (!suggestion) return push({ runes: null, runeImport: { state: "idle" } })
+
+  // Matched by the runes themselves, not by position: variant order is a
+  // popularity ranking and it moves between patches, so a stored index would
+  // silently start pointing at a different page.
+  const want = await chosenFor(champion.name)
+  const found = want ? suggestion.variants.findIndex((v) => signatureOf(v.page) === want) : -1
 
   push({
-    runes: suggestion
-      ? { ...suggestion, pageName: pageName(champion.name, state.patch ?? "") }
-      : null,
+    runes: {
+      variants: suggestion.variants,
+      chosen: found >= 0 ? found : 0,
+      remembered: found >= 0,
+      pageName: pageName(champion.name, state.patch ?? ""),
+    },
     runeImport: { state: "idle" },
   })
 }
@@ -376,6 +397,10 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
     const result = await importPage(lcu, champion, patch, page)
     console.log("[runes] %s → %s", champion, result.ok ? "imported" : result.reason)
     if (result.ok) {
+      // Remember what was actually written, whether the button was here or on
+      // the website. This is the whole point: champ select must not then put
+      // the most played page back over a deliberate choice.
+      await rememberChoice(champion, signatureOf(page))
       push({ runeImport: { state: "done", name: pageName(champion, patch), replaced: result.replaced } })
     } else if (result.reason === "no-room") {
       push({ runeImport: { state: "no-room", pages: result.pages } })
@@ -387,11 +412,19 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
   }
 }
 
+ipcMain.on("runes:choose", (_e, index: number) => {
+  const r = state.runes
+  if (!r || index < 0 || index >= r.variants.length) return
+  // Picking is not choosing yet — the choice is what gets imported, so this
+  // does not overwrite a remembered preference until the player commits.
+  push({ runes: { ...r, chosen: index }, runeImport: { state: "idle" } })
+})
+
 ipcMain.handle("runes:import", async () => {
   const r = state.runes
   const champ = state.select?.champion
   if (!r || !champ) return
-  await applyPage(champ.name, state.patch ?? "", r.page)
+  await applyPage(champ.name, state.patch ?? "", r.variants[r.chosen]!.page)
 })
 
 /**

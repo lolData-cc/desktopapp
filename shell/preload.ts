@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("desktop", {
   pinOverlay: (on: boolean) => ipcRenderer.send("overlay:pin", on),
   demoOverlay: () => ipcRenderer.send("overlay:demo"),
   importRunes: () => ipcRenderer.invoke("runes:import"),
+  chooseRunes: (index: number) => ipcRenderer.send("runes:choose", index),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability: string | null) => ipcRenderer.send("hud:hint", ability),
   // Diagnostic: the overlay says how big the surface it draws into really is,
