@@ -18478,6 +18478,7 @@ var PLATFORM_REGION = {
   vn2: "vn",
   me1: "me"
 };
+var lastShapeLogged = null;
 
 class LcuConnection {
   handlers;
@@ -18593,6 +18594,11 @@ class LcuConnection {
     const two = data?.gameData?.teamTwo;
     if (!Array.isArray(one) || !Array.isArray(two))
       return null;
+    const shape = [...one, ...two][0];
+    if (shape && lastShapeLogged !== data?.gameData?.gameId) {
+      lastShapeLogged = data?.gameData?.gameId;
+      console.log("[roster] teamOne=%d teamTwo=%d fields=%s", one.length, two.length, Object.keys(shape).join(","));
+    }
     const read = (p) => ({
       championKey: Number(p?.championId ?? 0),
       name: p?.gameName ?? p?.summonerName ?? "",
@@ -18600,10 +18606,21 @@ class LcuConnection {
       puuid: String(p?.puuid ?? "")
     });
     const mine = one.some((p) => p?.puuid && p.puuid === myPuuid);
-    return {
-      allies: (mine ? one : two).map(read),
-      enemies: (mine ? two : one).map(read)
-    };
+    const allies = (mine ? one : two).map(read);
+    const enemies = (mine ? two : one).map(read);
+    await Promise.all([...allies, ...enemies].map((e) => this.fillName(e)));
+    return { allies, enemies };
+  }
+  async fillName(entry) {
+    if (entry.name && entry.tag || !entry.puuid)
+      return;
+    try {
+      const { data } = await this.request("GET", `/lol-summoner/v2/summoners/puuid/${entry.puuid}`);
+      if (data?.gameName) {
+        entry.name = data.gameName;
+        entry.tag = data.tagLine ?? "";
+      }
+    } catch {}
   }
   async phase() {
     const { data } = await this.request("GET", "/lol-gameflow/v1/gameflow-phase");
@@ -20035,10 +20052,16 @@ function push(patch2) {
     loadingCalibrating: state.loadingCalibrating
   });
   if (state.phase !== before) {
-    if (state.phase === "InProgress" || state.phase === "Reconnect")
+    console.log("[phase] %s -> %s", before ?? "none", state.phase ?? "none");
+    if (IN_GAME_PHASES.has(state.phase ?? ""))
       startGameClock();
     else {
       stopGameClock();
+      if (state.loading) {
+        loadingFor = "";
+        push({ loading: null });
+        syncOverlay();
+      }
       if (before === "InProgress" || before === "PreEndOfGame" || before === "EndOfGame") {
         readProfile();
       }
@@ -20063,6 +20086,8 @@ var lcu = new LcuConnection({
     readProfile();
     if (phase === "ChampSelect")
       await readSelect(await lcu.champSelect());
+    if (IN_GAME_PHASES.has(phase ?? ""))
+      startGameClock();
   },
   onDisconnect: () => {
     lastEnemyKey = "";
@@ -20661,6 +20686,7 @@ function readObjective(gameTime, events, players, me, mapTerrain) {
     raiseNotice(next.kind, next.inSeconds, next.element, tally);
   }
 }
+var IN_GAME_PHASES = new Set(["GameStart", "InProgress", "Reconnect"]);
 function startGameClock() {
   if (tick)
     return;

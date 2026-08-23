@@ -23,6 +23,9 @@ const PLATFORM_REGION: Record<string, string> = {
   sg2: "sg", th2: "th", tw2: "tw", vn2: "vn", me1: "me",
 }
 
+/** Set once per game, so the shape dump does not repeat every poll. */
+let lastShapeLogged: unknown = null
+
 /** One player in a game being loaded. */
 export type RosterEntry = {
   championKey: number
@@ -223,18 +226,52 @@ export class LcuConnection {
     const two = data?.gameData?.teamTwo
     if (!Array.isArray(one) || !Array.isArray(two)) return null
 
+    // ⚠️ Logged once per game, because this endpoint's shape was taken from
+    // documentation and the documentation was wrong: a real ranked game gave
+    // one player, no opponents and no names at all. Printing the KEYS is how
+    // that gets settled — the values may carry identity, the key names do not.
+    const shape = [...one, ...two][0]
+    if (shape && lastShapeLogged !== data?.gameData?.gameId) {
+      lastShapeLogged = data?.gameData?.gameId
+      console.log("[roster] teamOne=%d teamTwo=%d fields=%s",
+        one.length, two.length, Object.keys(shape).join(","))
+    }
+
     const read = (p: any): RosterEntry => ({
       championKey: Number(p?.championId ?? 0),
-      // Newer clients split the riot id; older ones only have summonerName.
       name: p?.gameName ?? p?.summonerName ?? "",
       tag: p?.tagLine ?? "",
       puuid: String(p?.puuid ?? ""),
     })
 
     const mine = one.some((p: any) => p?.puuid && p.puuid === myPuuid)
-    return {
-      allies: (mine ? one : two).map(read),
-      enemies: (mine ? two : one).map(read),
+    const allies = (mine ? one : two).map(read)
+    const enemies = (mine ? two : one).map(read)
+
+    // ⚠️ Names are frequently ABSENT here — the session carries ids, not
+    // identities. Without a name#tag nothing downstream can look anyone up,
+    // which is exactly how a real game produced "no riot ids to look up".
+    // The client can resolve a puuid locally, so it is asked.
+    await Promise.all([...allies, ...enemies].map((e) => this.fillName(e)))
+
+    return { allies, enemies }
+  }
+
+  /** Fills in name and tag from a puuid, using the CLIENT rather than the
+   *  network — it already knows everyone in the game. */
+  private async fillName(entry: RosterEntry): Promise<void> {
+    if ((entry.name && entry.tag) || !entry.puuid) return
+    try {
+      const { data } = await this.request<any>(
+        "GET",
+        `/lol-summoner/v2/summoners/puuid/${entry.puuid}`
+      )
+      if (data?.gameName) {
+        entry.name = data.gameName
+        entry.tag = data.tagLine ?? ""
+      }
+    } catch {
+      // One unresolvable player costs that player's card, not the board.
     }
   }
 

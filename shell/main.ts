@@ -263,9 +263,21 @@ function push(patch: Partial<AppState>): void {
   if (state.phase !== before) {
     // The overlay is no longer tied to the phase — only a notice puts it on
     // screen. The phase just decides whether we are watching for one.
-    if (state.phase === "InProgress" || state.phase === "Reconnect") startGameClock()
+    // ⚠️ GameStart counts. The loading screen runs under it, and the clock
+    // only started on InProgress — so readLoading never ran while the cards
+    // were actually on screen, and the board simply never appeared. Every
+    // reader downstream already tolerates a game that is not answering yet;
+    // that IS the loading state.
+    console.log("[phase] %s -> %s", before ?? "none", state.phase ?? "none")
+    if (IN_GAME_PHASES.has(state.phase ?? "")) startGameClock()
     else {
       stopGameClock()
+      // Nothing about a game survives leaving one.
+      if (state.loading) {
+        loadingFor = ""
+        push({ loading: null })
+        syncOverlay()
+      }
       // Coming out of a game is exactly when the history has changed.
       if (before === "InProgress" || before === "PreEndOfGame" || before === "EndOfGame") {
         void readProfile()
@@ -296,6 +308,8 @@ const lcu = new LcuConnection({
     // Pull what is already true. LCU events only fire on CHANGES, so attaching
     // mid-select would otherwise leave the window blank until someone locked in.
     if (phase === "ChampSelect") await readSelect(await lcu.champSelect())
+    // Attaching mid-game, including mid-loading.
+    if (IN_GAME_PHASES.has(phase ?? "")) startGameClock()
   },
 
   onDisconnect: () => {
@@ -1365,6 +1379,10 @@ function readObjective(
     raiseNotice(next.kind, next.inSeconds, next.element, tally)
   }
 }
+
+/** The phases during which a game exists on this machine — including the one
+ *  where it is still loading. */
+const IN_GAME_PHASES = new Set(["GameStart", "InProgress", "Reconnect"])
 
 function startGameClock(): void {
   if (tick) return
