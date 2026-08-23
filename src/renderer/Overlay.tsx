@@ -151,7 +151,27 @@ function GoldBar({ g }: { g: TeamGold }) {
         }}
       />
 
-      <Frame />
+      <p className="relative mb-1.5 text-center font-jetbrains text-[11px] font-bold uppercase tracking-[0.2em]">
+        {lead === 0 ? (
+          <span className="text-flash/45">even</span>
+        ) : (
+          <span style={{ color: accent }}>
+            {/* the number keeps its case — the label's uppercase was turning
+                2.5k into 2.5K while the totals above still said k */}
+            <span className="normal-case">
+              {ahead ? "+" : "−"}
+              {shortGold(Math.abs(lead))}
+            </span>{" "}
+            {ahead ? "ahead" : "behind"}
+          </span>
+        )}
+        {partial && (
+          <span className="text-[9px] font-normal text-flash/30">
+            {" · "}
+            {g.oursCounted}v{g.theirsCounted} counted
+          </span>
+        )}
+      </p>
 
       <div className="relative flex items-center gap-2.5" style={{ textShadow: "0 1px 5px rgba(0,0,0,0.95)" }}>
         <span className="w-[52px] shrink-0 text-right font-chakrapetch text-[15px] font-bold tabular-nums text-jade">
@@ -176,38 +196,21 @@ function GoldBar({ g }: { g: TeamGold }) {
         </span>
       </div>
 
-      <p className="relative mt-1.5 text-center font-jetbrains text-[11px] font-bold uppercase tracking-[0.2em]">
-        {lead === 0 ? (
-          <span className="text-flash/45">even</span>
-        ) : (
-          <span style={{ color: accent }}>
-            {/* the number keeps its case — the label's uppercase was turning
-                2.5k into 2.5K while the totals above still said k */}
-            <span className="normal-case">
-              {ahead ? "+" : "−"}
-              {shortGold(Math.abs(lead))}
-            </span>{" "}
-            {ahead ? "ahead" : "behind"}
-          </span>
-        )}
-        {partial && (
-          <span className="text-[9px] font-normal text-flash/30">
-            {" · "}
-            {g.oursCounted}v{g.theirsCounted} counted
-          </span>
-        )}
-      </p>
-
+      <Frame />
     </div>
   )
 }
 
 /**
- * The shoulder above the gold bar.
+ * The shoulder below the gold bar.
  *
- * TOP only. There is nothing below because the scoreboard is — the bar sits on
- * its upper edge, and a second rule underneath would draw a line through the
- * thing it is meant to sit against.
+ * BOTTOM only. There is nothing above because the assembly hangs UNDER the
+ * scoreboard: the ornament closes it off downwards, and a second rule on top
+ * would draw a line through the thing it is meant to sit against.
+ *
+ * Drawn once and mirrored on Y rather than re-authored upside down, so the two
+ * orientations cannot drift apart. The mirror sits on the row, never on the
+ * text — flipping the whole assembly would leave the numbers upside down.
  *
  * One continuous profile per side: a low tail outside, a diagonal rise, then a
  * plateau running toward the centre, mirrored, with the break in the middle
@@ -269,7 +272,11 @@ function Frame() {
   )
 
   return (
-    <div aria-hidden className="relative mb-1 flex h-[22px] items-start">
+    <div
+      aria-hidden
+      className="relative mt-1 flex h-[22px] items-start"
+      style={{ transform: "scaleY(-1)" }}
+    >
       {shoulder(false)}
       {plateau()}
       {/* the break the numbers sit in */}

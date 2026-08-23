@@ -20083,7 +20083,7 @@ var noticeTimer = null;
 var announced = null;
 var hideTimer = null;
 var GOLD_HOTKEY = "Alt+O";
-var goldVisible = true;
+var goldVisible = false;
 function overlayWanted() {
   return state.notice !== null || state.gold !== null && goldVisible || state.levelHint !== null;
 }
@@ -20592,6 +20592,7 @@ ipcMain.handle("builds:delete", async (_e, championId) => {
 });
 ipcMain.on("gold:demo", () => {
   goldDemo = (goldDemo + 1) % GOLD_DEMOS.length;
+  goldVisible = GOLD_DEMOS[goldDemo] != null;
   push({ gold: GOLD_DEMOS[goldDemo] ?? null });
   syncOverlay();
 });

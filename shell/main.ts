@@ -441,7 +441,9 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
  * running. The risk there is the player's account, not our API key.
  */
 const GOLD_HOTKEY = "Alt+O"
-let goldVisible = true
+// OFF until asked for. It used to start on, which made Alt+O a key that turned
+// the bar OFF first — the opposite of a toggle you reach for to summon it.
+let goldVisible = false
 
 function overlayWanted(): boolean {
   return state.notice !== null || (state.gold !== null && goldVisible) || state.levelHint !== null
@@ -1247,6 +1249,9 @@ ipcMain.handle("builds:delete", async (_e, championId: string) => {
 
 ipcMain.on("gold:demo", () => {
   goldDemo = (goldDemo + 1) % GOLD_DEMOS.length
+  // Asking to see it IS asking for it to be visible. Now that the bar starts
+  // off, the preview would otherwise be a button that does nothing.
+  goldVisible = GOLD_DEMOS[goldDemo] != null
   push({ gold: GOLD_DEMOS[goldDemo] ?? null })
   syncOverlay()
 })
