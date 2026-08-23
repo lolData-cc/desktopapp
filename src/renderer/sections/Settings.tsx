@@ -6,7 +6,15 @@ export default function Settings({ s }: { s: AppState }) {
   // any screen at any HUD scale — which is the point of nudging in box units.
   const step = 0.1
   const nudge = (patch: Partial<HudNudge>) => window.desktop.calibrate(patch)
+  const nudgeTop = (patch: Partial<HudNudge>) => window.desktop.calibrateTopRight(patch)
   const { scale, nudge: n, source } = s.hud
+  // Its own alignment: this sits in the top-right corner and the outline sits
+  // at the bottom centre, so one pair of arrows for both would mean fixing one
+  // by breaking the other.
+  const t = s.hud.topRight ?? { x: 0, y: 0, size: 0 }
+  // A whole screen-width per press is useless here; this row is a few hundred
+  // pixels wide, so the step is a tenth of the outline's.
+  const fine = 0.002
 
   const Btn = ({ label, onClick }: { label: string; onClick: () => void }) => (
     <button
@@ -111,6 +119,29 @@ export default function Settings({ s }: { s: AppState }) {
       <span className="ml-auto font-jetbrains text-[9px] tabular-nums text-flash/20">
         {source ? `hud scale ${Math.round(scale * 100)}` : "hud scale unknown"}
         {(n.x || n.y || n.size) ? ` · ${n.x.toFixed(1)} ${n.y.toFixed(1)} ${n.size.toFixed(2)}` : ""}
+      </span>
+
+      {/* Aligning the gold readout against the game's own top-right strip. The
+          default is estimated rather than measured, so this is expected to be
+          used once — and the values are logged so they can become the default. */}
+      <span className="w-full basis-full" />
+      <span className="font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">
+        gold readout
+      </span>
+      <div className="flex items-center gap-1">
+        <Btn label="←" onClick={() => nudgeTop({ x: t.x - fine })} />
+        <Btn label="→" onClick={() => nudgeTop({ x: t.x + fine })} />
+        <Btn label="↑" onClick={() => nudgeTop({ y: t.y - fine })} />
+        <Btn label="↓" onClick={() => nudgeTop({ y: t.y + fine })} />
+        <span className="ml-2 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">size</span>
+        <Btn label="−" onClick={() => nudgeTop({ size: t.size - 0.04 })} />
+        <Btn label="+" onClick={() => nudgeTop({ size: t.size + 0.04 })} />
+        <Btn label="⟲" onClick={() => nudgeTop({ x: 0, y: 0, size: 0 })} />
+      </div>
+      <span className="font-jetbrains text-[9px] tabular-nums text-flash/20">
+        {(t.x || t.y || t.size)
+          ? `${(t.x * 1920).toFixed(0)}px ${(t.y * 1080).toFixed(0)}px ${t.size.toFixed(2)}`
+          : "aligned to the model"}
       </span>
     </div>
   )

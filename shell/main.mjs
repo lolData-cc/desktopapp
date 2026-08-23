@@ -19929,14 +19929,14 @@ var state = {
   update: { state: "idle", version: app3.getVersion() },
   canUpdate: false,
   pinned: false,
-  hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null }
+  hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null }
 };
 var win = null;
 function push(patch2) {
   const before = state.phase;
   state = { ...state, ...patch2 };
   win?.webContents.send("state", state);
-  sendOverlay("state", goldVisible ? state : { ...state, gold: null });
+  sendOverlay("state", { ...state, goldBar: goldVisible });
   if (state.phase !== before) {
     if (state.phase === "InProgress" || state.phase === "Reconnect")
       startGameClock();
@@ -20085,7 +20085,7 @@ var hideTimer = null;
 var GOLD_HOTKEY = "Alt+O";
 var goldVisible = false;
 function overlayWanted() {
-  return state.notice !== null || state.gold !== null && goldVisible || state.levelHint !== null;
+  return state.notice !== null || state.gold !== null || state.levelHint !== null;
 }
 function syncOverlay() {
   if (overlayWanted()) {
@@ -20392,6 +20392,11 @@ function createWindow() {
 ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
 ipcMain.on("win:close", () => win?.close());
+ipcMain.on("hud:calibrate-topright", (_e, patch2) => {
+  const topRight = { ...state.hud.topRight ?? NO_NUDGE, ...patch2 };
+  push({ hud: { ...state.hud, topRight } });
+  console.log("[hud] top-right nudge x=%s y=%s size=%s", topRight.x.toFixed(4), topRight.y.toFixed(4), topRight.size.toFixed(2));
+});
 ipcMain.on("hud:calibrate", (_e, patch2) => {
   const nudge = { ...state.hud.nudge, ...patch2 };
   push({ hud: { ...state.hud, nudge } });

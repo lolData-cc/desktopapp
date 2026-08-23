@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld("desktop", {
   smartBuild: (id: string, on: boolean) => ipcRenderer.invoke("builds:smart", id, on),
   deleteBuild: (id: string) => ipcRenderer.invoke("builds:delete", id),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
+  calibrateTopRight: (patch: unknown) => ipcRenderer.send("hud:calibrate-topright", patch),
   hint: (ability: string | null) => ipcRenderer.send("hud:hint", ability),
   // Diagnostic: the overlay says how big the surface it draws into really is,
   // because the shell only knows what it ASKED for, not what it got.

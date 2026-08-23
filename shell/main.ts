@@ -156,7 +156,10 @@ export type AppState = {
    *  config; the layout model turns it into pixels. `nudge` is a residual
    *  correction in box widths for what the model cannot see — an unusual aspect
    *  ratio, or an install whose config we failed to find. */
-  hud: { scale: number; nudge: HudNudge; source: string | null }
+  hud: { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
+  /** Whether the wide Alt+O bar is being asked for. Sent as a flag so the
+   *  top-right readout can use the same gold without being toggled by it. */
+  goldBar?: boolean
 }
 
 let state: AppState = {
@@ -179,7 +182,7 @@ let state: AppState = {
   update: { state: "idle", version: app.getVersion() },
   canUpdate: false,
   pinned: false,
-  hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null },
+  hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
 }
 
 let win: BrowserWindow | null = null
@@ -190,7 +193,10 @@ function push(patch: Partial<AppState>): void {
   win?.webContents.send("state", state)
   // The overlay is told what to DRAW: hiding the bar is a content decision, so
   // the window does not have to be torn down and rebuilt to honour a keypress.
-  sendOverlay("state", goldVisible ? state : { ...state, gold: null })
+  // The FLAG travels, not a censored copy of the state: the top-right readout
+  // wants the same numbers and is not toggled. Withholding data to control
+  // presentation is what made the shop notices unreachable earlier.
+  sendOverlay("state", { ...state, goldBar: goldVisible })
 
   // The overlay is only ever on screen during a match. Tying it to the phase
   // rather than to a toggle means there is no state where it is left hanging
@@ -446,7 +452,9 @@ const GOLD_HOTKEY = "Alt+O"
 let goldVisible = false
 
 function overlayWanted(): boolean {
-  return state.notice !== null || (state.gold !== null && goldVisible) || state.levelHint !== null
+  // Gold alone is enough now: the top-right readout is permanent during a game,
+  // and only the wide Tab bar answers to the hotkey.
+  return state.notice !== null || state.gold !== null || state.levelHint !== null
 }
 
 function syncOverlay(): void {
@@ -938,6 +946,16 @@ ipcMain.on("win:close", () => win?.close())
 // Development affordance: seeing the overlay should not require a live match.
 // Development affordance: raise a notice on demand, because waiting for a real
 // dragon every time the layout changes is not a workable loop.
+/** Separate from the ability nudge on purpose: they align different things on
+ *  different edges of the screen, and one control for both would mean fixing
+ *  one by breaking the other. */
+ipcMain.on("hud:calibrate-topright", (_e, patch: Partial<HudNudge>) => {
+  const topRight = { ...(state.hud.topRight ?? NO_NUDGE), ...patch }
+  push({ hud: { ...state.hud, topRight } })
+  console.log("[hud] top-right nudge x=%s y=%s size=%s",
+    topRight.x.toFixed(4), topRight.y.toFixed(4), topRight.size.toFixed(2))
+})
+
 ipcMain.on("hud:calibrate", (_e, patch: Partial<HudNudge>) => {
   const nudge = { ...state.hud.nudge, ...patch }
   push({ hud: { ...state.hud, nudge } })

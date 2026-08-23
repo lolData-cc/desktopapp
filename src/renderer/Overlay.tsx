@@ -4,6 +4,7 @@ import { championById } from "../data/champions"
 import { goldBarBox } from "../data/scoreboard"
 import { shortGold, type TeamGold } from "../data/teamGold"
 import { dragonIcon, dragonLabel, elementGlyph, elementName, soulLabel } from "./dragonIcon"
+import { topRightBox } from "../data/topRight"
 import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
 
 /**
@@ -40,9 +41,10 @@ type Notice = {
     note?: string
   }
 }
-type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
+type HudPlacement = { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
 type AppState = {
   gold: TeamGold | null
+  goldBar?: boolean
   notice: Notice | null
   levelHint: Ability | null
   hud: HudPlacement
@@ -61,6 +63,11 @@ export default function Overlay() {
   const [hint, setHint] = useState<Ability | null>(null)
   const [hud, setHud] = useState<HudPlacement | null>(null)
   const [gold, setGold] = useState<TeamGold | null>(null)
+  // Whether the Alt+O bar is being asked for. A FLAG rather than the shell
+  // withholding the numbers: the top-right readout wants the same gold and is
+  // not toggled, and stripping data to control presentation is what made the
+  // shop notices silently unreachable earlier.
+  const [goldBar, setGoldBar] = useState(false)
 
   useEffect(() => {
     const report = () =>
@@ -81,6 +88,7 @@ export default function Overlay() {
       setHint(s.levelHint ?? null)
       setHud(s.hud ?? null)
       setGold(s.gold ?? null)
+      setGoldBar(s.goldBar === true)
     }
     void window.desktop.getState().then(apply as never)
     return window.desktop.onState(apply as never)
@@ -89,7 +97,8 @@ export default function Overlay() {
   return (
     <div className="pointer-events-none h-full w-full bg-transparent">
       {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
-      {gold && <GoldBar g={gold} />}
+      {gold && goldBar && <GoldBar g={gold} />}
+      {gold && hud && <TopRightGold g={gold} hud={hud} />}
       {/* keyed on the notice so each one ASSEMBLES; without this React would
           reuse the element and the second notification would simply appear. */}
       {notice && <Card key={notice.raisedAt} n={notice} visible={visible} />}
@@ -114,6 +123,91 @@ export default function Overlay() {
  * built from six players presented as if it were from ten is a wrong number
  * nobody could check.
  */
+/**
+ * The gold lead, as one more field of the game's own top-right strip.
+ *
+ * Sits to the LEFT of the kill counter, at the same height and with the same
+ * gap the game leaves between its own fields, so it reads as part of the row
+ * rather than as something laid over it. The strip's own translucent ground is
+ * continued leftwards underneath, fading out, because a readout with no ground
+ * under it would float.
+ *
+ * Deliberately just a chevron and a number. The row it joins is four terse
+ * fields; a fifth one that explained itself would be the loud one.
+ *
+ * Not toggled by Alt+O — that summons the wide bar over the scoreboard. This is
+ * meant to be permanent and unnoticed, which is why it says so little.
+ */
+function TopRightGold({ g, hud }: { g: TeamGold; hud: HudPlacement }) {
+  const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
+
+  useEffect(() => {
+    const onResize = () => setScreen({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
+
+  const lead = g.ours - g.theirs
+  // Its OWN nudge: hud.nudge aligns the ability outline at the bottom of the
+  // screen and has nothing to do with this corner.
+  const box = topRightBox(screen, { scale: hud.scale, nudge: hud.topRight })
+
+  // Level is not "ahead by nothing" — it is its own reading, and an arrow
+  // pointing either way would be a lie about a tie.
+  const even = Math.abs(lead) < 100
+  const ahead = lead > 0
+  const colour = even ? "rgba(215,216,217,0.55)" : ahead ? "#00d992" : "#FFB615"
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute"
+      style={{ left: box.fadeLeft, top: box.top, width: box.fadeWidth, height: box.height }}
+    >
+      {/* The strip's ground, carried on to the left and fading to nothing. The
+          right end matches the game's tint; the left end must reach FULL
+          transparency inside this box or a vertical seam shows over the map. */}
+      <span
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(90deg," +
+            " rgba(6,26,32,0) 0%," +
+            " rgba(6,26,32,0.30) 42%," +
+            " rgba(6,26,32,0.62) 78%," +
+            " rgba(6,26,32,0.70) 100%)",
+        }}
+      />
+
+      <div
+        className="absolute inset-y-0 right-0 flex items-center justify-end gap-[0.14em]"
+        style={{
+          width: box.width,
+          color: colour,
+          fontSize: box.height * 0.44,
+          textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+        }}
+      >
+        {!even && (
+          <svg
+            width={box.height * 0.38}
+            height={box.height * 0.38}
+            viewBox="0 0 10 10"
+            className="shrink-0"
+            style={{ transform: ahead ? undefined : "rotate(180deg)" }}
+          >
+            <path d="M 1.5 6.5 L 5 3 L 8.5 6.5" fill="none" stroke={colour} strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
+        <span className="font-chakrapetch font-bold leading-none tabular-nums">
+          {even ? "0" : shortGold(Math.abs(lead))}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function GoldBar({ g }: { g: TeamGold }) {
   const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
 

@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("desktop", {
   smartBuild: (id, on) => ipcRenderer.invoke("builds:smart", id, on),
   deleteBuild: (id) => ipcRenderer.invoke("builds:delete", id),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
+  calibrateTopRight: (patch) => ipcRenderer.send("hud:calibrate-topright", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)
 });

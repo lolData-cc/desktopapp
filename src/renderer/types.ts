@@ -126,7 +126,7 @@ export type AppState = {
   } | null
   matchupLoading: boolean
   pinned: boolean
-  hud: { scale: number; nudge: HudNudge; source: string | null }
+  hud: { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
 }
 
 export type ChatMessage = { role: "user" | "assistant"; content: string }
@@ -162,6 +162,7 @@ declare global {
       smartBuild(championId: string, smart: boolean): Promise<void>
       deleteBuild(championId: string): Promise<void>
       calibrate(patch: Partial<HudNudge>): void
+      calibrateTopRight(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void
     }
