@@ -32,9 +32,18 @@ export type NextObjective = {
    * The element of the dragon that is COMING, or null when it cannot be known.
    *
    * The first two dragons are random, and only after the second does the Rift
-   * transform and fix the element of every later spawn. That transformation IS
-   * readable, via gamestats.mapTerrain, so from the third dragon on this is the
-   * real element and not a guess.
+   * transform and fix the element of every later spawn.
+   *
+   * ⚠️ That transformation is NOT readable. gamestats.mapTerrain looked like the
+   * answer and is not: observed still reading "Default" on a map that had
+   * visibly turned, and it does not appear in the API's own OpenAPI schema at
+   * all. The schema lists twelve liveclientdata endpoints and none carries the
+   * Rift's element; a search of the whole payload finds "terrain" exactly once,
+   * in that same field.
+   *
+   * So the element is only learned once a dragon of it has been KILLED — from
+   * the third on. mapTerrain is still consulted first, costing nothing, in case
+   * it is populated in real games where this was only tested in a practice one.
    *
    * Null therefore means "we genuinely do not know", and the caller must show a
    * plain dragon rather than pick one. Guessing here would be a specific,
@@ -44,11 +53,10 @@ export type NextObjective = {
 }
 
 /**
- * Riot names the same element two different ways: DragonKill events say
- * "Fire"/"Earth"/"Water"/"Air", while the map's terrain is expected to say
- * "Infernal"/"Mountain"/"Ocean"/"Cloud". Only "Default" could be observed on a
- * live untransformed map, so BOTH spellings are accepted rather than betting on
- * which one appears — an unrecognised value yields null, never a wrong dragon.
+ * DragonKill events say "Fire"/"Earth"/"Water"/"Air" — confirmed live. The
+ * scoreboard and terrain vocabulary uses "Infernal"/"Mountain"/"Ocean"/"Cloud"
+ * for the same six, so both spellings are accepted; an unrecognised value
+ * yields null, never a wrong dragon.
  */
 const ELEMENT_ALIASES: Record<string, DragonElement> = {
   fire: "Fire", infernal: "Fire",
@@ -166,7 +174,8 @@ export function nextObjective(
   events: GameEvent[],
   gameTime: number,
   players: PlayerSlot[] = [],
-  /** gamestats.mapTerrain — the transformation, when it has happened. */
+  /** gamestats.mapTerrain. Undocumented and observed always "Default", even on
+   *  a transformed map — kept as a cheap first guess, never relied upon. */
   mapTerrain?: string
 ): NextObjective | null {
   const kills = events
@@ -193,9 +202,8 @@ export function nextObjective(
     kind: "dragon",
     inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime,
     taken: kills.length,
-    // The map is the better source: it transforms as soon as the SECOND
-    // dragon dies, so the third is known before anyone has killed one of it.
-    // The kill history stays as a fallback for when the terrain is unreadable.
+    // The kill history is the source that actually works; the terrain is
+    // tried first only because it would be better IF it were ever populated.
     element: normaliseElement(mapTerrain) ?? lockedElement(kills),
   }
 }
