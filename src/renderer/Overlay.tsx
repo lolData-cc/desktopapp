@@ -69,7 +69,9 @@ export default function Overlay() {
   return (
     <div className="pointer-events-none h-full w-full bg-transparent">
       {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
-      {notice && <Card n={notice} visible={visible} />}
+      {/* keyed on the notice so each one ASSEMBLES; without this React would
+          reuse the element and the second notification would simply appear. */}
+      {notice && <Card key={notice.raisedAt} n={notice} visible={visible} />}
     </div>
   )
 }
@@ -153,14 +155,18 @@ function TeamTally({
   const plate = ours ? "bg-jade/[0.10]" : "bg-flash/[0.07]"
   const empty = ours ? "bg-jade/[0.05]" : "bg-flash/[0.035]"
   const decisive = accent ? taken.length : -1
+  // The slots land one after another, our side first. Small steps: this is the
+  // tail of the assembly, and it has to be finished by the time the eye reaches
+  // it, not still arriving.
+  const stepIn = (i: number) => ({ animationDelay: `${(ours ? 430 : 505) + i * 32}ms` })
 
   return (
     <span className="flex items-center gap-1.5">
-      <span className="font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30">
+      <span className="ds-late font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30">
         {label}
       </span>
       <span
-        className={`font-chakrapetch text-[15px] font-bold leading-none tabular-nums ${
+        className={`ds-late font-chakrapetch text-[15px] font-bold leading-none tabular-nums ${
           ours ? "text-jade" : "text-flash/70"
         }`}
       >
@@ -170,7 +176,7 @@ function TeamTally({
         {Array.from({ length: SOUL_AT }, (_, i) => {
           const el = taken[i]
           return el ? (
-            <span key={i} className={`grid h-[19px] w-[19px] place-items-center rounded-[2px] ${plate}`}>
+            <span key={i} className={`ds-slot grid h-[19px] w-[19px] place-items-center rounded-[2px] ${plate}`} style={stepIn(i)}>
               <img src={elementGlyph(el)} alt={elementName(el)} title={elementName(el)} className="h-[15px] w-[15px]" />
             </span>
           ) : i === decisive ? (
@@ -178,16 +184,60 @@ function TeamTally({
             // outline — this has to hold up over a bright dragon pit.
             <span
               key={i}
-              className="soul-pulse h-[19px] w-[19px] rounded-[2px]"
-              style={{ background: `${accent}22`, boxShadow: `inset 0 0 0 1px ${accent}` }}
-            />
+              className="ds-slot h-[19px] w-[19px] rounded-[2px]"
+              style={{ ...stepIn(i), background: `${accent}22`, boxShadow: `inset 0 0 0 1px ${accent}` }}
+            >
+              {/* the pulse rides an inner element so its opacity animation does
+                  not fight the slot's own arrival */}
+              <span className="soul-pulse block h-full w-full rounded-[2px]" style={{ background: `${accent}18` }} />
+            </span>
           ) : (
-            <span key={i} className={`h-[19px] w-[19px] rounded-[2px] ${empty}`} />
+            <span key={i} className={`ds-slot h-[19px] w-[19px] rounded-[2px] ${empty}`} style={stepIn(i)} />
           )
         })}
       </span>
     </span>
   )
+}
+
+/**
+ * A number that LANDS rather than appears.
+ *
+ * Death Stranding's readouts churn for a moment and resolve left to right, so
+ * the value arrives as a result rather than as a label. Only digits churn — the
+ * colon holds, keeping the clock's shape stable while its contents settle.
+ *
+ * Keyed on the notice, deliberately NOT on the value: the countdown reissues
+ * four times a second, and re-settling on every tick would be a slot machine
+ * rather than an arrival.
+ */
+function Digits({ value, settleKey }: { value: string; settleKey: number }) {
+  const [churn, setChurn] = useState<string | null>(null)
+  const latest = useRef(value)
+  latest.current = value
+
+  useEffect(() => {
+    const started = Date.now()
+    let raf = 0
+    const tick = () => {
+      const p = (Date.now() - started) / 420
+      if (p >= 1) return setChurn(null)
+      const chars = latest.current.split("")
+      // resolves a little faster than time passes, so the last digit is not
+      // still spinning as the animation ends
+      const settled = Math.floor(p * chars.length * 1.35)
+      setChurn(
+        chars
+          .map((c, i) => (i < settled || !/\d/.test(c) ? c : String(Math.floor(Math.random() * 10))))
+          .join("")
+      )
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [settleKey])
+
+  return <>{churn ?? value}</>
 }
 
 function Card({ n, visible }: { n: Notice; visible: boolean }) {
@@ -221,14 +271,7 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
   const unknownElement = n.kind === "dragon" && !n.element
 
   return (
-    <div
-      className="absolute right-0 top-[13%] w-[440px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-      style={{
-        // In from the right edge, out the same way. One movement, reversed.
-        transform: visible ? "translateX(0)" : "translateX(105%)",
-        opacity: visible ? 1 : 0,
-      }}
-    >
+    <div className={`absolute right-0 top-[13%] w-[440px] ${visible ? "ds-in" : "ds-out"}`}>
       {/* Feathered darkening rather than a plate: its alpha reaches zero well
           inside its own box, so there is no edge to notice over the art. */}
       <span
@@ -253,9 +296,25 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
         className="absolute inset-x-0 top-0 h-[12px] w-full overflow-visible"
         style={{ filter: `drop-shadow(0 0 5px ${accent}88)` }}
       >
-        <path d="M 2 11 L 11 2 L 440 2" fill="none" stroke={accent} strokeWidth="1"
-              vectorEffect="non-scaling-stroke" opacity="0.9" />
-        <rect x="358" y="-2.5" width="9" height="9" transform="rotate(45 362.5 2)" fill={accent} />
+        {/* pathLength=1 so the draw is expressed in fractions, not in the user
+            units of a viewBox that gets stretched */}
+        <path
+          className="ds-rail"
+          d="M 2 11 L 11 2 L 440 2"
+          fill="none"
+          stroke={accent}
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+          opacity="0.9"
+          pathLength={1}
+          strokeDasharray={1}
+        />
+        <rect
+          className="ds-mark"
+          x="358" y="-2.5" width="9" height="9"
+          transform="rotate(45 362.5 2)"
+          fill={accent}
+        />
       </svg>
 
       <div
@@ -263,21 +322,28 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
         style={{ textShadow: "0 1px 6px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.85)" }}
       >
         <div className="flex items-center gap-3.5">
+          <span className="relative shrink-0">
           <img
             src={dragonIcon(n.kind, n.element)}
             alt=""
             // A solid portrait now, not a transparent glyph, so it takes the
             // squared corner and hairline the rest of the app uses.
-            className="h-11 w-11 shrink-0 rounded-[3px] ring-1 ring-jade/25"
+            className="ds-icon block h-11 w-11 rounded-[3px] ring-1 ring-jade/25"
             style={{
               boxShadow: `0 0 14px ${accent}33, 0 2px 8px rgba(0,0,0,0.9)`,
               filter: unknownElement ? "grayscale(1) brightness(1.12) contrast(0.92)" : undefined,
             }}
           />
+          <span
+            aria-hidden
+            className="ds-flash pointer-events-none absolute inset-0 rounded-[3px]"
+            style={{ background: `linear-gradient(120deg, transparent 30%, ${accent}, transparent 70%)`, mixBlendMode: "screen" }}
+          />
+          </span>
 
           <div className="min-w-0">
             <p
-              className={`font-jetbrains text-[9px] uppercase tracking-[0.28em] ${soul ? "soul-pulse" : ""}`}
+              className={`ds-eyebrow font-jetbrains text-[9px] uppercase tracking-[0.28em] ${soul ? "soul-pulse" : ""}`}
               style={{ color: accent }}
             >
               {soul === "ours"
@@ -288,15 +354,18 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
                     ? "soul point · contested"
                     : "lolData"}
             </p>
-            <p className="whitespace-nowrap font-chakrapetch text-[19px] font-bold leading-tight text-flash">
+            <p className="ds-head whitespace-nowrap font-chakrapetch text-[19px] font-bold leading-tight text-flash">
               {soul ? soulLabel(n.element) : dragonLabel(n.kind, n.element)} is spawning in{" "}
-              <span className="tabular-nums" style={{ color: accent }}>{clock(left)}</span>
+              <span className="tabular-nums" style={{ color: accent }}>
+                <Digits value={clock(left)} settleKey={n.raisedAt} />
+              </span>
             </p>
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-3 border-t border-jade/[0.14] pt-2.5">
-          <span className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
+        <div className="relative mt-3 flex items-center gap-3 pt-2.5">
+          <span aria-hidden className="ds-rule absolute inset-x-0 top-0 h-px bg-jade/[0.18]" />
+          <span className="ds-late font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
             drakes
           </span>
           <TeamTally

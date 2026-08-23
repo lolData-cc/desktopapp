@@ -16,6 +16,7 @@ type AppState = {
     enemies: { locked: number; total: number }
   } | null
   levelHint: Ability | null
+  pinned: boolean
   hud: { scale: number; nudge: HudNudge; source: string | null }
 }
 
@@ -26,7 +27,8 @@ declare global {
       onState(fn: (s: AppState) => void): () => void
       minimise(): void
       close(): void
-      previewOverlay(on: boolean): void
+      pinOverlay(on: boolean): void
+      demoOverlay(): void
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void
@@ -87,8 +89,7 @@ function TitleBar() {
       </span>
 
       <div className="no-drag ml-auto flex items-center">
-        <OverlayToggle />
-        <button
+          <button
           type="button"
           onClick={() => window.desktop.minimise()}
           aria-label="Minimise"
@@ -108,23 +109,6 @@ function TitleBar() {
         </button>
       </div>
     </header>
-  )
-}
-
-/** Shows the overlay without needing a live match — the alternative is
- *  queueing into a game every time its layout changes. */
-function OverlayToggle() {
-  const [on, setOn] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={() => { const next = !on; setOn(next); window.desktop.previewOverlay(next) }}
-      className={`win-btn mr-1 h-6 rounded-[3px] px-2.5 font-jetbrains text-[8.5px] uppercase tracking-[0.16em] ${
-        on ? "bg-jade/15 text-jade" : "text-flash/30"
-      }`}
-    >
-      overlay
-    </button>
   )
 }
 
@@ -157,7 +141,26 @@ function Calibration({ s }: { s: AppState }) {
 
   return (
     <div className="relative z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-jade/[0.10] px-3.5 py-2">
-      <span className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/25">
+      {/* The overlay behaves as a notification; these two exist to inspect it
+          without waiting for a dragon. */}
+      <button
+        type="button"
+        onClick={() => window.desktop.pinOverlay(!s.pinned)}
+        className={`win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
+          s.pinned ? "bg-jade/15 text-jade" : "text-flash/30"
+        }`}
+      >
+        always on {s.pinned ? "· on" : "· off"}
+      </button>
+      <button
+        type="button"
+        onClick={() => window.desktop.demoOverlay()}
+        className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30"
+      >
+        show 5s
+      </button>
+
+      <span className="ml-1 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/25">
         outline
       </span>
 

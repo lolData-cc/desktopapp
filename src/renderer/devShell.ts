@@ -22,6 +22,7 @@ const SCENES: Record<string, unknown> = {
     select: null,
     notice: null,
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   lobby: {
@@ -32,6 +33,7 @@ const SCENES: Record<string, unknown> = {
     select: null,
     notice: null,
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   select: {
@@ -47,6 +49,7 @@ const SCENES: Record<string, unknown> = {
     },
     notice: null,
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   game: {
@@ -57,6 +60,7 @@ const SCENES: Record<string, unknown> = {
     select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
     notice: null,
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // the state the whole feature exists for
@@ -74,6 +78,7 @@ const SCENES: Record<string, unknown> = {
       tally: { ours: [], theirs: [] },
     },
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   elder: {
@@ -90,6 +95,7 @@ const SCENES: Record<string, unknown> = {
       tally: { ours: [], theirs: [] },
     },
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // From the third dragon on the element is knowable — this is that case.
@@ -108,6 +114,7 @@ const SCENES: Record<string, unknown> = {
       tally: { ours: ["Fire", "Water", "Air"], theirs: ["Earth", "Hextech"] },
     },
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // three ours, the next drake ends it — the live case
@@ -122,6 +129,7 @@ const SCENES: Record<string, unknown> = {
       tally: { ours: ["Fire", "Hextech", "Air"], theirs: [] },
     },
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
   // the same brink, on the wrong side of it
@@ -136,6 +144,7 @@ const SCENES: Record<string, unknown> = {
       tally: { ours: ["Fire"], theirs: ["Water", "Earth", "Hextech"] },
     },
     levelHint: null,
+    pinned: false,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
 }

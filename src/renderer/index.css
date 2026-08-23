@@ -132,3 +132,86 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .soul-pulse { animation: none; }
 }
+
+/* ── The notification assembles itself ────────────────────────────────────
+   Death Stranding's interface does not fade things in, it BUILDS them: a rail
+   draws itself, a marker snaps to it, and the contents arrive in sequence
+   rather than together. The card still arrives from the right, but only just —
+   28px, enough to say "this came from somewhere" without the slide becoming
+   the whole gesture.
+
+   Every step is short. The eye should register construction, not wait through
+   it: measured end to end the assembly runs ~830ms, and the exit is 300ms —
+   a third of it — because a thing that lingers on the way out reads as sluggish
+   rather than deliberate.
+
+   Timings live here, in one block, so the sequence can be retuned by reading
+   down a column instead of hunting through markup. */
+
+@keyframes ds-arrive {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes ds-leave {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(20px); }
+}
+
+/* the rail, drawing itself from the right edge inward */
+@keyframes ds-draw {
+  from { stroke-dashoffset: -1; }
+  to   { stroke-dashoffset: 0; }
+}
+/* the marker on the rail, arriving with a slight overshoot */
+@keyframes ds-snap {
+  0%   { opacity: 0; transform: scale(0.3); }
+  65%  { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* text uncovering left to right behind a bright edge */
+@keyframes ds-wipe {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 -2% 0 0); }
+}
+@keyframes ds-lift {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes ds-pop {
+  0%   { opacity: 0; transform: scale(0.55); }
+  60%  { opacity: 1; transform: scale(1.14); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* a rule opening from its left end */
+@keyframes ds-rule {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+/* one bright pass over the icon as it lands, gone in a moment */
+@keyframes ds-flash {
+  0%   { opacity: 0; }
+  25%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+.ds-in  { animation: ds-arrive 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ds-out { animation: ds-leave 300ms cubic-bezier(0.7, 0, 0.84, 0) both; }
+
+/* Children animate only on the way IN. On the way out the whole card leaves as
+   one piece — taking it apart again would read as hesitation. */
+.ds-in .ds-rail   { animation: ds-draw 400ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ds-in .ds-mark   { animation: ds-snap 300ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms both; transform-box: fill-box; transform-origin: center; }
+.ds-in .ds-icon   { animation: ds-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) 170ms both; }
+.ds-in .ds-flash  { animation: ds-flash 420ms ease-out 190ms both; }
+.ds-in .ds-eyebrow{ animation: ds-lift 260ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both; }
+.ds-in .ds-head   { animation: ds-wipe 380ms cubic-bezier(0.16, 1, 0.3, 1) 290ms both; }
+.ds-in .ds-rule   { animation: ds-rule 320ms cubic-bezier(0.16, 1, 0.3, 1) 380ms both; transform-origin: left center; }
+.ds-in .ds-late   { animation: ds-lift 240ms cubic-bezier(0.16, 1, 0.3, 1) 430ms both; }
+.ds-in .ds-slot   { animation: ds-pop 230ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-in, .ds-out { animation-duration: 1ms; }
+  .ds-in .ds-rail, .ds-in .ds-mark, .ds-in .ds-icon, .ds-in .ds-flash,
+  .ds-in .ds-eyebrow, .ds-in .ds-head, .ds-in .ds-rule, .ds-in .ds-late,
+  .ds-in .ds-slot { animation: none; }
+}

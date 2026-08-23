@@ -3420,6 +3420,7 @@ var state = {
   select: null,
   notice: null,
   levelHint: null,
+  pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null }
 };
 var win = null;
@@ -3484,7 +3485,7 @@ async function readSelect(data) {
 var NOTIFY_LEAD = 90;
 var NOTICE_MS = 9000;
 var POLL_MS = 2000;
-var PIN_OVERLAY = true;
+var DEMO_MS = 5000;
 var tick = null;
 var noticeTimer = null;
 var announced = null;
@@ -3495,13 +3496,13 @@ function dropNotice() {
   push({ notice: null });
   hideOverlay();
 }
-function raiseNotice(kind, inSeconds, element, tally) {
+function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } });
   showOverlay();
-  if (!PIN_OVERLAY)
-    noticeTimer = setTimeout(dropNotice, NOTICE_MS);
+  if (!state.pinned)
+    noticeTimer = setTimeout(dropNotice, ms);
 }
 async function readObjective() {
   const stats = await liveGameStats();
@@ -3517,7 +3518,7 @@ async function readObjective() {
     return;
   const tally = dragonTally(events, players ?? [], me);
   const spawnAt = Math.round(stats.gameTime + next.inSeconds);
-  if (PIN_OVERLAY) {
+  if (state.pinned) {
     raiseNotice(next.kind, next.inSeconds, next.element, tally);
     return;
   }
@@ -3585,11 +3586,28 @@ ipcMain.on("overlay:report", (_e, info) => {
   const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud);
   console.log("[hud] scale=%s → Q drawn at css (%d,%d) %dpx → physical (%d,%d) %dpx", state.hud.scale, Math.round(box.left), Math.round(box.top), Math.round(box.size), Math.round(box.left * info.dpr), Math.round(box.top * info.dpr), Math.round(box.size * info.dpr));
 });
-ipcMain.on("overlay:preview", (_e, on) => {
+ipcMain.on("overlay:pin", (_e, on) => {
+  push({ pinned: on });
   if (on)
-    raiseNotice("dragon", NOTIFY_LEAD, null, { ours: [], theirs: [] });
-  else
-    dropNotice();
+    readObjective();
+  else if (state.notice)
+    noticeTimer = setTimeout(dropNotice, NOTICE_MS);
+});
+ipcMain.on("overlay:demo", async () => {
+  const stats = await liveGameStats();
+  if (stats) {
+    const [events, players, me] = await Promise.all([
+      liveEvents(),
+      livePlayers(),
+      liveActivePlayerName().catch(() => null)
+    ]);
+    const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain);
+    if (next) {
+      raiseNotice(next.kind, next.inSeconds, next.element, dragonTally(events, players ?? [], me), DEMO_MS);
+      return;
+    }
+  }
+  raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
 });
 app.whenReady().then(async () => {
   createWindow();

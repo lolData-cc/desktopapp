@@ -49,6 +49,11 @@ export type AppState = {
   /** Which ability the skill order says to level next, or null for none.
    *  Static advice: it is the order we already publish for this champion. */
   levelHint: "Q" | "W" | "E" | "R" | null
+  /** Debug only: hold the overlay on screen instead of letting it expire.
+   *  Runtime rather than a build constant, so the notification behaviour can be
+   *  inspected without a rebuild — and so it can never be left on by accident
+   *  in a shipped binary. */
+  pinned: boolean
   /** Where the ability bar is, derived rather than hardcoded.
    *
    *  `scale` is the player's own HUD SCALE slider, read out of the game's
@@ -66,6 +71,7 @@ let state: AppState = {
   select: null,
   notice: null,
   levelHint: null,
+  pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null },
 }
 
@@ -154,15 +160,9 @@ const NOTIFY_LEAD = 90        // seconds before the spawn — the "1:30" mark
 const NOTICE_MS = 9_000       // how long it stays up
 const POLL_MS = 2_000
 
-/** TEMPORARY, for working on the overlay's design.
- *
- *  With this on, a notice never expires and one is raised as soon as a match
- *  starts, so the card can be looked at and adjusted without waiting for a
- *  dragon and then losing it nine seconds later.
- *
- *  Set it back to false before this ships: an overlay that never leaves is the
- *  exact thing the notification shape was chosen to avoid. */
-const PIN_OVERLAY = true
+/** How long the debug button holds a demo notice up. Shorter than a real one
+ *  on purpose — it is for checking the animation, not for reading. */
+const DEMO_MS = 5_000
 
 let tick: ReturnType<typeof setInterval> | null = null
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
@@ -181,12 +181,13 @@ function raiseNotice(
   kind: "dragon" | "elder",
   inSeconds: number,
   element: DragonElement | null,
-  tally: DragonTally
+  tally: DragonTally,
+  ms: number = NOTICE_MS
 ): void {
   if (noticeTimer) clearTimeout(noticeTimer)
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } })
   showOverlay()
-  if (!PIN_OVERLAY) noticeTimer = setTimeout(dropNotice, NOTICE_MS)
+  if (!state.pinned) noticeTimer = setTimeout(dropNotice, ms)
 }
 
 async function readObjective(): Promise<void> {
@@ -207,9 +208,9 @@ async function readObjective(): Promise<void> {
   // remaining seconds, so it identifies THIS spawn and not a moment.
   const spawnAt = Math.round(stats.gameTime + next.inSeconds)
 
-  if (PIN_OVERLAY) {
-    // Keep it on screen and keep the number honest — it still shows the real
-    // time to the real next objective, just without ever going away.
+  if (state.pinned) {
+    // Held open for inspection, but the number stays honest: it is still the
+    // real time to the real next objective, just without going away.
     raiseNotice(next.kind, next.inSeconds, next.element, tally)
     return
   }
@@ -308,9 +309,31 @@ ipcMain.on("overlay:report", (_e, info: { w: number; h: number; dpr: number }) =
   )
 })
 
-ipcMain.on("overlay:preview", (_e, on: boolean) => {
-  if (on) raiseNotice("dragon", NOTIFY_LEAD, null, { ours: [], theirs: [] })
-  else dropNotice()
+/** Debug: hold the overlay open, or let it behave like a notification again. */
+ipcMain.on("overlay:pin", (_e, on: boolean) => {
+  push({ pinned: on })
+  if (on) void readObjective()
+  else if (state.notice) noticeTimer = setTimeout(dropNotice, NOTICE_MS)
+})
+
+/** Debug: raise one for a few seconds. Uses the REAL objective and tally when a
+ *  match is running, so what gets checked is the actual card and not a mockup;
+ *  falls back to a representative one when there is no game to read. */
+ipcMain.on("overlay:demo", async () => {
+  const stats = await liveGameStats()
+  if (stats) {
+    const [events, players, me] = await Promise.all([
+      liveEvents(),
+      livePlayers(),
+      liveActivePlayerName().catch(() => null),
+    ])
+    const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain)
+    if (next) {
+      raiseNotice(next.kind, next.inSeconds, next.element, dragonTally(events, players ?? [], me), DEMO_MS)
+      return
+    }
+  }
+  raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS)
 })
 
 app.whenReady().then(async () => {
