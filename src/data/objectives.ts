@@ -17,7 +17,7 @@ export const FIRST_DRAGON_AT = 5 * 60
 export const DRAGON_RESPAWN = 5 * 60
 export const ELDER_RESPAWN = 6 * 60
 export const ELDER_EARLIEST = 35 * 60
-const SOUL_AT = 4
+export const SOUL_AT = 4
 
 /** The element names the live API uses in DragonKill.DragonType. */
 export type DragonElement = "Fire" | "Earth" | "Water" | "Air" | "Hextech" | "Chemtech"
@@ -96,6 +96,51 @@ function soulTakenBy(events: GameEvent[], players: PlayerSlot[]): string | null 
     if (count[team] >= SOUL_AT) return team
   }
   return null
+}
+
+export type DragonTally = {
+  /** Elements the player's own team has taken, oldest first. */
+  ours: DragonElement[]
+  /** And the other team's. */
+  theirs: DragonElement[]
+}
+
+/**
+ * Who has taken which dragons.
+ *
+ * The event carries a killer NAME and nothing else, so the team comes from the
+ * player list, and the player's OWN team from their name — without which there
+ * is no "ours" to speak of and both sides come back empty rather than
+ * arbitrarily assigned.
+ *
+ * A kill that cannot be attributed is dropped, not guessed onto a side: putting
+ * a dragon under the wrong team is worse than showing one fewer. Elder is
+ * excluded too — it is not an elemental drake and does not count toward soul.
+ */
+export function dragonTally(
+  events: GameEvent[],
+  players: PlayerSlot[],
+  myName: string | null
+): DragonTally {
+  const teamOf = new Map<string, string>()
+  for (const p of players) {
+    if (p.riotId) teamOf.set(p.riotId, p.team)
+    if (p.summonerName) teamOf.set(p.summonerName, p.team)
+  }
+
+  const myTeam = myName ? teamOf.get(myName) : undefined
+  const tally: DragonTally = { ours: [], theirs: [] }
+  if (!myTeam) return tally
+
+  for (const e of events) {
+    if (e.EventName !== "DragonKill") continue
+    const element = normaliseElement(e.DragonType)
+    if (!element) continue
+    const team = e.KillerName ? teamOf.get(e.KillerName) : undefined
+    if (!team) continue
+    ;(team === myTeam ? tally.ours : tally.theirs).push(element)
+  }
+  return tally
 }
 
 export function nextObjective(

@@ -3249,87 +3249,10 @@ function get(path) {
 }
 var liveGameStats = () => get("/gamestats");
 var liveActivePlayerName = () => get("/activeplayername");
-async function liveOwnSpells(riotId) {
-  const r = await get(`/playersummonerspells?riotId=${encodeURIComponent(riotId)}`);
-  const a = r?.summonerSpellOne?.displayName;
-  const b = r?.summonerSpellTwo?.displayName;
-  return a && b ? [a, b] : null;
-}
 var livePlayers = () => get("/playerlist");
-async function liveOwnRuneIds() {
-  const ap = await get("/activeplayer");
-  const runes = ap?.fullRunes;
-  if (!runes)
-    return [];
-  const ids = (runes.generalRunes ?? []).map((r) => r.id);
-  if (runes.keystone?.id)
-    ids.push(runes.keystone.id);
-  return ids;
-}
-async function liveOwnItemIds(riotId) {
-  const items = await get(`/playeritems?riotId=${encodeURIComponent(riotId)}`);
-  return (items ?? []).map((i) => i.itemID).filter((n) => Number.isFinite(n));
-}
 async function liveEvents() {
   const wrap = await get("/eventdata");
   return wrap?.Events ?? [];
-}
-
-// src/data/spells.ts
-var CDN2 = "https://cdn2.loldata.cc";
-var FALLBACK_PATCH2 = "16.16.1";
-var byName = null;
-var patch2 = FALLBACK_PATCH2;
-async function load2() {
-  if (byName)
-    return byName;
-  const marker = await fetch(`${CDN2}/_current_version.txt`).catch(() => null);
-  if (marker?.ok)
-    patch2 = (await marker.text()).trim() || FALLBACK_PATCH2;
-  const res = await fetch(`${CDN2}/${patch2}/data/en_US/summoner.json`);
-  if (!res.ok)
-    throw new Error(`summoner data ${res.status}`);
-  const json = await res.json();
-  const map = new Map;
-  for (const s of Object.values(json.data)) {
-    if (map.has(s.name))
-      continue;
-    const ammo = Number(s.maxammo ?? "-1");
-    map.set(s.name, {
-      id: s.id,
-      cooldown: s.cooldown?.[0] ?? 0,
-      charges: Number.isFinite(ammo) && ammo > 0 ? ammo : 1
-    });
-  }
-  byName = map;
-  return map;
-}
-var HASTE_SOURCES = [
-  { kind: "rune", id: 8347, haste: 18, name: "Cosmic Insight" },
-  { kind: "item", id: 3158, haste: 10, name: "Ionian Boots of Lucidity" }
-];
-function summonerHaste(runeIds, itemIds) {
-  let total = 0;
-  for (const src of HASTE_SOURCES) {
-    const ids = src.kind === "rune" ? runeIds : itemIds;
-    if (ids.includes(src.id))
-      total += src.haste;
-  }
-  return total;
-}
-var applyHaste = (base, haste) => Math.round(base / (1 + haste / 100));
-async function spellByName(displayName, haste = 0) {
-  if (!displayName)
-    return null;
-  const e = (await load2()).get(displayName);
-  if (!e)
-    return null;
-  return {
-    name: displayName,
-    icon: `${CDN2}/${patch2}/img/spell/${e.id}.png`,
-    cooldown: applyHaste(e.cooldown, haste),
-    charges: e.charges
-  };
 }
 
 // src/data/hud.ts
@@ -3438,6 +3361,31 @@ function soulTakenBy(events, players) {
   }
   return null;
 }
+function dragonTally(events, players, myName) {
+  const teamOf = new Map;
+  for (const p of players) {
+    if (p.riotId)
+      teamOf.set(p.riotId, p.team);
+    if (p.summonerName)
+      teamOf.set(p.summonerName, p.team);
+  }
+  const myTeam = myName ? teamOf.get(myName) : undefined;
+  const tally = { ours: [], theirs: [] };
+  if (!myTeam)
+    return tally;
+  for (const e of events) {
+    if (e.EventName !== "DragonKill")
+      continue;
+    const element = normaliseElement(e.DragonType);
+    if (!element)
+      continue;
+    const team = e.KillerName ? teamOf.get(e.KillerName) : undefined;
+    if (!team)
+      continue;
+    (team === myTeam ? tally.ours : tally.theirs).push(element);
+  }
+  return tally;
+}
 function nextObjective(events, gameTime, players = [], mapTerrain) {
   const kills = events.filter((e) => e.EventName === "DragonKill").sort((a, b) => a.EventTime - b.EventTime);
   if (kills.length === 0) {
@@ -3471,9 +3419,9 @@ var state = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null }
 };
 var win = null;
-function push(patch3) {
+function push(patch2) {
   const before = state.phase;
-  state = { ...state, ...patch3 };
+  state = { ...state, ...patch2 };
   win?.webContents.send("state", state);
   sendOverlay("state", state);
   if (state.phase !== before) {
@@ -3536,29 +3484,6 @@ var PIN_OVERLAY = true;
 var tick = null;
 var noticeTimer = null;
 var announced = null;
-var ownSpells = [];
-var spellHaste = -1;
-async function readOwnSpells() {
-  const name = await liveActivePlayerName();
-  if (!name)
-    return;
-  const [runes, items] = await Promise.all([
-    liveOwnRuneIds().catch(() => []),
-    liveOwnItemIds(name).catch(() => [])
-  ]);
-  const haste = summonerHaste(runes, items);
-  if (ownSpells.length && haste === spellHaste)
-    return;
-  const pair = await liveOwnSpells(name);
-  if (!pair)
-    return;
-  const resolved = await Promise.all(pair.map((n) => spellByName(n, haste).catch(() => null)));
-  const found = resolved.filter((x) => x !== null);
-  if (!found.length)
-    return;
-  ownSpells = found;
-  spellHaste = haste;
-}
 function dropNotice() {
   if (noticeTimer)
     clearTimeout(noticeTimer);
@@ -3566,10 +3491,10 @@ function dropNotice() {
   push({ notice: null });
   hideOverlay();
 }
-function raiseNotice(kind, inSeconds, element = null) {
+function raiseNotice(kind, inSeconds, element, tally) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells, element } });
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } });
   showOverlay();
   if (!PIN_OVERLAY)
     noticeTimer = setTimeout(dropNotice, NOTICE_MS);
@@ -3578,27 +3503,29 @@ async function readObjective() {
   const stats = await liveGameStats();
   if (!stats)
     return;
-  readOwnSpells();
-  const [events, players] = await Promise.all([liveEvents(), livePlayers()]);
+  const [events, players, me] = await Promise.all([
+    liveEvents(),
+    livePlayers(),
+    liveActivePlayerName().catch(() => null)
+  ]);
   const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain);
   if (!next)
     return;
+  const tally = dragonTally(events, players ?? [], me);
   const spawnAt = Math.round(stats.gameTime + next.inSeconds);
   if (PIN_OVERLAY) {
-    raiseNotice(next.kind, next.inSeconds, next.element);
+    raiseNotice(next.kind, next.inSeconds, next.element, tally);
     return;
   }
   if (next.inSeconds <= NOTIFY_LEAD && next.inSeconds > 0 && announced !== spawnAt) {
     announced = spawnAt;
-    raiseNotice(next.kind, next.inSeconds, next.element);
+    raiseNotice(next.kind, next.inSeconds, next.element, tally);
   }
 }
 function startGameClock() {
   if (tick)
     return;
   announced = null;
-  ownSpells = [];
-  spellHaste = -1;
   readObjective();
   tick = setInterval(() => void readObjective(), POLL_MS);
 }
@@ -3607,8 +3534,6 @@ function stopGameClock() {
     clearInterval(tick);
   tick = null;
   announced = null;
-  ownSpells = [];
-  spellHaste = -1;
   dropNotice();
 }
 function createWindow() {
@@ -3640,8 +3565,8 @@ function createWindow() {
 ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
 ipcMain.on("win:close", () => win?.close());
-ipcMain.on("hud:calibrate", (_e, patch3) => {
-  const nudge = { ...state.hud.nudge, ...patch3 };
+ipcMain.on("hud:calibrate", (_e, patch2) => {
+  const nudge = { ...state.hud.nudge, ...patch2 };
   push({ hud: { ...state.hud, nudge } });
   console.log("[hud] nudge x=%s y=%s size=%s", nudge.x.toFixed(2), nudge.y.toFixed(2), nudge.size.toFixed(2));
 });
@@ -3658,7 +3583,7 @@ ipcMain.on("overlay:report", (_e, info) => {
 });
 ipcMain.on("overlay:preview", (_e, on) => {
   if (on)
-    raiseNotice("dragon", NOTIFY_LEAD);
+    raiseNotice("dragon", NOTIFY_LEAD, null, { ours: [], theirs: [] });
   else
     dropNotice();
 });

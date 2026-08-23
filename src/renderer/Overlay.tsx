@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { abilityBox, type Ability, type HudNudge } from "../data/hud"
-import { dragonIcon, dragonLabel } from "./dragonIcon"
-import type { DragonElement } from "../data/objectives"
+import { dragonIcon, dragonLabel, elementGlyph, elementName } from "./dragonIcon"
+import { SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
 
 /**
  * The notification that sits over the game.
@@ -14,14 +14,14 @@ import type { DragonElement } from "../data/objectives"
  * the card is up, so what arrives is a reading, not a klaxon. The window
  * underneath is click-through, so none of this may look interactive.
  */
-type Spell = { name: string; icon: string; cooldown: number; charges: number }
 type Notice = {
   kind: "dragon" | "elder"
   inSeconds: number
   raisedAt: number
-  spells: Spell[]
   /** Null until the Rift's element is knowable — see objectives.ts. */
   element: DragonElement | null
+  /** Who has taken which drakes so far. */
+  tally: DragonTally
 }
 type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
 type AppState = {
@@ -129,37 +129,42 @@ function AbilityOutline({ ability, hud }: { ability: Ability; hud: HudPlacement 
 }
 
 /**
- * A spell with its cooldown LENGTH written on it.
+ * One team's drakes, as four slots rather than a number.
  *
- * Deliberately not the game's own on-cooldown look — no dimming, no big number
- * centred on the icon. Nothing we can read tells us whether the spell is up:
- * Riot publishes no remaining-cooldown field and no cast event. Borrowing the
- * visual language of "currently down" would state something we do not know.
+ * Four because that is the soul, so the empty slots carry the information a
+ * bare count does not: how close either side is to ending the dragon game. The
+ * filled ones use the element SYMBOLS — at this size a portrait is a smudge.
  *
- * A corner plate reads as a property of the spell instead, which is what it is:
- * how long the cooldown runs for THIS build, haste included.
+ * Ours reads in jade, theirs in plain grey. No light outlines anywhere: the
+ * slots are fills, which is also what keeps them legible over bright terrain.
  */
-function SpellChip({ spell }: { spell: Spell }) {
-  // m:ss above a minute, not rounded minutes: haste makes these numbers
-  // untidy on purpose — Flash with Cosmic Insight is 254s, and calling that
-  // "4m" would be confidently wrong by fourteen seconds.
-  const cd = spell.cooldown
-  const text = cd >= 60 ? clock(cd) : `${cd}s`
+function TeamTally({ label, taken, ours = false }: { label: string; taken: DragonElement[]; ours?: boolean }) {
+  const plate = ours ? "bg-jade/[0.10]" : "bg-flash/[0.07]"
+  const empty = ours ? "bg-jade/[0.05]" : "bg-flash/[0.035]"
 
   return (
-    <span className="relative shrink-0">
-      <img
-        src={spell.icon}
-        alt={spell.name}
-        title={spell.name}
-        className="block h-9 w-9 rounded-[3px] ring-1 ring-jade/20"
-        style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.9))" }}
-      />
+    <span className="flex items-center gap-1.5">
+      <span className="font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30">
+        {label}
+      </span>
       <span
-        className="absolute -bottom-[3px] left-1/2 -translate-x-1/2 rounded-[2px] px-[3px] font-jetbrains text-[9px] font-bold leading-[13px] tabular-nums text-flash"
-        style={{ background: "rgba(4,10,12,0.92)", boxShadow: "0 0 0 1px rgba(0,217,146,0.28)" }}
+        className={`font-chakrapetch text-[15px] font-bold leading-none tabular-nums ${
+          ours ? "text-jade" : "text-flash/70"
+        }`}
       >
-        {spell.charges > 1 ? `${spell.charges}×${text}` : text}
+        {taken.length}
+      </span>
+      <span className="ml-0.5 flex items-center gap-[3px]">
+        {Array.from({ length: SOUL_AT }, (_, i) => {
+          const el = taken[i]
+          return el ? (
+            <span key={i} className={`grid h-[19px] w-[19px] place-items-center rounded-[2px] ${plate}`}>
+              <img src={elementGlyph(el)} alt={elementName(el)} title={elementName(el)} className="h-[15px] w-[15px]" />
+            </span>
+          ) : (
+            <span key={i} className={`h-[19px] w-[19px] rounded-[2px] ${empty}`} />
+          )
+        })}
       </span>
     </span>
   )
@@ -256,16 +261,14 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           </div>
         </div>
 
-        {n.spells.length > 0 && (
-          <div className="mt-3 flex items-center gap-2.5 border-t border-jade/[0.14] pt-2.5">
-            <span className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
-              your spells · cd
-            </span>
-            {n.spells.map((sp) => (
-              <SpellChip key={sp.name} spell={sp} />
-            ))}
-          </div>
-        )}
+        <div className="mt-3 flex items-center gap-3 border-t border-jade/[0.14] pt-2.5">
+          <span className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
+            drakes
+          </span>
+          <TeamTally label="you" taken={n.tally.ours} ours />
+          <span aria-hidden className="h-5 w-px bg-jade/15" />
+          <TeamTally label="enemy" taken={n.tally.theirs} />
+        </div>
 
       </div>
     </div>

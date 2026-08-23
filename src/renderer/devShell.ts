@@ -13,8 +13,6 @@
  */
 type Listener = (s: unknown) => void
 
-const CDN = "https://cdn2.loldata.cc/16.16.1/img/spell/"
-
 const SCENES: Record<string, unknown> = {
   waiting: {
     client: "waiting",
@@ -72,13 +70,8 @@ const SCENES: Record<string, unknown> = {
       kind: "dragon",
       inSeconds: 90,
       raisedAt: Date.now(),
-      spells: [
-        // 300s and 180s cut by 18 haste — Cosmic Insight, as the real reader
-        // would compute it.
-        { name: "Flash", icon: CDN + "SummonerFlash.png", cooldown: 254, charges: 1 },
-        { name: "Ignite", icon: CDN + "SummonerDot.png", cooldown: 153, charges: 1 },
-      ],
       element: null,
+      tally: { ours: [], theirs: [] },
     },
     levelHint: null,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
@@ -93,13 +86,8 @@ const SCENES: Record<string, unknown> = {
       kind: "elder",
       inSeconds: 90,
       raisedAt: Date.now(),
-      spells: [
-        // 300s and 180s cut by 18 haste — Cosmic Insight, as the real reader
-        // would compute it.
-        { name: "Flash", icon: CDN + "SummonerFlash.png", cooldown: 254, charges: 1 },
-        { name: "Ignite", icon: CDN + "SummonerDot.png", cooldown: 153, charges: 1 },
-      ],
       element: null,
+      tally: { ours: [], theirs: [] },
     },
     levelHint: null,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
@@ -115,11 +103,9 @@ const SCENES: Record<string, unknown> = {
       kind: "dragon",
       inSeconds: 90,
       raisedAt: Date.now(),
-      spells: [
-        { name: "Flash", icon: CDN + "SummonerFlash.png", cooldown: 300, charges: 1 },
-        { name: "Smite", icon: CDN + "SummonerSmite.png", cooldown: 15, charges: 2 },
-      ],
       element: "Fire",
+      // soul is one drake away for us, and they have two
+      tally: { ours: ["Fire", "Water", "Air"], theirs: ["Earth", "Hextech"] },
     },
     levelHint: null,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },

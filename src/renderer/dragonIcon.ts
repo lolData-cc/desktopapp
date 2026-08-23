@@ -22,6 +22,31 @@ import hextech from "../assets/dragons/hextech.png"
 import chemtech from "../assets/dragons/chemtech.png"
 import elder from "../assets/dragons/elder.png"
 
+// The element SYMBOLS, a different asset for a different job: the portraits
+// above are unreadable at tally size, and these flat glyphs are exactly what
+// Riot draws them for.
+import gFire from "../assets/dragons/glyph/fire.png"
+import gEarth from "../assets/dragons/glyph/earth.png"
+import gWater from "../assets/dragons/glyph/water.png"
+import gAir from "../assets/dragons/glyph/air.png"
+import gHextech from "../assets/dragons/glyph/hextech.png"
+import gChemtech from "../assets/dragons/glyph/chemtech.png"
+
+const GLYPH: Record<DragonElement, string> = {
+  Fire: gFire,
+  Earth: gEarth,
+  Water: gWater,
+  Air: gAir,
+  Hextech: gHextech,
+  Chemtech: gChemtech,
+}
+
+/** The small element symbol, for counting rather than for identifying. */
+export const elementGlyph = (e: DragonElement): string => GLYPH[e]
+
+/** "Infernal", "Ocean" — the element on its own, without "Drake". */
+export const elementName = (e: DragonElement): string => LABEL[e].replace(" Drake", "")
+
 /** Keyed by the element names the live API uses in DragonKill.DragonType. */
 const BY_ELEMENT: Record<DragonElement, string> = {
   Fire: infernal,
