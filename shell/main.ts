@@ -15,6 +15,8 @@ import { championById, currentPatch, type Champion } from "../src/data/champions
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnSpells } from "../src/live/client"
 import { spellByName, type Spell } from "../src/data/spells"
+import { NO_NUDGE, type HudNudge } from "../src/data/hud"
+import { readHudSettings } from "../src/live/hudConfig"
 import { nextObjective } from "../src/data/objectives"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -42,6 +44,16 @@ export type AppState = {
     raisedAt: number
     spells: Spell[]
   } | null
+  /** Which ability the skill order says to level next, or null for none.
+   *  Static advice: it is the order we already publish for this champion. */
+  levelHint: "Q" | "W" | "E" | "R" | null
+  /** Where the ability bar is, derived rather than hardcoded.
+   *
+   *  `scale` is the player's own HUD SCALE slider, read out of the game's
+   *  config; the layout model turns it into pixels. `nudge` is a residual
+   *  correction in box widths for what the model cannot see — an unusual aspect
+   *  ratio, or an install whose config we failed to find. */
+  hud: { scale: number; nudge: HudNudge; source: string | null }
 }
 
 let state: AppState = {
@@ -51,6 +63,8 @@ let state: AppState = {
   patch: null,
   select: null,
   notice: null,
+  levelHint: null,
+  hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null },
 }
 
 let win: BrowserWindow | null = null
@@ -138,6 +152,16 @@ const NOTIFY_LEAD = 90        // seconds before the spawn — the "1:30" mark
 const NOTICE_MS = 9_000       // how long it stays up
 const POLL_MS = 2_000
 
+/** TEMPORARY, for working on the overlay's design.
+ *
+ *  With this on, a notice never expires and one is raised as soon as a match
+ *  starts, so the card can be looked at and adjusted without waiting for a
+ *  dragon and then losing it nine seconds later.
+ *
+ *  Set it back to false before this ships: an overlay that never leaves is the
+ *  exact thing the notification shape was chosen to avoid. */
+const PIN_OVERLAY = true
+
 let tick: ReturnType<typeof setInterval> | null = null
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
 /** The spawn we have already announced, on the game clock, so one dragon
@@ -166,7 +190,7 @@ function raiseNotice(kind: "dragon" | "elder", inSeconds: number): void {
   if (noticeTimer) clearTimeout(noticeTimer)
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells } })
   showOverlay()
-  noticeTimer = setTimeout(dropNotice, NOTICE_MS)
+  if (!PIN_OVERLAY) noticeTimer = setTimeout(dropNotice, NOTICE_MS)
 }
 
 async function readObjective(): Promise<void> {
@@ -182,6 +206,13 @@ async function readObjective(): Promise<void> {
   // Absolute spawn time on the game clock — stable across polls, unlike the
   // remaining seconds, so it identifies THIS spawn and not a moment.
   const spawnAt = Math.round(stats.gameTime + next.inSeconds)
+
+  if (PIN_OVERLAY) {
+    // Keep it on screen and keep the number honest — it still shows the real
+    // time to the real next objective, just without ever going away.
+    raiseNotice(next.kind, next.inSeconds)
+    return
+  }
 
   if (
     next.inSeconds <= NOTIFY_LEAD &&
@@ -248,6 +279,16 @@ ipcMain.on("win:close", () => win?.close())
 // Development affordance: seeing the overlay should not require a live match.
 // Development affordance: raise a notice on demand, because waiting for a real
 // dragon every time the layout changes is not a workable loop.
+ipcMain.on("hud:calibrate", (_e, patch: Partial<HudNudge>) => {
+  push({ hud: { ...state.hud, nudge: { ...state.hud.nudge, ...patch } } })
+})
+ipcMain.on("hud:hint", (_e, ability: "Q" | "W" | "E" | "R" | null) => {
+  push({ levelHint: ability })
+  // The outline lives in the overlay window, so that window has to be on screen
+  // for it to be visible at all.
+  if (ability) showOverlay()
+})
+
 ipcMain.on("overlay:preview", (_e, on: boolean) => {
   if (on) raiseNotice("dragon", NOTIFY_LEAD)
   else dropNotice()
@@ -256,6 +297,13 @@ ipcMain.on("overlay:preview", (_e, on: boolean) => {
 app.whenReady().then(async () => {
   createWindow()
   createOverlay(join(__dirname, "preload.mjs"))
+
+  // Read the player's own HUD scale before anything is drawn over the game, so
+  // the first frame is already in the right place rather than being corrected
+  // afterwards. A missing config is not fatal — the default stands.
+  const hud = await readHudSettings()
+  push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } })
+
   await lcu.start()
 })
 

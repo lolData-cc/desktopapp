@@ -3286,6 +3286,46 @@ async function spellByName(displayName) {
   return { name: displayName, icon: `${CDN2}/${patch2}/img/spell/${id}.png` };
 }
 
+// src/data/hud.ts
+var DEFAULT_MODEL = {
+  sizeAt0: 35 / 1080,
+  sizeAt1: 53 / 1080,
+  qOffsetInBoxes: -4.25,
+  pitchInBoxes: 1.25,
+  bottomInBoxes: 1.4
+};
+var NO_NUDGE = { x: 0, y: 0, size: 0 };
+
+// src/live/hudConfig.ts
+import { readFile as readFile2 } from "node:fs/promises";
+var CONFIG_PATHS = [
+  "C:/Riot Games/League of Legends/Config/game.cfg",
+  "C:/Program Files/Riot Games/League of Legends/Config/game.cfg",
+  "C:/Program Files (x86)/Riot Games/League of Legends/Config/game.cfg",
+  "D:/Riot Games/League of Legends/Config/game.cfg"
+];
+var DEFAULT_HUD_SCALE = 1;
+async function readHudSettings() {
+  for (const path of CONFIG_PATHS) {
+    let text;
+    try {
+      text = await readFile2(path, "utf8");
+    } catch {
+      continue;
+    }
+    const hud = text.split(/^\[/m).find((block) => block.startsWith("HUD]"));
+    const scope = hud ?? text;
+    const match = scope.match(/^GlobalScale\s*=\s*([\d.]+)/m);
+    if (!match?.[1])
+      continue;
+    const value = Number(match[1]);
+    if (!Number.isFinite(value) || value <= 0)
+      continue;
+    return { globalScale: value, source: path };
+  }
+  return { globalScale: DEFAULT_HUD_SCALE, source: null };
+}
+
 // src/data/objectives.ts
 var FIRST_DRAGON_AT = 5 * 60;
 var DRAGON_RESPAWN = 5 * 60;
@@ -3336,7 +3376,9 @@ var state = {
   phase: null,
   patch: null,
   select: null,
-  notice: null
+  notice: null,
+  levelHint: null,
+  hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null }
 };
 var win = null;
 function push(patch3) {
@@ -3400,6 +3442,7 @@ async function readSelect(data) {
 var NOTIFY_LEAD = 90;
 var NOTICE_MS = 9000;
 var POLL_MS = 2000;
+var PIN_OVERLAY = true;
 var tick = null;
 var noticeTimer = null;
 var announced = null;
@@ -3428,7 +3471,8 @@ function raiseNotice(kind, inSeconds) {
     clearTimeout(noticeTimer);
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells } });
   showOverlay();
-  noticeTimer = setTimeout(dropNotice, NOTICE_MS);
+  if (!PIN_OVERLAY)
+    noticeTimer = setTimeout(dropNotice, NOTICE_MS);
 }
 async function readObjective() {
   const stats = await liveGameStats();
@@ -3440,6 +3484,10 @@ async function readObjective() {
   if (!next)
     return;
   const spawnAt = Math.round(stats.gameTime + next.inSeconds);
+  if (PIN_OVERLAY) {
+    raiseNotice(next.kind, next.inSeconds);
+    return;
+  }
   if (next.inSeconds <= NOTIFY_LEAD && next.inSeconds > 0 && announced !== spawnAt) {
     announced = spawnAt;
     raiseNotice(next.kind, next.inSeconds);
@@ -3490,6 +3538,14 @@ function createWindow() {
 ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
 ipcMain.on("win:close", () => win?.close());
+ipcMain.on("hud:calibrate", (_e, patch3) => {
+  push({ hud: { ...state.hud, nudge: { ...state.hud.nudge, ...patch3 } } });
+});
+ipcMain.on("hud:hint", (_e, ability) => {
+  push({ levelHint: ability });
+  if (ability)
+    showOverlay();
+});
 ipcMain.on("overlay:preview", (_e, on) => {
   if (on)
     raiseNotice("dragon", NOTIFY_LEAD);
@@ -3499,6 +3555,8 @@ ipcMain.on("overlay:preview", (_e, on) => {
 app.whenReady().then(async () => {
   createWindow();
   createOverlay(join2(__dirname2, "preload.mjs"));
+  const hud = await readHudSettings();
+  push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
   await lcu.start();
 });
 app.on("before-quit", () => {

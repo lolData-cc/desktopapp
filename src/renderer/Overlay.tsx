@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { abilityBox, type Ability, type HudNudge } from "../data/hud"
 
 /**
  * The notification that sits over the game.
@@ -18,7 +19,12 @@ type Notice = {
   raisedAt: number
   spells: Spell[]
 }
-type AppState = { notice: Notice | null }
+type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
+type AppState = {
+  notice: Notice | null
+  levelHint: Ability | null
+  hud: HudPlacement
+}
 
 const DRAGON_ICON = "/img/dragon.png"
 
@@ -32,11 +38,15 @@ export default function Overlay() {
   // Kept separate from `notice` so the card can animate OUT before it is
   // unmounted; dropping it the instant state clears would make it vanish.
   const [visible, setVisible] = useState(false)
+  const [hint, setHint] = useState<Ability | null>(null)
+  const [hud, setHud] = useState<HudPlacement | null>(null)
 
   useEffect(() => {
     const apply = (s: AppState) => {
       if (s.notice) { setNotice(s.notice); setVisible(true) }
       else setVisible(false)
+      setHint(s.levelHint ?? null)
+      setHud(s.hud ?? null)
     }
     void window.desktop.getState().then(apply as never)
     return window.desktop.onState(apply as never)
@@ -44,7 +54,62 @@ export default function Overlay() {
 
   return (
     <div className="pointer-events-none h-full w-full bg-transparent">
+      {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
       {notice && <Card n={notice} visible={visible} />}
+    </div>
+  )
+}
+
+/**
+ * The ring around the ability to level.
+ *
+ * Static advice: which ability comes next is the skill order we already publish
+ * for this champion, known before the game began. It marks a button the player
+ * is already looking at rather than telling them something about the match.
+ *
+ * Drawn as a frame with corner ticks rather than a filled highlight — the icon
+ * underneath has to stay readable, and a wash over it would fight the art.
+ */
+function AbilityOutline({ ability, hud }: { ability: Ability; hud: HudPlacement }) {
+  const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
+
+  useEffect(() => {
+    const onResize = () => setScreen({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
+
+  const box = abilityBox(ability, screen, hud)
+  const pad = 3 // sit just outside the icon, not on top of its edge
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute"
+      style={{
+        left: box.left - pad,
+        top: box.top - pad,
+        width: box.size + pad * 2,
+        height: box.size + pad * 2,
+      }}
+    >
+      <span
+        className="absolute inset-0 rounded-[3px]"
+        style={{
+          border: "2px solid #00d992",
+          boxShadow: "0 0 14px rgba(0,217,146,0.75), inset 0 0 10px rgba(0,217,146,0.25)",
+          animation: "abilityPulse 1.6s ease-in-out infinite",
+        }}
+      />
+      {/* corner ticks, the same mark the app's panels use */}
+      {[
+        "top-[-3px] left-[-3px] border-t-2 border-l-2",
+        "top-[-3px] right-[-3px] border-t-2 border-r-2",
+        "bottom-[-3px] left-[-3px] border-b-2 border-l-2",
+        "bottom-[-3px] right-[-3px] border-b-2 border-r-2",
+      ].map((cls) => (
+        <span key={cls} className={`absolute h-2.5 w-2.5 border-jade ${cls}`} />
+      ))}
     </div>
   )
 }

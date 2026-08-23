@@ -108,3 +108,14 @@ body {
   .rise, .sweep, .beat { animation: none; }
   .sweep { opacity: 0.35; }
 }
+
+/* The ability ring breathes rather than blinks: it sits over a button the
+   player is about to press, and a hard flash there is a distraction, not a
+   hint. */
+@keyframes abilityPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="abilityPulse"] { animation: none !important; }
+}

@@ -21,6 +21,8 @@ const SCENES: Record<string, unknown> = {
     patch: "16.16.1",
     select: null,
     notice: null,
+    levelHint: null,
+    hud: { qLeft: 0.3871, top: 0.8693, size: 0.0494, pitch: 0.0323 },
   },
   lobby: {
     client: "attached",
@@ -29,6 +31,8 @@ const SCENES: Record<string, unknown> = {
     patch: "16.16.1",
     select: null,
     notice: null,
+    levelHint: null,
+    hud: { qLeft: 0.3871, top: 0.8693, size: 0.0494, pitch: 0.0323 },
   },
   select: {
     client: "attached",
@@ -42,6 +46,8 @@ const SCENES: Record<string, unknown> = {
       enemies: { locked: 1, total: 5 },
     },
     notice: null,
+    levelHint: null,
+    hud: { qLeft: 0.3871, top: 0.8693, size: 0.0494, pitch: 0.0323 },
   },
   game: {
     client: "attached",
@@ -50,6 +56,8 @@ const SCENES: Record<string, unknown> = {
     patch: "16.16.1",
     select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
     notice: null,
+    levelHint: null,
+    hud: { qLeft: 0.3871, top: 0.8693, size: 0.0494, pitch: 0.0323 },
   },
   // the state the whole feature exists for
   soon: {
@@ -67,6 +75,8 @@ const SCENES: Record<string, unknown> = {
         { name: "Ignite", icon: "https://cdn2.loldata.cc/16.16.1/img/spell/SummonerDot.png" },
       ],
     },
+    levelHint: null,
+    hud: { qLeft: 0.3871, top: 0.8693, size: 0.0494, pitch: 0.0323 },
   },
   elder: {
     client: "attached",
@@ -83,14 +93,20 @@ const SCENES: Record<string, unknown> = {
         { name: "Ignite", icon: "https://cdn2.loldata.cc/16.16.1/img/spell/SummonerDot.png" },
       ],
     },
+    levelHint: null,
+    hud: { qLeft: 0.3871, top: 0.8693, size: 0.0494, pitch: 0.0323 },
   },
 }
 
 export function installDevShell(): void {
   if ((window as any).desktop) return // running inside Electron — nothing to do
 
-  const scene = new URLSearchParams(location.search).get("state") ?? "select"
+  const params = new URLSearchParams(location.search)
+  const scene = params.get("state") ?? "select"
   let state = SCENES[scene] ?? SCENES.select
+  // ?hint=Q lights the ability outline without needing a game or the shell.
+  const hint = params.get("hint")
+  if (hint) state = { ...(state as object), levelHint: hint }
   const listeners = new Set<Listener>()
 
   ;(window as any).desktop = {

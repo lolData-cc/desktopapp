@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { ABILITIES, type Ability, type HudNudge } from "../data/hud"
 
 /** Mirrors the shell's AppState. Kept structural on purpose — the renderer is
  *  meant to be portable to a different shell without editing this file. */
@@ -14,6 +15,8 @@ type AppState = {
     allies: { locked: number; total: number }
     enemies: { locked: number; total: number }
   } | null
+  levelHint: Ability | null
+  hud: { scale: number; nudge: HudNudge; source: string | null }
 }
 
 declare global {
@@ -24,6 +27,8 @@ declare global {
       minimise(): void
       close(): void
       previewOverlay(on: boolean): void
+      calibrate(patch: Partial<HudNudge>): void
+      hint(ability: Ability | null): void
     }
   }
 }
@@ -61,6 +66,7 @@ export default function App() {
       <main className="relative flex flex-1 items-center justify-center px-8 pb-4">
         {s?.client === "attached" ? <Attached s={s} /> : <Waiting />}
       </main>
+      {s && <Calibration s={s} />}
       <StatusStrip s={s} />
     </div>
   )
@@ -118,6 +124,75 @@ function OverlayToggle() {
     >
       overlay
     </button>
+  )
+}
+
+/**
+ * Aligning the ability outline with the real HUD.
+ *
+ * This exists because League's HUD SCALE setting moves the ability bar, so no
+ * fixed coordinate is right for every player. Rather than guess and be wrong
+ * for most people, the outline is nudged onto the bar once and remembered.
+ *
+ * Temporary in this shape — it belongs in a settings screen, not the main
+ * window — but the numbers it produces are the real thing.
+ */
+function Calibration({ s }: { s: AppState }) {
+  // A tenth of a box width per press, so a correction means the same thing on
+  // any screen at any HUD scale — which is the point of nudging in box units.
+  const step = 0.1
+  const nudge = (patch: Partial<HudNudge>) => window.desktop.calibrate(patch)
+  const { scale, nudge: n, source } = s.hud
+
+  const Btn = ({ label, onClick }: { label: string; onClick: () => void }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="win-btn grid h-6 w-6 place-items-center rounded-[3px] font-jetbrains text-[11px] text-flash/45"
+    >
+      {label}
+    </button>
+  )
+
+  return (
+    <div className="relative z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-jade/[0.10] px-3.5 py-2">
+      <span className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/25">
+        outline
+      </span>
+
+      <div className="flex items-center gap-1">
+        {ABILITIES.map((a) => (
+          <button
+            key={a}
+            type="button"
+            onClick={() => window.desktop.hint(s.levelHint === a ? null : a)}
+            className={`win-btn h-6 w-7 rounded-[3px] font-chakrapetch text-[11px] font-bold ${
+              s.levelHint === a ? "bg-jade/15 text-jade" : "text-flash/30"
+            }`}
+          >
+            {a}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Btn label="←" onClick={() => nudge({ x: n.x - step })} />
+        <Btn label="→" onClick={() => nudge({ x: n.x + step })} />
+        <Btn label="↑" onClick={() => nudge({ y: n.y + step })} />
+        <Btn label="↓" onClick={() => nudge({ y: n.y - step })} />
+        <span className="ml-2 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">size</span>
+        <Btn label="−" onClick={() => nudge({ size: n.size - 0.02 })} />
+        <Btn label="+" onClick={() => nudge({ size: n.size + 0.02 })} />
+        <Btn label="⟲" onClick={() => nudge({ x: 0, y: 0, size: 0 })} />
+      </div>
+
+      {/* The read-out is the honest part: it says whether the placement was
+          DERIVED from the player's own settings or fell back to a guess. */}
+      <span className="ml-auto font-jetbrains text-[9px] tabular-nums text-flash/20">
+        {source ? `hud scale ${Math.round(scale * 100)}` : "hud scale unknown"}
+        {(n.x || n.y || n.size) ? ` · ${n.x.toFixed(1)} ${n.y.toFixed(1)} ${n.size.toFixed(2)}` : ""}
+      </span>
+    </div>
   )
 }
 
