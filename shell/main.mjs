@@ -18459,6 +18459,25 @@ function lcuFetch(port, authHeader, method, path, body) {
 // src/lcu/connection.ts
 var TLS = { rejectUnauthorized: false };
 var isBun = () => typeof globalThis.Bun !== "undefined";
+var PLATFORM_REGION = {
+  euw1: "euw",
+  eun1: "eune",
+  na1: "na",
+  kr: "kr",
+  br1: "br",
+  jp1: "jp",
+  la1: "lan",
+  la2: "las",
+  oc1: "oce",
+  tr1: "tr",
+  ru: "ru",
+  ph2: "ph",
+  sg2: "sg",
+  th2: "th",
+  tw2: "tw",
+  vn2: "vn",
+  me1: "me"
+};
 
 class LcuConnection {
   handlers;
@@ -18558,6 +18577,11 @@ class LcuConnection {
       puuid: data.puuid ?? "",
       iconId: data.profileIconId ?? 0
     };
+  }
+  async region() {
+    const { data } = await this.request("GET", "/lol-platform-config/v1/namespaces/LoginDataPacket/platformId");
+    const platform = String(data ?? "").toLowerCase();
+    return PLATFORM_REGION[platform] ?? (platform || null);
   }
   async phase() {
     const { data } = await this.request("GET", "/lol-gameflow/v1/gameflow-phase");
@@ -19964,6 +19988,8 @@ var state = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   lastPlayed: null,
+  region: null,
+  finalBoard: null,
   scoreboard: null
 };
 var win = null;
@@ -19989,7 +20015,7 @@ function push(patch2) {
 }
 var lcu = new LcuConnection({
   onConnect: async () => {
-    const [summoner, phase, patchVersion] = await Promise.all([
+    const [summoner, phase, patchVersion, region] = await Promise.all([
       lcu.currentSummoner().catch((e) => {
         console.error("[lcu] summoner:", e?.message);
         return null;
@@ -19998,9 +20024,10 @@ var lcu = new LcuConnection({
         console.error("[lcu] phase:", e?.message);
         return null;
       }),
-      currentPatch().catch(() => null)
+      currentPatch().catch(() => null),
+      lcu.region().catch(() => null)
     ]);
-    push({ client: "attached", summoner, phase, patch: patchVersion });
+    push({ client: "attached", summoner, phase, patch: patchVersion, region });
     readProfile();
     if (phase === "ChampSelect")
       await readSelect(await lcu.champSelect());
@@ -20015,7 +20042,10 @@ var lcu = new LcuConnection({
       push({
         phase,
         ...phase === "ChampSelect" ? {} : { select: null },
-        ...phase === "InProgress" || phase === "Reconnect" ? {} : { scoreboard: null }
+        ...phase === "InProgress" || phase === "Reconnect" ? {} : {
+          scoreboard: null,
+          ...state.scoreboard ? { finalBoard: { ours: state.scoreboard.ours, theirs: state.scoreboard.theirs } } : {}
+        }
       });
       if (POST_GAME_PHASES.has(phase))
         awaitMatch();
@@ -20402,6 +20432,7 @@ async function readScoreboard(players, me, myTeam, gameTime) {
       team: p.team,
       row: {
         name: p.riotIdGameName ?? p.summonerName ?? p.riotId ?? "—",
+        riotId: p.riotId ?? null,
         champion: p.championName ?? "—",
         championId: champ?.slug ?? null,
         level: p.level ?? 0,
@@ -20547,6 +20578,39 @@ async function applyPage(champion, patch2, page) {
 }
 ipcMain.handle("profile:refresh", async () => {
   await readProfile();
+});
+var rankCache = new Map;
+ipcMain.handle("ranks:get", async (_e, riotIds, region) => {
+  const out = {};
+  if (!region || !Array.isArray(riotIds))
+    return out;
+  await Promise.all(riotIds.slice(0, 10).map(async (riotId) => {
+    if (typeof riotId !== "string" || !riotId.includes("#"))
+      return;
+    const cacheKey = `${region}:${riotId}`;
+    if (rankCache.has(cacheKey)) {
+      out[riotId] = rankCache.get(cacheKey) ?? null;
+      return;
+    }
+    const [name, tag] = riotId.split("#");
+    try {
+      const res = await fetch("https://api2.loldata.cc/api/summoner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, tag, region })
+      });
+      if (!res.ok)
+        throw new Error(String(res.status));
+      const json = await res.json();
+      const rank2 = json?.summoner?.rank ?? null;
+      const clean = rank2 && !/unranked/i.test(rank2) ? rank2 : null;
+      rankCache.set(cacheKey, clean);
+      out[riotId] = clean;
+    } catch {
+      out[riotId] = null;
+    }
+  }));
+  return out;
 });
 var MODEL_DIR = () => join4(app3.getPath("userData"), "models");
 ipcMain.handle("model:get", async (_e, championId, key) => {

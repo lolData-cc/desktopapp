@@ -16,6 +16,13 @@ const TLS = { rejectUnauthorized: false }
 
 const isBun = () => typeof (globalThis as any).Bun !== "undefined"
 
+/** Riot's platform ids to the region segment our API uses. */
+const PLATFORM_REGION: Record<string, string> = {
+  euw1: "euw", eun1: "eune", na1: "na", kr: "kr", br1: "br", jp1: "jp",
+  la1: "lan", la2: "las", oc1: "oce", tr1: "tr", ru: "ru", ph2: "ph",
+  sg2: "sg", th2: "th", tw2: "tw", vn2: "vn", me1: "me",
+}
+
 export type Phase =
   | "None" | "Lobby" | "Matchmaking" | "ReadyCheck" | "ChampSelect"
   | "GameStart" | "InProgress" | "Reconnect" | "WaitingForStats"
@@ -159,6 +166,22 @@ export class LcuConnection {
       puuid: data.puuid ?? "",
       iconId: data.profileIconId ?? 0,
     }
+  }
+
+  /**
+   * The account's region, in the form our own API expects.
+   *
+   * The client reports a PLATFORM ("EUW1"); the site's routes take a REGION
+   * ("euw"). They are not the same string and there is no rule connecting
+   * them — "la1" is "lan" — so the map is written out rather than derived.
+   */
+  async region(): Promise<string | null> {
+    const { data } = await this.request<any>(
+      "GET",
+      "/lol-platform-config/v1/namespaces/LoginDataPacket/platformId"
+    )
+    const platform = String(data ?? "").toLowerCase()
+    return PLATFORM_REGION[platform] ?? (platform || null)
   }
 
   async phase(): Promise<Phase | null> {

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("desktop", {
   setSetting: (patch: unknown) => ipcRenderer.invoke("settings:set", patch),
   revealSettings: () => ipcRenderer.invoke("settings:reveal"),
   model: (championId: string, key: number) => ipcRenderer.invoke("model:get", championId, key),
+  ranks: (riotIds: string[], region: string | null) => ipcRenderer.invoke("ranks:get", riotIds, region),
   // Signing in opens a BROWSER. This surface deliberately has no way to send a
   // password anywhere — the site hands a session back over loldata://auth.
   signIn: () => ipcRenderer.send("account:signin"),

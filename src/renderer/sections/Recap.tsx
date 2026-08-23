@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import { CDN, type AppState } from "../types"
 import { championById } from "../../data/champions"
 import ChampionStage from "../ChampionStage"
+import Verdict from "../Verdict"
+import type { LivePlayer } from "../types"
 
 /**
  * The game you just finished.
@@ -80,12 +82,43 @@ export default function Recap({
     )
   }
 
+  /**
+   * The verdict plays once per opening — on MOUNT, not on every change.
+   *
+   * Stepping through games in preview keeps this component mounted, so the
+   * animation does not replay; sitting through 2.6 seconds per step would make
+   * the debug button slower than finishing a real game.
+   */
+  const [verdictDone, setVerdictDone] = useState(false)
+
+  /**
+   * ⚠️ Held until the window is actually LOOKED AT.
+   *
+   * A game ends while the player is still on League's end screen, so a verdict
+   * that starts on the phase change plays to an empty desktop and is over
+   * before they alt-tab in. It waits for focus, which is the moment they are
+   * here.
+   */
+  const [focused, setFocused] = useState(() => document.hasFocus())
+  useEffect(() => {
+    if (focused) return
+    const on = () => setFocused(true)
+    window.addEventListener("focus", on)
+    return () => window.removeEventListener("focus", on)
+  }, [focused])
+
+  const showVerdict = !verdictDone && focused
+
   const mins = match ? Math.max(1, match.durationSeconds / 60) : 1
   const kda = match ? (match.kills + match.assists) / Math.max(1, match.deaths) : 0
   const won = !!match?.win && !match?.remake
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      {showVerdict && (
+        <Verdict won={won} remake={!!match?.remake} onDone={() => setVerdictDone(true)} />
+      )}
+
       <div className="flex shrink-0 items-baseline gap-3">
         <h2
           className="font-chakrapetch text-[22px] font-bold leading-none"
@@ -100,13 +133,6 @@ export default function Recap({
             ? `${Math.floor(mins)} min · ${queueName(match.queueId, match.gameMode)}`
             : "waiting on the client for the result"}
         </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="win-btn ml-auto h-7 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/40"
-        >
-          dismiss
-        </button>
       </div>
 
       <div className="mt-4 flex min-h-0 flex-1 gap-7">
@@ -184,6 +210,119 @@ export default function Recap({
           </p>
         </div>
       </div>
+
+      <Lobby s={s} onClose={onClose} />
+    </div>
+  )
+}
+
+/**
+ * The ten players, and the way out.
+ *
+ * ⚠️ Read from the board CAPTURED WHEN THE GAME ENDED, not from a live one —
+ * that endpoint stops answering the moment the game does — and not from match
+ * history, which the client has usually not written yet.
+ *
+ * Ranks arrive separately and late, because they are ten network lookups. The
+ * cards render immediately without them and fill in; blocking the whole recap
+ * on a rank service would be letting the least important column set the pace.
+ */
+function Lobby({ s, onClose }: { s: AppState; onClose: () => void }) {
+  const board = s.finalBoard
+  const [ranks, setRanks] = useState<Record<string, string | null>>({})
+
+  const rows = board ? [...board.ours, ...board.theirs] : []
+
+  useEffect(() => {
+    if (!rows.length) return
+    const ids = rows.map((p) => p.riotId).filter((x): x is string => !!x)
+    if (!ids.length) return
+    let alive = true
+    void window.desktop
+      .ranks(ids, s.region)
+      .then((r) => { if (alive) setRanks(r) })
+      .catch(() => undefined)
+    return () => { alive = false }
+    // Once per board, never per render: ten lookups behind a re-render would be
+    // a request storm.
+  }, [board, s.region])
+
+  return (
+    <div className="mt-5 shrink-0">
+      {rows.length > 0 && (
+        <>
+          <p className="mb-2 font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">
+            the lobby
+          </p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {rows.map((p, i) => (
+              <PlayerCard
+                key={`${p.name}-${i}`}
+                p={p}
+                patch={s.patch ?? "16.16.1"}
+                rank={p.riotId ? ranks[p.riotId] ?? null : null}
+                ally={i < (board?.ours.length ?? 5)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={onClose}
+          className="act-btn h-9 rounded-[3px] px-7 font-chakrapetch text-[12px] font-bold uppercase tracking-[0.18em]"
+        >
+          continue
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PlayerCard({
+  p,
+  patch,
+  rank,
+  ally,
+}: {
+  p: LivePlayer
+  patch: string
+  rank: string | null
+  ally: boolean
+}) {
+  const accent = ally ? "rgba(0,217,146," : "rgba(255,98,134,"
+  return (
+    <div
+      className="ds-row flex items-center gap-2 rounded-[3px] px-2 py-1.5"
+      style={{
+        background: p.isMe ? `${accent}0.10)` : `${accent}0.035)`,
+        boxShadow: p.isMe ? `inset 2px 0 0 0 ${accent}0.85)` : `inset 1px 0 0 0 ${accent}0.28)`,
+      }}
+    >
+      {p.championId ? (
+        <img
+          src={`${CDN}/${patch}/img/champion/${p.championId}.png`}
+          alt=""
+          className="h-8 w-8 shrink-0 rounded-[2px]"
+        />
+      ) : (
+        <div className="h-8 w-8 shrink-0 rounded-[2px] bg-flash/[0.05]" />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-chakrapetch text-[11.5px] font-bold leading-tight">{p.name}</p>
+        <p className="truncate font-jetbrains text-[8px] uppercase tracking-[0.12em] text-flash/25">
+          {/* A rank we do not have yet and a player who has none look the same
+              on a card, so neither gets a placeholder pretending otherwise. */}
+          {rank ?? p.champion}
+        </p>
+      </div>
+
+      <p className="shrink-0 font-chakrapetch text-[11.5px] font-bold tabular-nums text-flash/75">
+        {p.kills}/{p.deaths}/{p.assists}
+      </p>
     </div>
   )
 }

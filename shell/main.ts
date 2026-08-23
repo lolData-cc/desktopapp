@@ -174,6 +174,17 @@ export type AppState = {
    * waiting and no guessing.
    */
   lastPlayed: { championId: string; championKey: number } | null
+  /** For rank lookups, which our API keys on region rather than platform. */
+  region: string | null
+  /**
+   * The board as it stood when the game ended.
+   *
+   * ⚠️ Kept because the live one is GONE by the time the recap opens — the
+   * endpoint stops answering the moment the game does. Without this the recap
+   * could only ever show your own row, and the other nine players would have
+   * to be re-fetched from a match history that has not been written yet.
+   */
+  finalBoard: { ours: LivePlayer[]; theirs: LivePlayer[] } | null
   /** Everyone in the running game, ours first. Null outside a game. */
   scoreboard: {
     gameTime: number
@@ -205,6 +216,8 @@ let state: AppState = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   lastPlayed: null,
+  region: null,
+  finalBoard: null,
   scoreboard: null,
 }
 
@@ -251,12 +264,13 @@ const lcu = new LcuConnection({
     // Anything that throws in here used to vanish: the promise rejected, the
     // state stayed "waiting", and the window said "Open League" with the client
     // plainly running. A failure has to be visible, not silent.
-    const [summoner, phase, patchVersion] = await Promise.all([
+    const [summoner, phase, patchVersion, region] = await Promise.all([
       lcu.currentSummoner().catch((e) => { console.error("[lcu] summoner:", e?.message); return null }),
       lcu.phase().catch((e) => { console.error("[lcu] phase:", e?.message); return null }),
       currentPatch().catch(() => null),
+      lcu.region().catch(() => null),
     ])
-    push({ client: "attached", summoner, phase, patch: patchVersion })
+    push({ client: "attached", summoner, phase, patch: patchVersion, region })
 
     // The profile and history are not needed to attach, so they load after —
     // the window should show something the moment the client is there.
@@ -279,7 +293,16 @@ const lcu = new LcuConnection({
         phase,
         ...(phase === "ChampSelect" ? {} : { select: null }),
         // A scoreboard from the last game is worse than none: it looks live.
-        ...(phase === "InProgress" || phase === "Reconnect" ? {} : { scoreboard: null }),
+        // But it is not thrown away — it MOVES, because the recap needs the
+        // final standings and the live endpoint has already stopped answering.
+        ...(phase === "InProgress" || phase === "Reconnect"
+          ? {}
+          : {
+              scoreboard: null,
+              ...(state.scoreboard
+                ? { finalBoard: { ours: state.scoreboard.ours, theirs: state.scoreboard.theirs } }
+                : {}),
+            }),
       })
       // The client writes the finished game to history on its own schedule, so
       // one read at the end is a coin toss. Polled until the match we actually
@@ -887,6 +910,8 @@ async function readShop(
  */
 export type LivePlayer = {
   name: string
+  /** Full "Name#TAG" — the rank lookup needs the tag, the card does not. */
+  riotId: string | null
   champion: string
   /** DDragon id, which is what the portrait URL needs. */
   championId: string | null
@@ -978,6 +1003,7 @@ async function readScoreboard(
         // riotIdGameName is the name without the tag, which is what a
         // scoreboard shows; the others are fallbacks for older payloads.
         name: p.riotIdGameName ?? p.summonerName ?? p.riotId ?? "—",
+        riotId: p.riotId ?? null,
         champion: p.championName ?? "—",
         championId: champ?.slug ?? null,
         level: p.level ?? 0,
@@ -1192,6 +1218,59 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
 }
 
 ipcMain.handle("profile:refresh", async () => { await readProfile() })
+
+/**
+ * Ranks for the players in a finished game.
+ *
+ * ⚠️ Ten lookups, so: cached for the session, and asked for ONCE per recap
+ * rather than per render. Our own API rate-limits a summoner to one refresh
+ * every three minutes anyway, so hammering it would return the same answer
+ * more slowly.
+ *
+ * Failure is per player, not per request. One unranked or unknown account
+ * should not blank the other nine — the card simply shows no rank, which is
+ * also the honest answer for a genuinely unranked player.
+ */
+const rankCache = new Map<string, string | null>()
+
+ipcMain.handle("ranks:get", async (_e, riotIds: string[], region: string | null) => {
+  const out: Record<string, string | null> = {}
+  if (!region || !Array.isArray(riotIds)) return out
+
+  await Promise.all(
+    riotIds.slice(0, 10).map(async (riotId) => {
+      if (typeof riotId !== "string" || !riotId.includes("#")) return
+      const cacheKey = `${region}:${riotId}`
+      if (rankCache.has(cacheKey)) {
+        out[riotId] = rankCache.get(cacheKey) ?? null
+        return
+      }
+
+      const [name, tag] = riotId.split("#")
+      try {
+        const res = await fetch("https://api2.loldata.cc/api/summoner", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, tag, region }),
+        })
+        if (!res.ok) throw new Error(String(res.status))
+        const json = (await res.json()) as { summoner?: { rank?: string } }
+        const rank = json?.summoner?.rank ?? null
+        // "Unranked" is an answer, not a missing value — but it is not worth
+        // a line on a card, so it is stored as nothing.
+        const clean = rank && !/unranked/i.test(rank) ? rank : null
+        rankCache.set(cacheKey, clean)
+        out[riotId] = clean
+      } catch {
+        // Not cached on failure: a network blip should not blank this player
+        // for the rest of the session.
+        out[riotId] = null
+      }
+    })
+  )
+
+  return out
+})
 
 /**
  * A champion's 3D model, cached on disk.

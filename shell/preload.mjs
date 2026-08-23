@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("desktop", {
   setSetting: (patch) => ipcRenderer.invoke("settings:set", patch),
   revealSettings: () => ipcRenderer.invoke("settings:reveal"),
   model: (championId, key) => ipcRenderer.invoke("model:get", championId, key),
+  ranks: (riotIds, region) => ipcRenderer.invoke("ranks:get", riotIds, region),
   signIn: () => ipcRenderer.send("account:signin"),
   signOut: () => ipcRenderer.invoke("account:signout"),
   askAi: (messages) => ipcRenderer.invoke("ai:ask", messages),

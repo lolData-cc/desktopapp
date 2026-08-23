@@ -23,6 +23,8 @@ import type { Ability, HudNudge } from "../data/hud"
 /** One scoreboard row, assembled by the shell. Mirrors LivePlayer there. */
 export type LivePlayer = {
   name: string
+  /** Full "Name#TAG" — the rank lookup needs the tag, the card does not. */
+  riotId: string | null
   champion: string
   championId: string | null
   level: number
@@ -168,6 +170,10 @@ export type AppState = {
   /** The champion we last played, from the live game rather than from match
    *  history — which the client writes at its own pace. */
   lastPlayed: { championId: string; championKey: number } | null
+  region: string | null
+  /** The board as it stood when the game ended — the live one is gone by
+   *  the time the recap opens. */
+  finalBoard: { ours: LivePlayer[]; theirs: LivePlayer[] } | null
   scoreboard: {
     gameTime: number
     ours: LivePlayer[]
@@ -198,6 +204,8 @@ declare global {
       /** A champion's model as a GLB, cached on disk by the shell. Null when
        *  it could not be fetched. */
       model(championId: string, key: number): Promise<ArrayBuffer | null>
+      /** Ranked tier per riotId, for the players in a finished game. */
+      ranks(riotIds: string[], region: string | null): Promise<Record<string, string | null>>
       signIn(): void
       signOut(): Promise<void>
       askAi(messages: ChatMessage[]): Promise<ChatResult>
