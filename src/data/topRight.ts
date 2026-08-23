@@ -8,6 +8,11 @@
  * constraint, and it is why this is a MODEL and not a pair of coordinates —
  * getting the gap wrong by three pixels is what would make it look stuck on.
  *
+ * It draws NO ground of its own. Extending the strip's tint leftwards was
+ * tried and looked worse at every opacity: the game's own has already thinned
+ * out this far left, so anything we add reads as a second panel rather than as
+ * more of the first. The text carries its own legibility instead.
+ *
  * ⚠️ The numbers below are estimated from a 1920x1080 capture, NOT measured at
  * both ends of the HUD slider the way the ability bar was. They are a starting
  * position expected to be nudged once, and the nudge is logged so an alignment
@@ -35,8 +40,6 @@ export type TopRightModel = {
   gapInHeights: number
   /** How far our own readout is, in strip heights — chevron plus four digits. */
   widthInHeights: number
-  /** How far the extended background reaches left of the readout, fading out. */
-  fadeInHeights: number
 }
 
 export const DEFAULT_TOP_RIGHT: TopRightModel = {
@@ -55,9 +58,6 @@ export const DEFAULT_TOP_RIGHT: TopRightModel = {
   topInHeights: -0.055,
   gapInHeights: 0.34,
   widthInHeights: 2.5,
-  // A long fade: the game's own ground has already thinned to almost nothing by
-  // here, so ours has to arrive gradually or the join reads as a panel edge.
-  fadeInHeights: 10.0,
 }
 
 /** Strip height in pixels for a given slider position. Linear between the ends,
@@ -77,9 +77,6 @@ export type TopRightBox = {
   top: number
   width: number
   height: number
-  /** Where the fade starts, left of the readout — the extended background. */
-  fadeLeft: number
-  fadeWidth: number
 }
 
 /**
@@ -103,14 +100,10 @@ export function topRightBox(
   const right = killsLeft - model.gapInHeights * height
 
   const left = right - width + nudge.x * screen.width
-  const fadeWidth = model.fadeInHeights * height
-
   return {
     left,
     top: model.topInHeights * height + nudge.y * screen.height,
     width,
     height,
-    fadeLeft: left - fadeWidth,
-    fadeWidth: fadeWidth + width,
   }
 }

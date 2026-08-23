@@ -162,59 +162,18 @@ function TopRightGold({ g, hud }: { g: TeamGold; hud: HudPlacement }) {
     <div
       aria-hidden
       className="pointer-events-none absolute"
-      style={{ left: box.fadeLeft, top: box.top, width: box.fadeWidth, height: box.height }}
-      /* no overflow clip: the ground is drawn taller than the strip so its
-         bottom edge can fade out instead of being cut off */
+      style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
     >
-      {/* The strip's ground, carried on to the left and fading to nothing.
-          Deliberately FAINT: by this far left the game's own ground has already
-          thinned to almost nothing, so anything that reads as a panel is a
-          panel. The stops ease in rather than ramping — a linear fade has a
-          visible knee where it leaves zero, and that knee is the edge we are
-          trying not to draw.
-
-          ⚠️ It fades on BOTH axes. The horizontal gradient alone still left a
-          hard horizontal cut along the bottom of the box — the tint stopped
-          mid-air and drew exactly the edge the soft left end was there to
-          avoid. The mask takes the bottom out over the lower half, and the box
-          is drawn taller than the strip so that fade has somewhere to happen. */}
-      <span
-        className="absolute left-0 right-0 top-0"
-        style={{
-          height: box.height * 1.75,
-          background:
-            "linear-gradient(90deg," +
-            " rgba(6,26,32,0) 0%," +
-            " rgba(6,26,32,0.015) 26%," +
-            " rgba(6,26,32,0.06) 48%," +
-            " rgba(6,26,32,0.14) 67%," +
-            " rgba(6,26,32,0.24) 84%," +
-            " rgba(6,26,32,0.31) 100%)",
-          WebkitMaskImage:
-            "linear-gradient(180deg," +
-            " rgba(0,0,0,1) 0%," +
-            " rgba(0,0,0,1) 42%," +
-            " rgba(0,0,0,0.72) 60%," +
-            " rgba(0,0,0,0.34) 78%," +
-            " rgba(0,0,0,0) 100%)",
-          maskImage:
-            "linear-gradient(180deg," +
-            " rgba(0,0,0,1) 0%," +
-            " rgba(0,0,0,1) 42%," +
-            " rgba(0,0,0,0.72) 60%," +
-            " rgba(0,0,0,0.34) 78%," +
-            " rgba(0,0,0,0) 100%)",
-        }}
-      />
-
-
       <div
-        className="absolute inset-y-0 right-0 flex items-center justify-end gap-[0.14em]"
+        className="absolute inset-0 flex items-center justify-end gap-[0.14em]"
         style={{
-          width: box.width,
           color: colour,
           fontSize: box.height * 0.44,
-          textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+          // No ground behind it, so the text carries its own legibility. Two
+          // shadows: a tight dark one for edge definition against bright
+          // terrain, and a wider soft one so it does not shimmer when the
+          // camera moves over grass.
+          textShadow: "0 1px 2px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.75)",
         }}
       >
         {!even && (
@@ -223,7 +182,12 @@ function TopRightGold({ g, hud }: { g: TeamGold; hud: HudPlacement }) {
             height={box.height * 0.38}
             viewBox="0 0 10 10"
             className="shrink-0"
-            style={{ transform: ahead ? undefined : "rotate(180deg)" }}
+            style={{
+              transform: ahead ? undefined : "rotate(180deg)",
+              // text-shadow does not reach an SVG, so it gets its own — without
+              // this the chevron is the one element with no contrast behind it.
+              filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.95))",
+            }}
           >
             <path d="M 1.5 6.5 L 5 3 L 8.5 6.5" fill="none" stroke={colour} strokeWidth="1.8"
                   strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
