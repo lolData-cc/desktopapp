@@ -189,10 +189,10 @@ function Account({ s }: { s: AppState | null }) {
           <button
             type="button"
             aria-label="Close menu"
-            /* No cursor of its own: this covers the whole window, and a
-               cursor-default here would swap ours for Windows' arrow over
-               every pixel the moment the menu opens. */
-            className="fixed inset-0 z-30"
+            /* An arrow, not the hand preflight gives every button: this
+               covers the whole window, and a pointer over every pixel would
+               claim the entire screen is clickable. */
+            className="fixed inset-0 z-30 cursor-default"
             onClick={() => setOpen(false)}
           />
           <div className="hud absolute right-0 top-[calc(100%+6px)] z-40 w-[248px] px-4 py-4">
