@@ -12,9 +12,11 @@ export default function Settings({ s }: { s: AppState }) {
   // at the bottom centre, so one pair of arrows for both would mean fixing one
   // by breaking the other.
   const t = s.hud.topRight ?? { x: 0, y: 0, size: 0 }
-  // A whole screen-width per press is useless here; this row is a few hundred
-  // pixels wide, so the step is a tenth of the outline's.
-  const fine = 0.002
+  // Two steps, because placing this has two phases: get it clear of the kill
+  // counter, then close the last few pixels. One step size would make the first
+  // phase twenty presses or the second one impossible.
+  const fine = 0.004    // ~8px at 1920
+  const coarse = 0.02   // ~38px at 1920
 
   const Btn = ({ label, onClick }: { label: string; onClick: () => void }) => (
     <button
@@ -129,8 +131,10 @@ export default function Settings({ s }: { s: AppState }) {
         gold readout
       </span>
       <div className="flex items-center gap-1">
+        <Btn label="«" onClick={() => nudgeTop({ x: t.x - coarse })} />
         <Btn label="←" onClick={() => nudgeTop({ x: t.x - fine })} />
         <Btn label="→" onClick={() => nudgeTop({ x: t.x + fine })} />
+        <Btn label="»" onClick={() => nudgeTop({ x: t.x + coarse })} />
         <Btn label="↑" onClick={() => nudgeTop({ y: t.y - fine })} />
         <Btn label="↓" onClick={() => nudgeTop({ y: t.y + fine })} />
         <span className="ml-2 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">size</span>

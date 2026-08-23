@@ -40,7 +40,10 @@ export type TopRightModel = {
 export const DEFAULT_TOP_RIGHT: TopRightModel = {
   heightAt0: 26 / 1080,
   heightAt1: 38 / 1080,
-  killsLeftInHeights: 8.9,
+  // Still an estimate, not a measurement: the first guess (8.9) was reported as
+  // landing ON the kill counter, so this is that guess moved left far enough to
+  // clear it. Replace it with whatever the nudge settles on.
+  killsLeftInHeights: 12.4,
   gapInHeights: 0.34,
   widthInHeights: 2.5,
   fadeInHeights: 4.5,
