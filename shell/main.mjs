@@ -3486,20 +3486,31 @@ var NOTIFY_LEAD = 90;
 var NOTICE_MS = 9000;
 var POLL_MS = 2000;
 var DEMO_MS = 5000;
+var EXIT_MS = 360;
 var tick = null;
 var noticeTimer = null;
 var announced = null;
+var hideTimer = null;
 function dropNotice() {
   if (noticeTimer)
     clearTimeout(noticeTimer);
   noticeTimer = null;
   push({ notice: null });
-  hideOverlay();
+  if (hideTimer)
+    clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    hideTimer = null;
+    hideOverlay();
+  }, EXIT_MS);
 }
 function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } });
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
   showOverlay();
   if (!state.pinned)
     noticeTimer = setTimeout(dropNotice, ms);
