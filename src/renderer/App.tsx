@@ -8,6 +8,7 @@ import Patch from "./sections/Patch"
 import Builds from "./sections/Builds"
 import BuildEditor from "./sections/BuildEditor"
 import Preferences from "./sections/Preferences"
+import ChampionField, { useArtChampion } from "./ChampionField"
 import Settings from "./sections/Settings"
 import UpdateBar from "./UpdateBar"
 import logo from "../assets/logo.png"
@@ -44,6 +45,7 @@ export default function App() {
   // Which profile is open for editing. Held here rather than inside Builds so
   // that leaving the section closes the editor instead of hiding it.
   const [editing, setEditing] = useState<string | null>(null)
+  const art = useArtChampion(s ?? ({} as AppState))
 
   useEffect(() => {
     void window.desktop.getState().then(setS)
@@ -69,7 +71,26 @@ export default function App() {
         />
 
         {/* Keyed on the section so each one ASSEMBLES rather than swapping. */}
-        <main key={`${section}:${editing ?? ""}`} className="ds-enter min-h-0 flex-1 overflow-hidden px-7 py-6">
+        <main key={`${section}:${editing ?? ""}`} className="ds-enter relative min-h-0 flex-1 overflow-hidden px-7 py-6">
+          {/* Only on the Overview, and only when there is no live board to
+              read: over ten rows of numbers this would be noise, and the board
+              is the one screen that is already full. */}
+          {section === "overview" && !s?.scoreboard && (
+            <div aria-hidden className="pointer-events-none absolute inset-0">
+              <ChampionField championId={art} />
+              {/* Solid where the copy is, clearing to the right so the field is
+                  still visible as art rather than as texture behind text. */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(90deg, #040A0C 0%, rgba(4,10,12,0.92) 34%," +
+                    " rgba(4,10,12,0.55) 62%, rgba(4,10,12,0.25) 100%)",
+                }}
+              />
+            </div>
+          )}
+          <div className="relative h-full">
           {section === "overview" ? (
             s?.client === "attached" ? <Attached s={s} /> : <Waiting />
           ) : !s ? null : section === "builds" ? (
@@ -89,6 +110,7 @@ export default function App() {
           ) : (
             <AiChat s={s} />
           )}
+          </div>
         </main>
       </div>
 

@@ -192,6 +192,9 @@ declare global {
       refreshProfile(): Promise<void>
       setSetting(patch: Partial<AppSettings>): Promise<AppSettings>
       revealSettings(): Promise<void>
+      /** A champion splash as a data URL, so its pixels can be read without
+       *  tainting the canvas. Null when the art could not be fetched. */
+      splash(championId: string): Promise<string | null>
       signIn(): void
       signOut(): Promise<void>
       askAi(messages: ChatMessage[]): Promise<ChatResult>

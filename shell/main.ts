@@ -1138,6 +1138,44 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
 ipcMain.handle("profile:refresh", async () => { await readProfile() })
 
 /**
+ * A champion splash, as a data URL.
+ *
+ * Fetched HERE rather than in the interface, and that is the whole point. The
+ * renderer wants to read the image's PIXELS to build the point field, which
+ * means getImageData, which throws on a canvas tainted by a cross-origin
+ * image. Our CDN sits behind Cloudflare, which is known to serve a cached copy
+ * WITHOUT the CORS header — so the browser path works most of the time and
+ * fails unpredictably, which is worse than failing always.
+ *
+ * The main process has no origin and no CORS, and a data URL is same-origin by
+ * construction. The hazard disappears rather than being handled.
+ *
+ * Cached for the session: the file is ~600KB and a champion's art does not
+ * change while the app is open.
+ */
+const splashCache = new Map<string, string | null>()
+
+ipcMain.handle("art:splash", async (_e, championId: string) => {
+  if (!/^[A-Za-z0-9]{1,32}$/.test(championId)) return null
+  if (splashCache.has(championId)) return splashCache.get(championId) ?? null
+
+  try {
+    const res = await fetch(`https://cdn2.loldata.cc/img/champion/splash/${championId}_0.jpg`)
+    if (!res.ok) throw new Error(String(res.status))
+    const buf = Buffer.from(await res.arrayBuffer())
+    const url = `data:image/jpeg;base64,${buf.toString("base64")}`
+    splashCache.set(championId, url)
+    return url
+  } catch (e) {
+    console.log("[art] splash %s failed: %s", championId, (e as Error)?.message)
+    // Remembered as a failure too, so a champion whose art is missing is not
+    // re-fetched on every render.
+    splashCache.set(championId, null)
+    return null
+  }
+})
+
+/**
  * Settings.
  *
  * Launch-at-login is the only one the OS has to be told about; the rest are
