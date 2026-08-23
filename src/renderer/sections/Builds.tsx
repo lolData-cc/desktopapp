@@ -92,7 +92,7 @@ function Row({
         }
       }}
       title={`Edit ${b.championName}`}
-      className="ds-row flex cursor-pointer items-center gap-3 rounded-[3px] py-2 pl-3 pr-3 outline-none transition hover:brightness-125 focus-visible:ring-1 focus-visible:ring-jade/50"
+      className="ds-row flex items-center gap-3 rounded-[3px] py-2 pl-3 pr-3 outline-none transition hover:brightness-125 focus-visible:ring-1 focus-visible:ring-jade/50"
       style={{
         background: b.enabled ? "rgba(0,217,146,0.05)" : "rgba(215,216,217,0.02)",
         boxShadow: b.enabled ? "inset 2px 0 0 0 rgba(0,217,146,0.55)" : undefined,

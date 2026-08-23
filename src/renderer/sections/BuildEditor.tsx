@@ -572,7 +572,6 @@ function ItemSlot({
           boxShadow: id
             ? "inset 0 0 0 1px rgba(0,217,146,0.28)"
             : "inset 0 0 0 1px rgba(215,216,217,0.06)",
-          cursor: draggable ? "grab" : undefined,
         }}
       >
         <span className="absolute left-1.5 top-1 font-jetbrains text-[8.5px] tracking-[0.14em] text-flash/25">

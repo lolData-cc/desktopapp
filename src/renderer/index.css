@@ -310,37 +310,57 @@ body {
 
 /* ── cursors ──────────────────────────────────────────────────────────────
    The same two the website uses, so the app does not feel like a different
-   product wearing the same colours.
+   product wearing its colours.
+
+   ⚠️ The `cursor: inherit` on EVERYTHING is the load-bearing line, not a
+   tidy-up. `cursor` inherits, but only where the child has no value of its
+   own — and almost everything does: the UA sheet gives buttons and inputs
+   theirs, Tailwind hands out cursor-pointer, an inline style sets grab.
+   Every one of those is a hole the system cursor shows through, so moving
+   across the window flickers between ours and Windows'. Forcing inherit
+   closes the holes; the rules below then reopen exactly the ones we mean.
 
    ⚠️ Referenced RELATIVELY, never as "/cursors/…". The app is loaded over
    file:// in production, where a leading slash resolves to the root of the
-   DISK — the same mistake that once broke every dragon icon. Vite rewrites
-   these relative to this stylesheet and hashes them into the bundle. */
-html,
-body,
-#root {
-  cursor: url("../assets/cursors/base.svg") 8 8, auto;
-}
+   DISK — the same mistake that once broke every dragon icon. Vite inlines
+   them as data URIs, so no path survives to be got wrong. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    cursor: inherit;
+  }
 
-button,
-a,
-[role="button"],
-summary,
-select,
-input[type="checkbox"],
-input[type="radio"] {
-  cursor: url("../assets/cursors/clicker.svg") 16 6, pointer;
-}
+  html,
+  body {
+    cursor: url("../assets/cursors/base.svg") 8 8, auto;
+  }
 
-/* A control that cannot be used should not answer like one that can. */
-button:disabled,
-[aria-disabled="true"] {
-  cursor: not-allowed;
-}
+  /* !important because inherit above is what every element now has, and a
+     plain rule here would lose to any utility class that sets a cursor. */
+  a,
+  button,
+  [role="button"],
+  summary,
+  select,
+  label[for],
+  input[type="submit"],
+  input[type="button"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor: url("../assets/cursors/clicker.svg") 16 6, pointer !important;
+  }
 
-/* Text still behaves like text. */
-input[type="text"],
-input:not([type]),
-textarea {
-  cursor: text;
+  /* A control that cannot be used should not answer like one that can. */
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed !important;
+  }
+
+  /* Text still behaves like text. */
+  input[type="text"],
+  input:not([type]),
+  textarea {
+    cursor: text !important;
+  }
 }
