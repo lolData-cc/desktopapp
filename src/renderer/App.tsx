@@ -55,6 +55,10 @@ export default function App() {
    * moment the real one arrived, having just been dismissed.
    */
   const [dismissed, setDismissed] = useState(false)
+  // Which past game the recap is being previewed over, or null for off. An
+  // INDEX rather than a match, so the button can step through recent games and
+  // the framing can be checked on champions of different sizes.
+  const [preview, setPreview] = useState<number | null>(null)
 
   useEffect(() => {
     void window.desktop.getState().then(setS)
@@ -69,7 +73,9 @@ export default function App() {
 
   // Something to show: the champion from the game we just watched, or failing
   // that whatever history has.
-  const showRecap = post && !dismissed && (!!s?.lastPlayed || !!s?.matches?.length)
+  const previewMatch = preview !== null ? (s?.matches?.[preview] ?? null) : null
+  const showRecap =
+    !!previewMatch || (post && !dismissed && (!!s?.lastPlayed || !!s?.matches?.length))
 
   return (
     <div className="relative flex h-full flex-col bg-liquirice text-flash">
@@ -99,7 +105,11 @@ export default function App() {
           {section === "overview" ? (
             s?.client === "attached" ? (
               showRecap ? (
-                <Recap s={s} onClose={() => setDismissed(true)} />
+                <Recap
+                  s={s}
+                  preview={previewMatch}
+                  onClose={() => (previewMatch ? setPreview(null) : setDismissed(true))}
+                />
               ) : (
                 <Attached s={s} />
               )
@@ -128,7 +138,18 @@ export default function App() {
       </div>
 
       {s && <UpdateBar s={s} />}
-      {showSettings && s && <Settings s={s} />}
+      {showSettings && s && (
+        <Settings
+          s={s}
+          preview={preview}
+          onPreview={(i) => {
+            setPreview(i)
+            // Stepping into the recap from another section would leave the
+            // player looking at a panel they cannot see.
+            if (i !== null) setSection("overview")
+          }}
+        />
+      )}
       <StatusStrip s={s} />
     </div>
   )

@@ -1,7 +1,15 @@
 import { ABILITIES, type HudNudge } from "../../data/hud"
 import type { AppState } from "../types"
 
-export default function Settings({ s }: { s: AppState }) {
+export default function Settings({
+  s,
+  preview,
+  onPreview,
+}: {
+  s: AppState
+  preview: number | null
+  onPreview: (index: number | null) => void
+}) {
   // A tenth of a box width per press, so a correction means the same thing on
   // any screen at any HUD scale — which is the point of nudging in box units.
   const step = 0.1
@@ -47,6 +55,27 @@ export default function Settings({ s }: { s: AppState }) {
         className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30"
       >
         show 5s
+      </button>
+
+      {/* The recap is only reachable by finishing a match, which makes it the
+          most expensive screen in the app to work on — a change costs twenty
+          minutes of League. This opens it over a real past game, and STEPS
+          through them, so the 3D framing can be checked on champions of
+          different sizes rather than on whatever was played last. */}
+      <button
+        type="button"
+        disabled={!s.matches?.length}
+        onClick={() => {
+          const n = s.matches?.length ?? 0
+          if (!n) return
+          onPreview(preview === null ? 0 : preview + 1 >= Math.min(n, 10) ? null : preview + 1)
+        }}
+        title="Open the post-game recap over a past game, then step through them"
+        className={`win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
+          preview !== null ? "bg-jade/15 text-jade" : "text-flash/30"
+        }`}
+      >
+        {preview === null ? "recap" : `recap · ${preview + 1}`}
       </button>
 
       {/* The notice least likely to turn up by accident: it needs a smart

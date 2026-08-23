@@ -22,7 +22,23 @@ export function isPostGame(phase: string | null): boolean {
   return !!phase && POST_GAME.has(phase)
 }
 
-export default function Recap({ s, onClose }: { s: AppState; onClose: () => void }) {
+export default function Recap({
+  s,
+  onClose,
+  preview,
+}: {
+  s: AppState
+  onClose: () => void
+  /**
+   * A game to show instead of the one that just ended.
+   *
+   * The recap is only reachable by finishing a match, which makes it the most
+   * expensive screen in the app to iterate on — a change costs twenty minutes
+   * of League. This lets it be opened over a real past game instead, so the
+   * model, the framing and the layout can all be worked on at a desk.
+   */
+  preview?: NonNullable<AppState["matches"]>[number] | null
+}) {
   /**
    * ⚠️ The champion comes from the LIVE GAME, not from history.
    *
@@ -31,17 +47,21 @@ export default function Recap({ s, onClose }: { s: AppState; onClose: () => void
    * showed Yasuo to someone who had just played Kai'Sa. The board we were
    * watching a second ago knows the right answer with no waiting.
    */
-  const played = s.lastPlayed
-  const newest = s.matches?.[0] ?? null
+  const played = preview ? null : s.lastPlayed
+  const newest = preview ?? s.matches?.[0] ?? null
 
   // The numbers are only shown once history has caught up to the game we
   // actually played. Anything else is last game's score under this game's
   // champion, which is worse than an empty column.
-  const match = played && newest?.championId === played.championKey ? newest : null
+  const match = preview
+    ? preview
+    : played && newest?.championId === played.championKey
+      ? newest
+      : null
 
   const [fallbackSlug, setFallbackSlug] = useState<string | null>(null)
   useEffect(() => {
-    if (played || !newest) return
+    if (played || !newest) return   // played already carries the slug
     let alive = true
     void championById(newest.championId)
       .then((c) => { if (alive) setFallbackSlug(c?.slug ?? null) })
