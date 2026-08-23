@@ -50,6 +50,40 @@ Two reasons, both learned the hard way:
 Both the download page and the app read the version from that one file, so
 neither can drift out of date behind a release.
 
+## The CDN caches the installer for four hours
+
+Measured, not assumed:
+
+| file | content-type | Cloudflare |
+|---|---|---|
+| `latest.yml` | `text/yaml` | `DYNAMIC` — never cached, always fresh |
+| `*.exe` | `application/octet-stream` | `max-age=14400`, so **cached for 4 hours** |
+| `*.blockmap` | `application/octet-stream` | `DYNAMIC` — not cached |
+
+The manifest updates instantly and the binary does not. That asymmetry is the
+dangerous one: for up to four hours `latest.yml` can advertise a version whose
+`.exe` Cloudflare is still serving from the old copy, and every update in that
+window fails its hash check.
+
+**A normal release does not hit this.** Bumping the version changes the
+filename, and a filename nobody has requested cannot have a stale cache entry.
+
+It only bites when the SAME filename is re-uploaded — fixing a bad build,
+usually. When that happens, purge the cache for that URL in Cloudflare before
+telling anyone, or wait out the four hours.
+
+To tell a stale cache from a bad upload, ask twice:
+
+```bash
+# a query string forces a MISS, so this is what the ORIGIN holds
+curl -sI "https://cdn2.loldata.cc/desktopapp/lolData-Setup-0.0.1-x64.exe?v=1" | grep -i content-length
+# and this is what people actually get
+curl -sI "https://cdn2.loldata.cc/desktopapp/lolData-Setup-0.0.1-x64.exe"     | grep -i content-length
+```
+
+Different numbers mean the upload worked and the cache is stale. The same
+number means the upload did not.
+
 ## Architectures
 
 x64 only, deliberately. League of Legends requires 64-bit Windows, so a machine
