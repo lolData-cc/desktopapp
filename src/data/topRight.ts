@@ -42,11 +42,14 @@ export type TopRightModel = {
 export const DEFAULT_TOP_RIGHT: TopRightModel = {
   heightAt0: 26 / 1080,
   heightAt1: 38 / 1080,
-  // Settled against a real 1920x1080 screen at HUD 85, in two rounds: 14.0 was
-  // reported as needing +131px, which is 3.6 strip heights at that scale.
-  // Expressed in heights it holds at other resolutions and slider positions,
-  // which a pixel would not.
-  killsLeftInHeights: 10.4,
+  // Settled against a real 1920x1080 screen at HUD 85 over three rounds, the
+  // last a -15px trim. Expressed in heights it holds at other resolutions and
+  // slider positions, which a pixel would not.
+  //
+  // Larger value = further LEFT (it is measured back from the right edge), so a
+  // negative pixel nudge ADDS here. Getting that backwards once already cost a
+  // round trip.
+  killsLeftInHeights: 10.81,
   /** The strip's top edge, in strip heights from the top of the screen. The
    *  same alignment put it 2px high of zero. */
   topInHeights: -0.055,
