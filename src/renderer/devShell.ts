@@ -110,6 +110,34 @@ const SCENES: Record<string, unknown> = {
     levelHint: null,
     hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
   },
+  // three ours, the next drake ends it — the live case
+  soul: {
+    client: "attached",
+    summoner: { name: "yuumi45", tag: "EU1", level: 104 },
+    phase: "InProgress",
+    patch: "16.16.1",
+    select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
+    notice: {
+      kind: "dragon", inSeconds: 90, raisedAt: Date.now(), element: "Air",
+      tally: { ours: ["Fire", "Hextech", "Air"], theirs: [] },
+    },
+    levelHint: null,
+    hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
+  },
+  // the same brink, on the wrong side of it
+  soulenemy: {
+    client: "attached",
+    summoner: { name: "yuumi45", tag: "EU1", level: 104 },
+    phase: "InProgress",
+    patch: "16.16.1",
+    select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
+    notice: {
+      kind: "dragon", inSeconds: 90, raisedAt: Date.now(), element: "Water",
+      tally: { ours: ["Fire"], theirs: ["Water", "Earth", "Hextech"] },
+    },
+    levelHint: null,
+    hud: { scale: 0.85, nudge: { x: 0, y: 0, size: 0 }, source: null },
+  },
 }
 
 export function installDevShell(): void {

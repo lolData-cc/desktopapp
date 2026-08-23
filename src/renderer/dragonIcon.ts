@@ -81,3 +81,8 @@ export function dragonLabel(kind: "dragon" | "elder", element: DragonElement | n
   if (kind === "elder") return "Elder Dragon"
   return element ? LABEL[element] : "Drake"
 }
+
+/** "Cloud Soul" — the game's own name for what the fourth drake grants. */
+export function soulLabel(element: DragonElement | null): string {
+  return element ? `${elementName(element)} Soul` : "Soul"
+}

@@ -119,3 +119,16 @@ body {
 @media (prefers-reduced-motion: reduce) {
   [style*="abilityPulse"] { animation: none !important; }
 }
+
+/* The soul marker breathes, and animates OPACITY ONLY.
+   .beat also animates box-shadow, which silently overwrote the ring that gives
+   the slot its shape — and hardcodes jade, so it would have shown the wrong
+   colour on the one reading that matters most: the enemy about to take it. */
+@keyframes soulPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.58; }
+}
+.soul-pulse { animation: soulPulse 2.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .soul-pulse { animation: none; }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { abilityBox, type Ability, type HudNudge } from "../data/hud"
-import { dragonIcon, dragonLabel, elementGlyph, elementName } from "./dragonIcon"
-import { SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
+import { dragonIcon, dragonLabel, elementGlyph, elementName, soulLabel } from "./dragonIcon"
+import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
 
 /**
  * The notification that sits over the game.
@@ -138,9 +138,21 @@ function AbilityOutline({ ability, hud }: { ability: Ability; hud: HudPlacement 
  * Ours reads in jade, theirs in plain grey. No light outlines anywhere: the
  * slots are fills, which is also what keeps them legible over bright terrain.
  */
-function TeamTally({ label, taken, ours = false }: { label: string; taken: DragonElement[]; ours?: boolean }) {
+function TeamTally({
+  label,
+  taken,
+  ours = false,
+  accent,
+}: {
+  label: string
+  taken: DragonElement[]
+  ours?: boolean
+  /** Set when THIS team is one drake from the soul; marks the slot that ends it. */
+  accent?: string
+}) {
   const plate = ours ? "bg-jade/[0.10]" : "bg-flash/[0.07]"
   const empty = ours ? "bg-jade/[0.05]" : "bg-flash/[0.035]"
+  const decisive = accent ? taken.length : -1
 
   return (
     <span className="flex items-center gap-1.5">
@@ -161,6 +173,14 @@ function TeamTally({ label, taken, ours = false }: { label: string; taken: Drago
             <span key={i} className={`grid h-[19px] w-[19px] place-items-center rounded-[2px] ${plate}`}>
               <img src={elementGlyph(el)} alt={elementName(el)} title={elementName(el)} className="h-[15px] w-[15px]" />
             </span>
+          ) : i === decisive ? (
+            // The one that would end it. A fill and a ring, never a pale
+            // outline — this has to hold up over a bright dragon pit.
+            <span
+              key={i}
+              className="soul-pulse h-[19px] w-[19px] rounded-[2px]"
+              style={{ background: `${accent}22`, boxShadow: `inset 0 0 0 1px ${accent}` }}
+            />
           ) : (
             <span key={i} className={`h-[19px] w-[19px] rounded-[2px] ${empty}`} />
           )
@@ -187,7 +207,12 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
   }, [])
 
   const elder = n.kind === "elder"
-  const accent = elder ? "#FFB615" : "#00d992"
+
+  // At three, the next drake is not one of four — it is the last one, and that
+  // changes the decision rather than the description. Citrine when the enemy
+  // can end it, because then the reading is "stop them", not "go get it".
+  const soul = n.kind === "dragon" ? soulPoint(n.tally) : null
+  const accent = elder || (soul && soul !== "ours") ? "#FFB615" : "#00d992"
 
   // Riot's base dragon portrait is a dark red head with a glowing mouth — all
   // but identical to the Infernal one. Drawn as-is it makes "we do not know yet"
@@ -251,11 +276,20 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           />
 
           <div className="min-w-0">
-            <p className="font-jetbrains text-[9px] uppercase tracking-[0.28em]" style={{ color: accent }}>
-              lolData
+            <p
+              className={`font-jetbrains text-[9px] uppercase tracking-[0.28em] ${soul ? "soul-pulse" : ""}`}
+              style={{ color: accent }}
+            >
+              {soul === "ours"
+                ? "soul point · yours"
+                : soul === "theirs"
+                  ? "soul point · enemy"
+                  : soul === "both"
+                    ? "soul point · contested"
+                    : "lolData"}
             </p>
             <p className="whitespace-nowrap font-chakrapetch text-[19px] font-bold leading-tight text-flash">
-              {dragonLabel(n.kind, n.element)} is spawning in{" "}
+              {soul ? soulLabel(n.element) : dragonLabel(n.kind, n.element)} is spawning in{" "}
               <span className="tabular-nums" style={{ color: accent }}>{clock(left)}</span>
             </p>
           </div>
@@ -265,9 +299,18 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           <span className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
             drakes
           </span>
-          <TeamTally label="you" taken={n.tally.ours} ours />
+          <TeamTally
+            label="you"
+            taken={n.tally.ours}
+            ours
+            accent={soul === "ours" || soul === "both" ? accent : undefined}
+          />
           <span aria-hidden className="h-5 w-px bg-jade/15" />
-          <TeamTally label="enemy" taken={n.tally.theirs} />
+          <TeamTally
+            label="enemy"
+            taken={n.tally.theirs}
+            accent={soul === "theirs" || soul === "both" ? accent : undefined}
+          />
         </div>
 
       </div>

@@ -170,6 +170,29 @@ export function dragonTally(
   return tally
 }
 
+/**
+ * Whether the NEXT drake ends the dragon game, and for whom.
+ *
+ * Worth calling out separately from the count, because it changes the decision
+ * rather than describing the state: at three, a drake is no longer one of four,
+ * it is the last one. Which side is on the brink decides whether that means
+ * contest or concede, so the answer names a side rather than a boolean.
+ *
+ * Null once a soul has actually been taken — then the Elder is next and this is
+ * no longer the question being asked.
+ */
+export type SoulPoint = "ours" | "theirs" | "both" | null
+
+export function soulPoint(tally: DragonTally): SoulPoint {
+  if (tally.ours.length >= SOUL_AT || tally.theirs.length >= SOUL_AT) return null
+  const us = tally.ours.length === SOUL_AT - 1
+  const them = tally.theirs.length === SOUL_AT - 1
+  if (us && them) return "both"
+  if (us) return "ours"
+  if (them) return "theirs"
+  return null
+}
+
 export function nextObjective(
   events: GameEvent[],
   gameTime: number,
