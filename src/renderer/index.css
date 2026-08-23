@@ -309,21 +309,20 @@ body {
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── cursors ──────────────────────────────────────────────────────────────
-   The same two the website uses, so the app does not feel like a different
-   product wearing its colours.
+   The website's two, and deliberately the SAME SHAPE of rule it uses — the
+   app kept diverging from something known to work and then debugging the
+   difference.
 
-   ⚠️ The `cursor: inherit` on EVERYTHING is the load-bearing line, not a
-   tidy-up. `cursor` inherits, but only where the child has no value of its
-   own — and almost everything does: the UA sheet gives buttons and inputs
-   theirs, Tailwind hands out cursor-pointer, an inline style sets grab.
-   Every one of those is a hole the system cursor shows through, so moving
-   across the window flickers between ours and Windows'. Forcing inherit
-   closes the holes; the rules below then reopen exactly the ones we mean.
+   ⚠️ `cursor: inherit` on everything is load-bearing. `cursor` inherits, but
+   only where the child has no value of its own, and almost everything does:
+   preflight gives buttons `cursor: pointer` and `:disabled` `cursor: default`.
+   Each is a hole the system arrow shows through, so moving across the window
+   flickers. Forcing inherit closes them; the rule after reopens exactly the
+   ones we mean, with !important because inherit is now what everything has.
 
-   ⚠️ Referenced RELATIVELY, never as "/cursors/…". The app is loaded over
-   file:// in production, where a leading slash resolves to the root of the
-   DISK — the same mistake that once broke every dragon icon. Vite inlines
-   them as data URIs, so no path survives to be got wrong. */
+   ⚠️ The files must be EMITTED, not inlined — see assetsInlineLimit in
+   vite.config.ts. Chromium does not reliably accept an SVG cursor from a data
+   URI, and when it refuses one it falls back to `auto`: the Windows arrow. */
 @layer base {
   *,
   *::before,
@@ -331,33 +330,22 @@ body {
     cursor: inherit;
   }
 
-  html,
   body {
     cursor: url("../assets/cursors/base.svg") 8 8, auto;
   }
 
-  /* !important because inherit above is what every element now has, and a
-     plain rule here would lose to any utility class that sets a cursor. */
   a,
   button,
   [role="button"],
-  summary,
-  select,
-  label[for],
   input[type="submit"],
   input[type="button"],
-  input[type="checkbox"],
-  input[type="radio"] {
+  select,
+  label[for],
+  summary,
+  .cursor-clicker {
     cursor: url("../assets/cursors/clicker.svg") 16 6, pointer !important;
   }
 
-  /* A control that cannot be used should not answer like one that can. */
-  button:disabled,
-  [aria-disabled="true"] {
-    cursor: not-allowed !important;
-  }
-
-  /* Text still behaves like text. */
   input[type="text"],
   input:not([type]),
   textarea {
