@@ -219,7 +219,7 @@ async function readObjective(): Promise<void> {
   void readOwnSpells()
 
   const [events, players] = await Promise.all([liveEvents(), livePlayers()])
-  const next = nextObjective(events, stats.gameTime, players ?? [])
+  const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain)
   if (!next) return
 
   // Absolute spawn time on the game clock — stable across polls, unlike the

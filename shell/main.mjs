@@ -3394,6 +3394,23 @@ var DRAGON_RESPAWN = 5 * 60;
 var ELDER_RESPAWN = 6 * 60;
 var ELDER_EARLIEST = 35 * 60;
 var SOUL_AT = 4;
+var ELEMENT_ALIASES = {
+  fire: "Fire",
+  infernal: "Fire",
+  earth: "Earth",
+  mountain: "Earth",
+  water: "Water",
+  ocean: "Water",
+  air: "Air",
+  cloud: "Air",
+  hextech: "Hextech",
+  chemtech: "Chemtech"
+};
+function normaliseElement(raw) {
+  if (!raw)
+    return null;
+  return ELEMENT_ALIASES[raw.trim().toLowerCase()] ?? null;
+}
 function lockedElement(kills) {
   const elemental = kills.filter((k) => k.DragonType && k.DragonType !== "Elder");
   if (elemental.length < 3)
@@ -3421,7 +3438,7 @@ function soulTakenBy(events, players) {
   }
   return null;
 }
-function nextObjective(events, gameTime, players = []) {
+function nextObjective(events, gameTime, players = [], mapTerrain) {
   const kills = events.filter((e) => e.EventName === "DragonKill").sort((a, b) => a.EventTime - b.EventTime);
   if (kills.length === 0) {
     return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0, element: null };
@@ -3436,7 +3453,7 @@ function nextObjective(events, gameTime, players = []) {
     kind: "dragon",
     inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime,
     taken: kills.length,
-    element: lockedElement(kills)
+    element: normaliseElement(mapTerrain) ?? lockedElement(kills)
   };
 }
 
@@ -3563,7 +3580,7 @@ async function readObjective() {
     return;
   readOwnSpells();
   const [events, players] = await Promise.all([liveEvents(), livePlayers()]);
-  const next = nextObjective(events, stats.gameTime, players ?? []);
+  const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain);
   if (!next)
     return;
   const spawnAt = Math.round(stats.gameTime + next.inSeconds);

@@ -32,15 +32,36 @@ export type NextObjective = {
    * The element of the dragon that is COMING, or null when it cannot be known.
    *
    * The first two dragons are random, and only after the second does the Rift
-   * transform and fix the element of every later spawn. That transformation is
-   * not exposed anywhere — no endpoint, no event — so the element is only
-   * learned once a dragon of it has actually been killed, from the third on.
+   * transform and fix the element of every later spawn. That transformation IS
+   * readable, via gamestats.mapTerrain, so from the third dragon on this is the
+   * real element and not a guess.
    *
    * Null therefore means "we genuinely do not know", and the caller must show a
    * plain dragon rather than pick one. Guessing here would be a specific,
    * confident, wrong icon two times out of three.
    */
   element: DragonElement | null
+}
+
+/**
+ * Riot names the same element two different ways: DragonKill events say
+ * "Fire"/"Earth"/"Water"/"Air", while the map's terrain is expected to say
+ * "Infernal"/"Mountain"/"Ocean"/"Cloud". Only "Default" could be observed on a
+ * live untransformed map, so BOTH spellings are accepted rather than betting on
+ * which one appears — an unrecognised value yields null, never a wrong dragon.
+ */
+const ELEMENT_ALIASES: Record<string, DragonElement> = {
+  fire: "Fire", infernal: "Fire",
+  earth: "Earth", mountain: "Earth",
+  water: "Water", ocean: "Water",
+  air: "Air", cloud: "Air",
+  hextech: "Hextech",
+  chemtech: "Chemtech",
+}
+
+export function normaliseElement(raw: string | null | undefined): DragonElement | null {
+  if (!raw) return null
+  return ELEMENT_ALIASES[raw.trim().toLowerCase()] ?? null
 }
 
 /** The element every remaining dragon will be, once that is knowable. */
@@ -80,7 +101,9 @@ function soulTakenBy(events: GameEvent[], players: PlayerSlot[]): string | null 
 export function nextObjective(
   events: GameEvent[],
   gameTime: number,
-  players: PlayerSlot[] = []
+  players: PlayerSlot[] = [],
+  /** gamestats.mapTerrain — the transformation, when it has happened. */
+  mapTerrain?: string
 ): NextObjective | null {
   const kills = events
     .filter((e) => e.EventName === "DragonKill")
@@ -88,6 +111,7 @@ export function nextObjective(
 
   // Before the first one there is nothing to derive from — it is a fixed time.
   if (kills.length === 0) {
+    // Nothing has transformed yet and nothing has died: the first is random.
     return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0, element: null }
   }
 
@@ -105,7 +129,10 @@ export function nextObjective(
     kind: "dragon",
     inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime,
     taken: kills.length,
-    element: lockedElement(kills),
+    // The map is the better source: it transforms as soon as the SECOND
+    // dragon dies, so the third is known before anyone has killed one of it.
+    // The kill history stays as a fallback for when the terrain is unreadable.
+    element: normaliseElement(mapTerrain) ?? lockedElement(kills),
   }
 }
 

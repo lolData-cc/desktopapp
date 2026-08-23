@@ -1,22 +1,26 @@
 /**
  * The dragon's own artwork, per element.
  *
- * Riot's scoreboard icons, bundled rather than fetched: an overlay that has to
- * reach the network to draw a 3KB image mid-match will eventually draw nothing.
+ * Riot's own dragon PORTRAITS — the character icons, not the scoreboard glyphs.
+ * The scoreboard set was the wrong art: its "infernal" is a flame symbol and its
+ * generic is a flat head, which at 44px read as emoji rather than as a dragon.
+ *
+ * Bundled rather than fetched: an overlay that has to reach the network to draw
+ * an image mid-match will eventually draw nothing.
  * Imported as modules so Vite emits them with correct RELATIVE paths — the
  * overlay window is loaded from file://, where an absolute "/img/..." resolves
  * to the root of the DISK and silently fails to load.
  */
 import type { DragonElement } from "../data/objectives"
 
-import generic from "../assets/dragons/dragon.png"
-import infernal from "../assets/dragons/infernaldrake.png"
-import mountain from "../assets/dragons/mountaindrake.png"
-import ocean from "../assets/dragons/oceandrake.png"
-import cloud from "../assets/dragons/clouddrake.png"
-import hextech from "../assets/dragons/hextechdrake.png"
-import chemtech from "../assets/dragons/chemtechdrake.png"
-import elder from "../assets/dragons/elderdrake.png"
+import generic from "../assets/dragons/generic.png"
+import infernal from "../assets/dragons/fire.png"
+import mountain from "../assets/dragons/earth.png"
+import ocean from "../assets/dragons/water.png"
+import cloud from "../assets/dragons/air.png"
+import hextech from "../assets/dragons/hextech.png"
+import chemtech from "../assets/dragons/chemtech.png"
+import elder from "../assets/dragons/elder.png"
 
 /** Keyed by the element names the live API uses in DragonKill.DragonType. */
 const BY_ELEMENT: Record<DragonElement, string> = {

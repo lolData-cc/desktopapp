@@ -18,6 +18,10 @@ export type GameStats = {
   gameMode: string
   gameTime: number // seconds since the game clock started
   mapName: string
+  /** The Rift's transformation: "Default" until the map changes, then the
+   *  element every remaining dragon will be. The only forward-looking signal
+   *  Riot exposes about dragons. */
+  mapTerrain?: string
 }
 
 export type GameEvent = {

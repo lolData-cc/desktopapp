@@ -230,8 +230,10 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           <img
             src={dragonIcon(n.kind, n.element)}
             alt=""
-            className="h-11 w-11 shrink-0"
-            style={{ filter: `drop-shadow(0 0 10px ${accent}55) drop-shadow(0 2px 6px rgba(0,0,0,0.9))` }}
+            // A solid portrait now, not a transparent glyph, so it takes the
+            // squared corner and hairline the rest of the app uses.
+            className="h-11 w-11 shrink-0 rounded-[3px] ring-1 ring-jade/25"
+            style={{ boxShadow: `0 0 14px ${accent}33, 0 2px 8px rgba(0,0,0,0.9)` }}
           />
 
           <div className="min-w-0">
