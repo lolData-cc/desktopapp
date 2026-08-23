@@ -20186,10 +20186,13 @@ async function backfillRuneProfiles() {
     return;
   }
   let made = 0;
+  let complete = true;
   for (const name of names) {
     const champ = await championByName(name).catch(() => null);
-    if (!champ)
+    if (!champ) {
+      complete = false;
       continue;
+    }
     if (await buildFor(champ.slug).catch(() => null))
       continue;
     await saveBuild({
@@ -20206,9 +20209,12 @@ async function backfillRuneProfiles() {
     });
     made++;
   }
-  await markRunesBackfilled();
+  if (complete)
+    await markRunesBackfilled();
   if (made)
     console.log("[builds] recovered %d rune import(s) into profiles", made);
+  if (!complete)
+    console.log("[builds] some champions did not resolve; retrying next start");
   await pushBuilds();
 }
 async function pushBuilds() {

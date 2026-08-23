@@ -848,8 +848,10 @@ async function profileFromRunes(championName: string, patch: string, runes: stri
  * it, deleting a rune-only profile would silently bring it back on the next
  * start, which is a delete button that does not delete.
  *
- * Failures here are silent and unmarked, so a champion the CDN could not
- * resolve gets another chance next start rather than being written off.
+ * A champion that fails to resolve leaves the pass UNFINISHED, so it runs
+ * again next start. Marking it done regardless would write that champion off
+ * permanently over one slow CDN fetch — which is exactly what happened the
+ * first time this ran.
  */
 async function backfillRuneProfiles(): Promise<void> {
   if (await runesBackfilled().catch(() => true)) return
@@ -862,9 +864,13 @@ async function backfillRuneProfiles(): Promise<void> {
   }
 
   let made = 0
+  let complete = true
   for (const name of names) {
     const champ = await championByName(name).catch(() => null)
-    if (!champ) continue
+    if (!champ) {
+      complete = false
+      continue
+    }
     // Anything already saved is the player's own, and outranks this.
     if (await buildFor(champ.slug).catch(() => null)) continue
 
@@ -883,8 +889,9 @@ async function backfillRuneProfiles(): Promise<void> {
     made++
   }
 
-  await markRunesBackfilled()
+  if (complete) await markRunesBackfilled()
   if (made) console.log("[builds] recovered %d rune import(s) into profiles", made)
+  if (!complete) console.log("[builds] some champions did not resolve; retrying next start")
   await pushBuilds()
 }
 
