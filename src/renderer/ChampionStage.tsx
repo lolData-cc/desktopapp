@@ -89,7 +89,10 @@ export default function ChampionStage({ championId, championKey, className }: Pr
         const box = new THREE.Box3().setFromObject(model)
         const size = box.getSize(new THREE.Vector3())
         const centre = box.getCenter(new THREE.Vector3())
-        const height = Math.max(1, size.y)
+        // Guarded against zero, not against "small": these models are about a
+        // unit tall, so clamping to 1 would silently re-frame every champion
+        // shorter than that.
+        const height = Math.max(1e-4, size.y)
 
         model.position.sub(centre)
         model.position.y += height / 2 // stand it ON the pedestal, not through it
