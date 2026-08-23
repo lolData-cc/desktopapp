@@ -18925,9 +18925,14 @@ async function load2() {
   try {
     const raw = await readFile2(file(), "utf8");
     const parsed = JSON.parse(raw);
-    cache2 = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null, builds: parsed?.builds ?? {} };
+    cache2 = {
+      chosen: parsed?.chosen ?? {},
+      session: parsed?.session ?? null,
+      builds: parsed?.builds ?? {},
+      runesBackfilled: parsed?.runesBackfilled ?? false
+    };
   } catch {
-    cache2 = { chosen: {}, session: null, builds: {} };
+    cache2 = { chosen: {}, session: null, builds: {}, runesBackfilled: false };
   }
   return cache2;
 }
@@ -18937,10 +18942,18 @@ async function chosenFor(champion) {
 async function rememberChoice(champion, signature) {
   const store = await load2();
   store.chosen[champion.toLowerCase()] = signature;
-  try {
-    await mkdir(dirname(file()), { recursive: true });
-    await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
-  } catch {}
+  await persist(store);
+}
+async function chosenAll() {
+  return { ...(await load2()).chosen };
+}
+async function runesBackfilled() {
+  return (await load2()).runesBackfilled === true;
+}
+async function markRunesBackfilled() {
+  const store = await load2();
+  store.runesBackfilled = true;
+  await persist(store);
 }
 async function readSession() {
   return (await load2()).session ?? null;
@@ -18948,10 +18961,7 @@ async function readSession() {
 async function writeSession(session) {
   const store = await load2();
   store.session = session;
-  try {
-    await mkdir(dirname(file()), { recursive: true });
-    await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
-  } catch {}
+  await persist(store);
 }
 async function listBuilds() {
   const store = await load2();
@@ -20166,6 +20176,41 @@ async function profileFromRunes(championName, patch2, runes) {
   });
   await pushBuilds();
 }
+async function backfillRuneProfiles() {
+  if (await runesBackfilled().catch(() => true))
+    return;
+  const choices = await chosenAll().catch(() => ({}));
+  const names = Object.keys(choices);
+  if (!names.length) {
+    await markRunesBackfilled();
+    return;
+  }
+  let made = 0;
+  for (const name of names) {
+    const champ = await championByName(name).catch(() => null);
+    if (!champ)
+      continue;
+    if (await buildFor(champ.slug).catch(() => null))
+      continue;
+    await saveBuild({
+      championId: champ.slug,
+      championName: champ.name,
+      championKey: champ.key,
+      role: null,
+      items: [],
+      runes: choices[name],
+      enabled: true,
+      source: "site",
+      savedAt: Date.now(),
+      patch: null
+    });
+    made++;
+  }
+  await markRunesBackfilled();
+  if (made)
+    console.log("[builds] recovered %d rune import(s) into profiles", made);
+  await pushBuilds();
+}
 async function pushBuilds() {
   push({ builds: await listBuilds().catch(() => []) });
 }
@@ -20323,6 +20368,7 @@ if (!gotLock) {
     const saved = await readSession();
     if (saved)
       await setSession(saved);
+    await backfillRuneProfiles();
     await pushBuilds();
     const initial = initUpdater((update) => push({ update }));
     push({ update: initial, canUpdate: canUpdate() });

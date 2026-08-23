@@ -19,7 +19,8 @@ import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, 
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
 import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session,
-         listBuilds, buildFor, saveBuild, setBuildEnabled, deleteBuild, type BuildProfile } from "./prefs"
+         listBuilds, buildFor, saveBuild, setBuildEnabled, deleteBuild, type BuildProfile,
+         chosenAll, runesBackfilled, markRunesBackfilled } from "./prefs"
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
 import { linkFromArgv, linkKind, parseAuthLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
@@ -835,6 +836,58 @@ async function profileFromRunes(championName: string, patch: string, runes: stri
   await pushBuilds()
 }
 
+/**
+ * Turn rune imports made BEFORE profiles existed into profiles.
+ *
+ * Every import already recorded its choice, so the information was never lost
+ * — it just had nowhere to show. This reads those records once and gives each
+ * one a profile, so a player who imported runes last week opens Builds and
+ * finds them there instead of an empty section.
+ *
+ * Runs ONCE, guarded by a flag rather than by "is the section empty": without
+ * it, deleting a rune-only profile would silently bring it back on the next
+ * start, which is a delete button that does not delete.
+ *
+ * Failures here are silent and unmarked, so a champion the CDN could not
+ * resolve gets another chance next start rather than being written off.
+ */
+async function backfillRuneProfiles(): Promise<void> {
+  if (await runesBackfilled().catch(() => true)) return
+
+  const choices = await chosenAll().catch((): Record<string, string> => ({}))
+  const names = Object.keys(choices)
+  if (!names.length) {
+    await markRunesBackfilled()
+    return
+  }
+
+  let made = 0
+  for (const name of names) {
+    const champ = await championByName(name).catch(() => null)
+    if (!champ) continue
+    // Anything already saved is the player's own, and outranks this.
+    if (await buildFor(champ.slug).catch(() => null)) continue
+
+    await saveBuild({
+      championId: champ.slug,
+      championName: champ.name,
+      championKey: champ.key,
+      role: null,
+      items: [],
+      runes: choices[name]!,
+      enabled: true,
+      source: "site",
+      savedAt: Date.now(),
+      patch: null,
+    })
+    made++
+  }
+
+  await markRunesBackfilled()
+  if (made) console.log("[builds] recovered %d rune import(s) into profiles", made)
+  await pushBuilds()
+}
+
 async function pushBuilds(): Promise<void> {
   push({ builds: await listBuilds().catch(() => []) })
 }
@@ -1068,6 +1121,7 @@ if (!gotLock) {
     const saved = await readSession()
     if (saved) await setSession(saved)
 
+    await backfillRuneProfiles()
     await pushBuilds()
 
     // One check at startup, then only when asked. Nothing downloads by itself.

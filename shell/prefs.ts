@@ -63,6 +63,10 @@ type Stored = {
   chosen: Record<string, PageSignature>
   session?: Session | null
   builds?: Record<string, BuildProfile>
+  /** Set once the pre-existing rune choices have been turned into profiles.
+   *  Without it the backfill would run every start and resurrect a rune-only
+   *  profile the player had deliberately deleted. */
+  runesBackfilled?: boolean
 }
 
 let cache: Stored | null = null
@@ -74,9 +78,14 @@ async function load(): Promise<Stored> {
   try {
     const raw = await readFile(file(), "utf8")
     const parsed = JSON.parse(raw) as Stored
-    cache = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null, builds: parsed?.builds ?? {} }
+    cache = {
+      chosen: parsed?.chosen ?? {},
+      session: parsed?.session ?? null,
+      builds: parsed?.builds ?? {},
+      runesBackfilled: parsed?.runesBackfilled ?? false,
+    }
   } catch {
-    cache = { chosen: {}, session: null, builds: {} }
+    cache = { chosen: {}, session: null, builds: {}, runesBackfilled: false }
   }
   return cache
 }
@@ -94,13 +103,23 @@ export async function chosenFor(champion: string): Promise<PageSignature | null>
 export async function rememberChoice(champion: string, signature: PageSignature): Promise<void> {
   const store = await load()
   store.chosen[champion.toLowerCase()] = signature
-  try {
-    await mkdir(dirname(file()), { recursive: true })
-    await writeFile(file(), JSON.stringify(store, null, 2), "utf8")
-  } catch {
-    // Failing to persist is not worth interrupting an import that worked; the
-    // choice simply does not survive a restart.
-  }
+  await persist(store)
+}
+
+/** Every remembered choice, keyed by the champion's DISPLAY NAME lowercased —
+ *  which is what the import knew. Not the ddragon id. */
+export async function chosenAll(): Promise<Record<string, PageSignature>> {
+  return { ...(await load()).chosen }
+}
+
+export async function runesBackfilled(): Promise<boolean> {
+  return (await load()).runesBackfilled === true
+}
+
+export async function markRunesBackfilled(): Promise<void> {
+  const store = await load()
+  store.runesBackfilled = true
+  await persist(store)
 }
 
 export async function readSession(): Promise<Session | null> {
@@ -111,13 +130,7 @@ export async function readSession(): Promise<Session | null> {
 export async function writeSession(session: Session | null): Promise<void> {
   const store = await load()
   store.session = session
-  try {
-    await mkdir(dirname(file()), { recursive: true })
-    await writeFile(file(), JSON.stringify(store, null, 2), "utf8")
-  } catch {
-    // Not worth interrupting a sign-in that otherwise worked; it simply will
-    // not survive a restart.
-  }
+  await persist(store)
 }
 
 /** Every saved build, newest first. */
@@ -155,12 +168,14 @@ export async function deleteBuild(championId: string): Promise<void> {
   await persist(store)
 }
 
+/** The one place this file is written. Failing to persist never interrupts an
+ *  operation that otherwise worked — the change simply does not survive a
+ *  restart, which is better than losing an import that DID reach the client. */
 async function persist(store: Stored): Promise<void> {
   try {
     await mkdir(dirname(file()), { recursive: true })
     await writeFile(file(), JSON.stringify(store, null, 2), "utf8")
   } catch {
-    // Not worth interrupting the thing that worked; it just will not survive a
-    // restart.
+    // deliberately silent, see above
   }
 }
