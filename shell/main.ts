@@ -9,12 +9,13 @@
  */
 import { app, BrowserWindow, ipcMain, screen, shell } from "electron"
 import { fileURLToPath } from "node:url"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
-import { importPage, pageName } from "../src/lcu/runes"
+import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { popularRunes, type RuneSuggestion } from "../src/data/runeSource"
+import { linkFromArgv, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
@@ -368,16 +369,12 @@ ipcMain.on("overlay:report", (_e, info: { w: number; h: number; dpr: number }) =
 })
 
 /** Debug: hold the overlay open, or let it behave like a notification again. */
-ipcMain.handle("runes:import", async () => {
-  const r = state.runes
-  const champ = state.select?.champion
-  if (!r || !champ) return
-
+async function applyPage(champion: string, patch: string, page: BuildPage): Promise<void> {
   push({ runeImport: { state: "working" } })
   try {
-    const result = await importPage(lcu, champ.name, state.patch ?? "", r.page)
+    const result = await importPage(lcu, champion, patch, page)
     if (result.ok) {
-      push({ runeImport: { state: "done", name: r.pageName, replaced: result.replaced } })
+      push({ runeImport: { state: "done", name: pageName(champion, patch), replaced: result.replaced } })
     } else if (result.reason === "no-room") {
       push({ runeImport: { state: "no-room", pages: result.pages } })
     } else {
@@ -386,7 +383,39 @@ ipcMain.handle("runes:import", async () => {
   } catch (e) {
     push({ runeImport: { state: "error", message: (e as Error)?.message ?? "import failed" } })
   }
+}
+
+ipcMain.handle("runes:import", async () => {
+  const r = state.runes
+  const champ = state.select?.champion
+  if (!r || !champ) return
+  await applyPage(champ.name, state.patch ?? "", r.page)
 })
+
+/**
+ * A loldata:// link from the website.
+ *
+ * The window comes forward first, and deliberately: this was started somewhere
+ * else, so the result has to be visible where it lands. An import that happens
+ * silently in a background window is indistinguishable from one that failed.
+ */
+async function handleLink(raw: string | null): Promise<void> {
+  if (!raw) return
+  const link = parseRuneLink(raw)
+  if (!link) {
+    push({ runeImport: { state: "error", message: "that link was not a valid rune page" } })
+    return
+  }
+
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
+  // The site knows the patch it was showing; ours is the fallback so the page
+  // is never named with an empty one.
+  await applyPage(link.champion, link.patch ?? state.patch ?? "", link.page)
+}
 
 ipcMain.on("overlay:pin", (_e, on: boolean) => {
   push({ pinned: on })
@@ -414,7 +443,36 @@ ipcMain.on("overlay:demo", async () => {
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS)
 })
 
+/**
+ * Windows hands a loldata:// link to a NEW process. Without the single-instance
+ * lock that means a second app every time the website's button is pressed, each
+ * with its own client connection — so the second one forwards the link to the
+ * first and exits.
+ */
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on("second-instance", (_e, argv) => {
+    void handleLink(linkFromArgv(argv))
+  })
+  // macOS delivers it as an event instead of an argument.
+  app.on("open-url", (e, url) => {
+    e.preventDefault()
+    void handleLink(url)
+  })
+}
+
 app.whenReady().then(async () => {
+  // Claim loldata:// so the website's button has something to reach. In dev the
+  // executable is Electron itself, so the script path has to travel with it or
+  // the link would launch a bare Electron with nothing loaded.
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [resolve(process.argv[1]!)])
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL)
+  }
+
   createWindow()
   createOverlay(join(__dirname, "preload.mjs"))
 
@@ -425,6 +483,9 @@ app.whenReady().then(async () => {
   push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } })
 
   await lcu.start()
+
+  // Launched BY a link rather than sent one: the URL is already in our argv.
+  void handleLink(linkFromArgv(process.argv))
 })
 
 app.on("before-quit", () => { stopGameClock(); destroyOverlay() })

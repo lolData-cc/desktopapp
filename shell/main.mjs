@@ -1677,7 +1677,7 @@ var require_websocket = __commonJS((exports, module) => {
   var tls = __require("tls");
   var { randomBytes, createHash } = __require("crypto");
   var { Duplex, Readable } = __require("stream");
-  var { URL } = __require("url");
+  var { URL: URL2 } = __require("url");
   var PerMessageDeflate = require_permessage_deflate();
   var Receiver = require_receiver();
   var Sender = require_sender();
@@ -2056,11 +2056,11 @@ var require_websocket = __commonJS((exports, module) => {
       throw new RangeError(`Unsupported protocol version: ${opts.protocolVersion} ` + `(supported versions: ${protocolVersions.join(", ")})`);
     }
     let parsedUrl;
-    if (address instanceof URL) {
+    if (address instanceof URL2) {
       parsedUrl = address;
     } else {
       try {
-        parsedUrl = new URL(address);
+        parsedUrl = new URL2(address);
       } catch {
         throw new SyntaxError(`Invalid URL: ${address}`);
       }
@@ -2197,7 +2197,7 @@ var require_websocket = __commonJS((exports, module) => {
         req.abort();
         let addr;
         try {
-          addr = new URL(location, address);
+          addr = new URL2(location, address);
         } catch (e) {
           const err = new SyntaxError(`Invalid URL: ${location}`);
           emitErrorAndClose(websocket, err);
@@ -2901,7 +2901,7 @@ var require_websocket_server = __commonJS((exports, module) => {
 // shell/main.ts
 import { app, BrowserWindow as BrowserWindow2, ipcMain, screen as screen2, shell } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, join as join2 } from "node:path";
+import { dirname, join as join2, resolve } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -3313,6 +3313,66 @@ async function popularRunes(championKey, championName, role, signal) {
   };
 }
 
+// src/lcu/deepLink.ts
+var PROTOCOL = "loldata";
+var isPerkId = (n) => Number.isInteger(n) && n >= 5000 && n < 1e5;
+var isStyleId = (n) => Number.isInteger(n) && n >= 8000 && n <= 8500;
+var CHAMPION = /^[A-Za-z][A-Za-z0-9 '.&:-]{0,31}$/;
+var PATCH = /^\d{1,2}\.\d{1,2}(\.\d{1,3})?$/;
+function ints(raw) {
+  if (!raw)
+    return [];
+  return raw.split(",").map((p) => Number(p.trim()));
+}
+function parseRuneLink(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== `${PROTOCOL}:`)
+    return null;
+  if (url.hostname !== "runes")
+    return null;
+  const q = url.searchParams;
+  const champion = (q.get("champion") ?? "").trim();
+  if (!CHAMPION.test(champion))
+    return null;
+  const patch2 = (q.get("patch") ?? "").trim();
+  const primaryStyle = Number(q.get("primary"));
+  const subStyle = Number(q.get("sub"));
+  if (!isStyleId(primaryStyle) || !isStyleId(subStyle))
+    return null;
+  if (primaryStyle === subStyle)
+    return null;
+  const perks = ints(q.get("perks"));
+  if (perks.length !== 9 || !perks.every(isPerkId))
+    return null;
+  const primary = perks.slice(0, 4);
+  const secondary = perks.slice(4, 6);
+  const shards = perks.slice(6, 9);
+  if (!shards.every((id) => id >= 5000 && id < 6000))
+    return null;
+  if (primary.some((id) => id < 8000) || secondary.some((id) => id < 8000))
+    return null;
+  return {
+    champion,
+    patch: PATCH.test(patch2) ? patch2 : null,
+    page: {
+      keystone: primary[0],
+      primaryStyle,
+      primary,
+      subStyle,
+      secondary,
+      shards
+    }
+  };
+}
+function linkFromArgv(argv) {
+  return argv.find((a) => a.startsWith(`${PROTOCOL}://`)) ?? null;
+}
+
 // src/live/client.ts
 import { request as httpsRequest2 } from "node:https";
 var PORT = 2999;
@@ -3706,16 +3766,12 @@ ipcMain.on("overlay:report", (_e, info) => {
   const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud);
   console.log("[hud] scale=%s → Q drawn at css (%d,%d) %dpx → physical (%d,%d) %dpx", state.hud.scale, Math.round(box.left), Math.round(box.top), Math.round(box.size), Math.round(box.left * info.dpr), Math.round(box.top * info.dpr), Math.round(box.size * info.dpr));
 });
-ipcMain.handle("runes:import", async () => {
-  const r = state.runes;
-  const champ = state.select?.champion;
-  if (!r || !champ)
-    return;
+async function applyPage(champion, patch2, page) {
   push({ runeImport: { state: "working" } });
   try {
-    const result = await importPage(lcu, champ.name, state.patch ?? "", r.page);
+    const result = await importPage(lcu, champion, patch2, page);
     if (result.ok) {
-      push({ runeImport: { state: "done", name: r.pageName, replaced: result.replaced } });
+      push({ runeImport: { state: "done", name: pageName(champion, patch2), replaced: result.replaced } });
     } else if (result.reason === "no-room") {
       push({ runeImport: { state: "no-room", pages: result.pages } });
     } else {
@@ -3724,7 +3780,30 @@ ipcMain.handle("runes:import", async () => {
   } catch (e) {
     push({ runeImport: { state: "error", message: e?.message ?? "import failed" } });
   }
+}
+ipcMain.handle("runes:import", async () => {
+  const r = state.runes;
+  const champ = state.select?.champion;
+  if (!r || !champ)
+    return;
+  await applyPage(champ.name, state.patch ?? "", r.page);
 });
+async function handleLink(raw) {
+  if (!raw)
+    return;
+  const link = parseRuneLink(raw);
+  if (!link) {
+    push({ runeImport: { state: "error", message: "that link was not a valid rune page" } });
+    return;
+  }
+  if (win) {
+    if (win.isMinimized())
+      win.restore();
+    win.show();
+    win.focus();
+  }
+  await applyPage(link.champion, link.patch ?? state.patch ?? "", link.page);
+}
 ipcMain.on("overlay:pin", (_e, on) => {
   push({ pinned: on });
   if (on)
@@ -3748,12 +3827,30 @@ ipcMain.on("overlay:demo", async () => {
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
 });
+var gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_e, argv) => {
+    handleLink(linkFromArgv(argv));
+  });
+  app.on("open-url", (e, url) => {
+    e.preventDefault();
+    handleLink(url);
+  });
+}
 app.whenReady().then(async () => {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [resolve(process.argv[1])]);
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL);
+  }
   createWindow();
   createOverlay(join2(__dirname2, "preload.mjs"));
   const hud = await readHudSettings();
   push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
   await lcu.start();
+  handleLink(linkFromArgv(process.argv));
 });
 app.on("before-quit", () => {
   stopGameClock();
