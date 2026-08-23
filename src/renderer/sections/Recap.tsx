@@ -3,7 +3,7 @@ import { CDN, type AppState } from "../types"
 import { championById } from "../../data/champions"
 import ChampionStage from "../ChampionStage"
 import Verdict from "../Verdict"
-import type { LivePlayer } from "../types"
+import type { LivePlayer, PlayerRank } from "../types"
 
 /**
  * The game you just finished.
@@ -235,7 +235,7 @@ export default function Recap({
  */
 function Lobby({ s, onClose }: { s: AppState; onClose: () => void }) {
   const board = s.finalBoard
-  const [ranks, setRanks] = useState<Record<string, string | null>>({})
+  const [ranks, setRanks] = useState<Record<string, PlayerRank | null>>({})
 
   const rows = board ? [...board.ours, ...board.theirs] : []
 
@@ -295,7 +295,7 @@ function PlayerCard({
 }: {
   p: LivePlayer
   patch: string
-  rank: string | null
+  rank: PlayerRank | null
   ally: boolean
 }) {
   const accent = ally ? "rgba(0,217,146," : "rgba(255,98,134,"
@@ -320,9 +320,15 @@ function PlayerCard({
       <div className="min-w-0 flex-1">
         <p className="truncate font-chakrapetch text-[11.5px] font-bold leading-tight">{p.name}</p>
         <p className="truncate font-jetbrains text-[8px] uppercase tracking-[0.12em] text-flash/25">
-          {/* A rank we do not have yet and a player who has none look the same
+          {/* ⚠️ rank.LABEL, not rank. This renders a PlayerRank object as a
+              React child if you forget, which throws "objects are not valid as
+              a React child" and takes the screen down — it did, when the rank
+              lookup was widened from a string to an object and this caller was
+              not updated with it.
+
+              A rank we do not have yet and a player who has none look the same
               on a card, so neither gets a placeholder pretending otherwise. */}
-          {rank ?? p.champion}
+          {rank?.label ?? p.champion}
         </p>
       </div>
 

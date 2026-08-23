@@ -249,8 +249,8 @@ declare global {
       /** A champion's model as a GLB, cached on disk by the shell. Null when
        *  it could not be fetched. */
       model(championId: string, key: number): Promise<ArrayBuffer | null>
-      /** Ranked tier per riotId, for the players in a finished game. */
-      ranks(riotIds: string[], region: string | null): Promise<Record<string, string | null>>
+      /** Ranked standing per riotId, for the players in a finished game. */
+      ranks(riotIds: string[], region: string | null): Promise<Record<string, PlayerRank | null>>
       signIn(): void
       signOut(): Promise<void>
       askAi(messages: ChatMessage[]): Promise<ChatResult>
