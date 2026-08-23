@@ -136,7 +136,7 @@ function GoldBar({ g }: { g: TeamGold }) {
         }}
       />
 
-      <Frame edge="top" />
+      <Frame />
 
       <div className="relative flex items-center gap-2.5" style={{ textShadow: "0 1px 5px rgba(0,0,0,0.95)" }}>
         <span className="w-[52px] shrink-0 text-right font-chakrapetch text-[15px] font-bold tabular-nums text-jade">
@@ -161,9 +161,9 @@ function GoldBar({ g }: { g: TeamGold }) {
         </span>
       </div>
 
-      <p className="relative mt-1 text-center font-jetbrains text-[8.5px] uppercase tracking-[0.22em]">
+      <p className="relative mt-1.5 text-center font-jetbrains text-[11px] font-bold uppercase tracking-[0.2em]">
         {lead === 0 ? (
-          <span className="text-flash/30">even</span>
+          <span className="text-flash/45">even</span>
         ) : (
           <span style={{ color: accent }}>
             {/* the number keeps its case — the label's uppercase was turning
@@ -176,69 +176,90 @@ function GoldBar({ g }: { g: TeamGold }) {
           </span>
         )}
         {partial && (
-          <span className="text-flash/25">
+          <span className="text-[9px] font-normal text-flash/30">
             {" · "}
             {g.oursCounted}v{g.theirsCounted} counted
           </span>
         )}
       </p>
 
-      <Frame edge="bottom" />
     </div>
   )
 }
 
 /**
- * The shoulder above and below the gold bar.
+ * The shoulder above the gold bar.
  *
- * One continuous profile per side rather than separate marks: a low tail
- * outside, a diagonal rise, then a plateau running toward the centre, and the
- * whole thing mirrored. The break in the middle is where the numbers live —
- * the shape brackets them instead of underlining them.
+ * TOP only. There is nothing below because the scoreboard is — the bar sits on
+ * its upper edge, and a second rule underneath would draw a line through the
+ * thing it is meant to sit against.
  *
- * The side notification's rail is asymmetric because it ARRIVES from an edge.
- * A centred readout asks the opposite, so this is the same grammar with nothing
- * pulling the eye off centre.
+ * One continuous profile per side: a low tail outside, a diagonal rise, then a
+ * plateau running toward the centre, mirrored, with the break in the middle
+ * where the numbers live.
  *
- * ⚠️ Only the PLATEAU stretches. The shoulder is a fixed-size SVG because a
- * path scaled with preserveAspectRatio="none" distorts its diagonals, and this
- * bar's width follows the screen — the rise would be a shallow ramp on a wide
- * monitor and a cliff on a narrow one. The plateau is a plain hairline aligned
- * to the shoulder's own flat, which is the one part that can be any length.
+ * The difference between a hairline and an ornament is LAYERS. A single stroke
+ * is a divider; this is a primary profile, a dimmer secondary running under the
+ * plateau, ticks hanging from it, a filled node where the geometry turns, and a
+ * cap closing the tail. Each one marks something real about the shape rather
+ * than decorating it.
+ *
+ * ⚠️ Only the plateau stretches. The shoulder is fixed-size because a path
+ * scaled with preserveAspectRatio="none" distorts its diagonals, and this bar's
+ * width follows the screen. The plateau's ticks are a repeating gradient for
+ * the same reason — a pattern repeats at any length, where a drawn one would
+ * smear.
  */
-function Frame({ edge }: { edge: "top" | "bottom" }) {
-  const flip = edge === "bottom"
-  const accent = "rgba(0,217,146,0.55)"
+function Frame() {
+  const line = "rgba(0,217,146,0.6)"
+  const dim = "rgba(0,217,146,0.26)"
 
-  // The flat sits at y=3.5 so a 1px stroke covers 3-4 exactly, which is where
-  // the plateau hairline lands with its 3px offset. Half a pixel out and the
-  // join shows as a step.
   const shoulder = (mirror: boolean) => (
-    <svg width="58" height="18" viewBox="0 0 58 18" aria-hidden
+    <svg width="66" height="22" viewBox="0 0 66 22" aria-hidden
          className="shrink-0 overflow-visible"
          style={mirror ? { transform: "scaleX(-1)" } : undefined}>
-      <path
-        d="M 0 15.5 L 15 15.5 L 30 3.5 L 58 3.5"
-        fill="none"
-        stroke={accent}
-        strokeWidth="1"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      {/* the profile */}
+      <path d="M 4 16.5 L 18 16.5 L 33 3.5 L 66 3.5"
+            fill="none" stroke={line} strokeWidth="1.2"
+            strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      {/* a second run under the plateau, stopping short — a parallel that goes
+          the whole way reads as a mistake rather than as depth */}
+      <path d="M 40 8 L 66 8" fill="none" stroke={dim} strokeWidth="1"
+            vectorEffect="non-scaling-stroke" />
+      {/* ticks hanging from it */}
+      <path d="M 46 8 L 46 11 M 54 8 L 54 10" fill="none" stroke={dim}
+            strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      {/* the node where the rise meets the plateau — the one place the shape
+          changes its mind, so the one place worth marking */}
+      <rect x="30.5" y="1" width="5" height="5" fill={line}
+            transform="rotate(45 33 3.5)" />
+      {/* the tail closes rather than fading out */}
+      <path d="M 4 13 L 4 20" fill="none" stroke={line} strokeWidth="1.2"
+            vectorEffect="non-scaling-stroke" />
     </svg>
   )
 
+  /* the stretching half: the plateau, its dim parallel, and repeating ticks */
+  const plateau = () => (
+    <span className="relative h-[22px] min-w-0 flex-1">
+      <span className="absolute left-0 right-0 top-[3px] h-px" style={{ background: line }} />
+      <span className="absolute left-0 right-0 top-[7.5px] h-px" style={{ background: dim }} />
+      <span
+        className="absolute left-0 right-0 top-[8px] h-[3px]"
+        style={{
+          background: `repeating-linear-gradient(90deg, ${dim} 0 1px, transparent 1px 14px)`,
+        }}
+      />
+    </span>
+  )
+
   return (
-    <div
-      aria-hidden
-      className={`relative flex h-[18px] items-start ${flip ? "mt-1" : "mb-1"}`}
-      style={flip ? { transform: "scaleY(-1)" } : undefined}
-    >
+    <div aria-hidden className="relative mb-1 flex h-[22px] items-start">
       {shoulder(false)}
-      <span className="mt-[3px] h-px flex-1" style={{ background: accent }} />
+      {plateau()}
       {/* the break the numbers sit in */}
-      <span className="w-[72px] shrink-0" />
-      <span className="mt-[3px] h-px flex-1" style={{ background: accent }} />
+      <span className="w-[76px] shrink-0" />
+      {plateau()}
       {shoulder(true)}
     </div>
   )
