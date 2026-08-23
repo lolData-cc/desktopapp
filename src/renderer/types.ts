@@ -87,6 +87,7 @@ export type AppState = {
     | { state: "idle" }
     | { state: "working" }
     | { state: "done"; name: string; replaced: boolean }
+    | { state: "build-saved"; champion: string; items: number }
     | { state: "no-room"; pages: { id: number; name: string }[] }
     | { state: "error"; message: string }
   gold: { ours: number; theirs: number; oursCounted: number; theirsCounted: number } | null
@@ -154,6 +155,7 @@ declare global {
       relaunch(): void
       demoGold(): void
       saveBuild(): Promise<void>
+      updateBuild(championId: string, items: number[], runes: string | null): Promise<void>
       toggleBuild(championId: string, enabled: boolean): Promise<void>
       deleteBuild(championId: string): Promise<void>
       calibrate(patch: Partial<HudNudge>): void

@@ -13,7 +13,7 @@ import { CDN, type AppState } from "../types"
  * calculation — an off switch that quietly substitutes something else is not an
  * off switch.
  */
-export default function Builds({ s }: { s: AppState }) {
+export default function Builds({ s, onOpen }: { s: AppState; onOpen: (championId: string) => void }) {
   const builds = s.builds ?? []
   const patch = s.patch ?? "16.16.1"
 
@@ -43,16 +43,16 @@ export default function Builds({ s }: { s: AppState }) {
       {builds.length === 0 ? (
         <div className="grid flex-1 place-items-center px-8 text-center">
           <p className="max-w-[46ch] font-chakrapetch text-[13px] leading-relaxed text-flash/35">
-            Import runes from the site, or lock a champion in and let the app work
-            out a build against the enemy comp. Either one saves a profile here, and
-            an enabled profile drives the in-game notices — you will be told when the
-            next item becomes affordable.
+            Import runes or a build from the site, or lock a champion in and let the
+            app work one out against the enemy comp. Either saves a profile here, and
+            clicking a profile lets you set its default page and item order — which is
+            what the in-game notices then walk you through.
           </p>
         </div>
       ) : (
         <div className="mt-4 flex-1 space-y-1.5 overflow-y-auto pr-1">
           {builds.map((b, i) => (
-            <Row key={b.championId} b={b} patch={patch} index={i} />
+            <Row key={b.championId} b={b} patch={patch} index={i} onOpen={() => onOpen(b.championId)} />
           ))}
         </div>
       )}
@@ -64,10 +64,12 @@ function Row({
   b,
   patch,
   index,
+  onOpen,
 }: {
   b: AppState["builds"][number]
   patch: string
   index: number
+  onOpen: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
 
@@ -80,7 +82,17 @@ function Row({
 
   return (
     <div
-      className="ds-row flex items-center gap-3 rounded-[3px] py-2 pl-3 pr-3"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+      title={`Edit ${b.championName}`}
+      className="ds-row flex cursor-pointer items-center gap-3 rounded-[3px] py-2 pl-3 pr-3 outline-none transition hover:brightness-125 focus-visible:ring-1 focus-visible:ring-jade/50"
       style={{
         background: b.enabled ? "rgba(0,217,146,0.05)" : "rgba(215,216,217,0.02)",
         boxShadow: b.enabled ? "inset 2px 0 0 0 rgba(0,217,146,0.55)" : undefined,
@@ -103,10 +115,11 @@ function Row({
 
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
         {/* A rune import creates a profile with no items yet. Saying so beats
-            an empty gap, which reads as something failing to load. */}
+            an empty gap, which reads as something failing to load — and it says
+            what to DO about it, since without items there are no notices. */}
         {b.items.length === 0 && (
-          <span className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
-            runes only · items fill in at champion select
+          <span className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-citrine/40">
+            runes only · click to add a build
           </span>
         )}
         {b.items.map((id, i) => (
@@ -126,7 +139,10 @@ function Row({
 
       <button
         type="button"
-        onClick={() => void window.desktop.toggleBuild(b.championId, !b.enabled)}
+        onClick={(e) => {
+          e.stopPropagation()
+          void window.desktop.toggleBuild(b.championId, !b.enabled)
+        }}
         className={`win-btn h-6 shrink-0 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
           b.enabled ? "bg-jade/15 text-jade" : "text-flash/30"
         }`}
@@ -136,7 +152,8 @@ function Row({
 
       <button
         type="button"
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation()
           if (confirming) void window.desktop.deleteBuild(b.championId)
           else setConfirming(true)
         }}

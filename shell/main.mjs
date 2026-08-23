@@ -19130,11 +19130,41 @@ function parseRuneLink(raw) {
   if (!CHAMPION.test(champion))
     return null;
   const patch2 = (q.get("patch") ?? "").trim();
+  const page = pageFrom(q);
+  if (!page)
+    return null;
+  return { champion, patch: PATCH.test(patch2) ? patch2 : null, page };
+}
+var isItemId = (n) => Number.isInteger(n) && n >= 1000 && n < 1e6;
+function parseBuildLink(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== `${PROTOCOL}:` || url.hostname !== "build")
+    return null;
+  const q = url.searchParams;
+  const champion = (q.get("champion") ?? "").trim();
+  if (!CHAMPION.test(champion))
+    return null;
+  const items = ints(q.get("items")).filter(isItemId);
+  const unique = [...new Set(items)].slice(0, 6);
+  if (!unique.length)
+    return null;
+  const patch2 = (q.get("patch") ?? "").trim();
+  return {
+    champion,
+    patch: PATCH.test(patch2) ? patch2 : null,
+    items: unique,
+    page: pageFrom(q)
+  };
+}
+function pageFrom(q) {
   const primaryStyle = Number(q.get("primary"));
   const subStyle = Number(q.get("sub"));
-  if (!isStyleId(primaryStyle) || !isStyleId(subStyle))
-    return null;
-  if (primaryStyle === subStyle)
+  if (!isStyleId(primaryStyle) || !isStyleId(subStyle) || primaryStyle === subStyle)
     return null;
   const perks = ints(q.get("perks"));
   if (perks.length !== 9 || !perks.every(isPerkId))
@@ -19146,18 +19176,7 @@ function parseRuneLink(raw) {
     return null;
   if (primary.some((id) => id < 8000) || secondary.some((id) => id < 8000))
     return null;
-  return {
-    champion,
-    patch: PATCH.test(patch2) ? patch2 : null,
-    page: {
-      keystone: primary[0],
-      primaryStyle,
-      primary,
-      subStyle,
-      secondary,
-      shards
-    }
-  };
+  return { keystone: primary[0], primaryStyle, primary, subStyle, secondary, shards };
 }
 var JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 var EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/;
@@ -19187,7 +19206,8 @@ function linkKind(raw) {
     const u = new URL(raw);
     if (u.protocol !== `${PROTOCOL}:`)
       return null;
-    return u.hostname === "runes" ? "runes" : u.hostname === "auth" ? "auth" : null;
+    const host = u.hostname;
+    return host === "runes" || host === "build" || host === "auth" ? host : null;
   } catch {
     return null;
   }
@@ -20227,6 +20247,40 @@ async function backfillRuneProfiles() {
     console.log("[builds] recovered %d rune import(s) into profiles", made);
   await pushBuilds();
 }
+async function importBuild(raw) {
+  const link = parseBuildLink(raw);
+  console.log("[link] build valid=%s champion=%s items=%d", !!link, link?.champion ?? "-", link?.items.length ?? 0);
+  if (!link) {
+    push({ runeImport: { state: "error", message: "that link was not a valid build" } });
+    return;
+  }
+  const champ = await championByName(link.champion).catch(() => null);
+  if (!champ) {
+    push({ runeImport: { state: "error", message: `${link.champion} is not a champion we know` } });
+    return;
+  }
+  if (win) {
+    if (win.isMinimized())
+      win.restore();
+    win.show();
+    win.focus();
+  }
+  const existing = await buildFor(champ.slug).catch(() => null);
+  await saveBuild({
+    championId: champ.slug,
+    championName: champ.name,
+    championKey: champ.key,
+    role: existing?.role ?? null,
+    items: link.items,
+    runes: link.page ? signatureOf(link.page) : existing?.runes ?? null,
+    enabled: existing?.enabled ?? true,
+    source: "site",
+    savedAt: Date.now(),
+    patch: link.patch ?? existing?.patch ?? null
+  });
+  await pushBuilds();
+  push({ runeImport: { state: "build-saved", champion: champ.name, items: link.items.length } });
+}
 async function pushBuilds() {
   const builds = await listBuilds().catch(() => []);
   console.log("[builds] %d profile(s): %s", builds.length, builds.map((b) => b.championName).join(", ") || "none");
@@ -20250,6 +20304,19 @@ ipcMain.handle("builds:save", async () => {
     patch: m.patch
   };
   await saveBuild(profile);
+  await pushBuilds();
+});
+ipcMain.handle("builds:update", async (_e, championId, items, runes) => {
+  const existing = await buildFor(championId).catch(() => null);
+  if (!existing)
+    return;
+  const clean = (Array.isArray(items) ? items : []).filter((n) => Number.isInteger(n) && n > 0).slice(0, 6);
+  await saveBuild({
+    ...existing,
+    items: clean,
+    runes: typeof runes === "string" && runes.length ? runes : existing.runes ?? null,
+    savedAt: Date.now()
+  });
   await pushBuilds();
 });
 ipcMain.handle("builds:toggle", async (_e, championId, enabled) => {
@@ -20315,6 +20382,10 @@ async function handleLink(raw) {
         win.focus();
       }
     }
+    return;
+  }
+  if (linkKind(raw) === "build") {
+    await importBuild(raw);
     return;
   }
   const link = parseRuneLink(raw);

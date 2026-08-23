@@ -6,6 +6,7 @@ import Champions from "./sections/Champions"
 import AiChat from "./sections/AiChat"
 import Patch from "./sections/Patch"
 import Builds from "./sections/Builds"
+import BuildEditor from "./sections/BuildEditor"
 import Settings from "./sections/Settings"
 import UpdateBar from "./UpdateBar"
 import logo from "../assets/logo.png"
@@ -39,6 +40,9 @@ export default function App() {
   const [s, setS] = useState<AppState | null>(null)
   const [section, setSection] = useState<SectionId>("overview")
   const [showSettings, setShowSettings] = useState(false)
+  // Which profile is open for editing. Held here rather than inside Builds so
+  // that leaving the section closes the editor instead of hiding it.
+  const [editing, setEditing] = useState<string | null>(null)
 
   useEffect(() => {
     void window.desktop.getState().then(setS)
@@ -54,18 +58,25 @@ export default function App() {
       <div className="relative z-10 flex min-h-0 flex-1">
         <Rail
           section={section}
-          onSection={setSection}
+          onSection={(id) => {
+            setEditing(null)
+            setSection(id)
+          }}
           settingsOpen={showSettings}
           onSettings={() => setShowSettings((v) => !v)}
           premium={isPremium(s?.account?.tier)}
         />
 
         {/* Keyed on the section so each one ASSEMBLES rather than swapping. */}
-        <main key={section} className="ds-enter min-h-0 flex-1 overflow-hidden px-7 py-6">
+        <main key={`${section}:${editing ?? ""}`} className="ds-enter min-h-0 flex-1 overflow-hidden px-7 py-6">
           {section === "overview" ? (
             s?.client === "attached" ? <Attached s={s} /> : <Waiting />
           ) : !s ? null : section === "builds" ? (
-            <Builds s={s} />
+            editing ? (
+              <BuildEditor s={s} championId={editing} onBack={() => setEditing(null)} />
+            ) : (
+              <Builds s={s} onOpen={setEditing} />
+            )
           ) : section === "matches" ? (
             <Matches s={s} />
           ) : section === "champions" ? (

@@ -109,6 +109,11 @@ function RuneImportNotice({ imp }: { imp: AppState["runeImport"] }) {
           saved as <span className="text-jade">{imp.name}</span>
           {imp.replaced ? " · replaced the previous loldata page" : ""}
         </>
+      ) : imp.state === "build-saved" ? (
+        <>
+          <span className="text-jade">{imp.champion}</span> build saved · {imp.items} item
+          {imp.items === 1 ? "" : "s"} · notices will follow it in game
+        </>
       ) : imp.state === "no-room" ? (
         <>
           <span className="text-citrine">no free rune page slot.</span> delete one in the client

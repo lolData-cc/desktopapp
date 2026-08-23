@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld("desktop", {
   relaunch: () => ipcRenderer.send("app:relaunch"),
   demoGold: () => ipcRenderer.send("gold:demo"),
   saveBuild: () => ipcRenderer.invoke("builds:save"),
+  updateBuild: (id: string, items: number[], runes: string | null) =>
+    ipcRenderer.invoke("builds:update", id, items, runes),
   toggleBuild: (id: string, on: boolean) => ipcRenderer.invoke("builds:toggle", id, on),
   deleteBuild: (id: string) => ipcRenderer.invoke("builds:delete", id),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),

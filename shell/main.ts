@@ -23,7 +23,7 @@ import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type
          chosenAll, runesBackfilledFor, markRunesBackfilled } from "./prefs"
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
-import { linkFromArgv, linkKind, parseAuthLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
+import { linkFromArgv, linkKind, parseAuthLink, parseBuildLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnPurse } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
@@ -118,6 +118,7 @@ export type AppState = {
     | { state: "idle" }
     | { state: "working" }
     | { state: "done"; name: string; replaced: boolean }
+    | { state: "build-saved"; champion: string; items: number }
     | { state: "no-room"; pages: { id: number; name: string }[] }
     | { state: "error"; message: string }
   /** The signed-in lolData account, WITHOUT its token — the renderer never
@@ -896,6 +897,58 @@ async function backfillRuneProfiles(): Promise<void> {
   await pushBuilds()
 }
 
+/**
+ * A build sent from the website, saved as this champion's profile.
+ *
+ * This does NOT touch the League client. A build is a plan for a game that has
+ * not started, where a rune page is something the client can hold right now —
+ * writing items nowhere and runes somewhere would make one button do two
+ * unrelated things.
+ *
+ * An existing profile keeps its enabled setting, so importing a build for a
+ * champion whose notices you turned off does not turn them back on behind you.
+ */
+async function importBuild(raw: string): Promise<void> {
+  const link = parseBuildLink(raw)
+  console.log("[link] build valid=%s champion=%s items=%d",
+    !!link, link?.champion ?? "-", link?.items.length ?? 0)
+
+  if (!link) {
+    push({ runeImport: { state: "error", message: "that link was not a valid build" } })
+    return
+  }
+
+  const champ = await championByName(link.champion).catch(() => null)
+  if (!champ) {
+    push({ runeImport: { state: "error", message: `${link.champion} is not a champion we know` } })
+    return
+  }
+
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
+
+  const existing = await buildFor(champ.slug).catch(() => null)
+  await saveBuild({
+    championId: champ.slug,
+    championName: champ.name,
+    championKey: champ.key,
+    role: existing?.role ?? null,
+    items: link.items,
+    // A build link without runes must not erase a page already saved.
+    runes: link.page ? signatureOf(link.page) : existing?.runes ?? null,
+    enabled: existing?.enabled ?? true,
+    source: "site",
+    savedAt: Date.now(),
+    patch: link.patch ?? existing?.patch ?? null,
+  })
+  await pushBuilds()
+
+  push({ runeImport: { state: "build-saved", champion: champ.name, items: link.items.length } })
+}
+
 async function pushBuilds(): Promise<void> {
   const builds = await listBuilds().catch(() => [])
   console.log("[builds] %d profile(s): %s", builds.length,
@@ -922,6 +975,35 @@ ipcMain.handle("builds:save", async () => {
     patch: m.patch,
   }
   await saveBuild(profile)
+  await pushBuilds()
+})
+
+/**
+ * Save an edited profile.
+ *
+ * Only the two things the editor owns are written — the item order and the
+ * rune page. Everything else is left as it was, so editing a build cannot
+ * silently change which champion it is for, where it came from, or whether it
+ * is enabled.
+ *
+ * Validated here rather than trusted from the renderer: it is our own window,
+ * but a build that reaches the notifier with a hole in it produces a notice
+ * about nothing, and the cost of checking is a line.
+ */
+ipcMain.handle("builds:update", async (_e, championId: string, items: number[], runes: string | null) => {
+  const existing = await buildFor(championId).catch(() => null)
+  if (!existing) return
+
+  const clean = (Array.isArray(items) ? items : [])
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .slice(0, 6)
+
+  await saveBuild({
+    ...existing,
+    items: clean,
+    runes: typeof runes === "string" && runes.length ? runes : existing.runes ?? null,
+    savedAt: Date.now(),
+  })
   await pushBuilds()
 })
 
@@ -1010,6 +1092,11 @@ async function handleLink(raw: string | null): Promise<void> {
       await setSession(auth)
       if (win) { win.show(); win.focus() }
     }
+    return
+  }
+
+  if (linkKind(raw) === "build") {
+    await importBuild(raw)
     return
   }
 

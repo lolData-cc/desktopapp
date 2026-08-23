@@ -16,7 +16,11 @@ const FALLBACK_PATCH = "16.16.1"
 export type Perk = { id: number; name: string; icon: string }
 export type Style = { id: number; name: string; icon: string }
 
-let cache: { perks: Map<number, Perk>; styles: Map<number, Style> } | null = null
+/** A style with its rows, which is what an editor needs: picking a rune is
+ *  picking one PER ROW, and a flat list of ids cannot express that. */
+export type RuneTree = Style & { slots: Perk[][] }
+
+let cache: { perks: Map<number, Perk>; styles: Map<number, Style>; trees: RuneTree[] } | null = null
 let patch = FALLBACK_PATCH
 
 /** The stat shards, which runesReforged.json does not carry. */
@@ -51,20 +55,57 @@ async function load() {
 
   const perks = new Map<number, Perk>()
   const styles = new Map<number, Style>()
+  const structured: RuneTree[] = []
   for (const tree of trees) {
-    styles.set(tree.id, { id: tree.id, name: tree.name, icon: `${CDN}/img/${tree.icon}` })
+    const style: Style = { id: tree.id, name: tree.name, icon: `${CDN}/img/${tree.icon}` }
+    styles.set(tree.id, style)
+
+    const slots: Perk[][] = []
     for (const slot of tree.slots) {
+      const row: Perk[] = []
       for (const r of slot.runes) {
-        perks.set(r.id, { id: r.id, name: r.name, icon: `${CDN}/img/${r.icon}` })
+        const perk = { id: r.id, name: r.name, icon: `${CDN}/img/${r.icon}` }
+        perks.set(r.id, perk)
+        row.push(perk)
       }
+      slots.push(row)
     }
+    structured.push({ ...style, slots })
   }
   for (const [id, s] of Object.entries(SHARDS)) {
     perks.set(Number(id), { id: Number(id), name: s.name, icon: `${CDN}/img/${s.icon}` })
   }
 
-  cache = { perks, styles }
+  cache = { perks, styles, trees: structured }
   return cache
+}
+
+/**
+ * The five trees, each with its rows in order — keystone row first.
+ *
+ * Empty rather than thrown on a failed fetch: an editor with no trees can say
+ * so, where an exception takes the whole section down with it.
+ */
+export async function runeTrees(): Promise<RuneTree[]> {
+  return (await load().catch(() => null))?.trees ?? []
+}
+
+/**
+ * The stat shards, as three rows.
+ *
+ * Riot publishes no data file for these, so the ROWS are hard-coded here from
+ * what the client offers. Getting a row wrong would let the editor build a page
+ * the client refuses, so this is deliberately explicit rather than derived.
+ */
+export const SHARD_ROWS: number[][] = [
+  [5008, 5005, 5007],
+  [5008, 5010, 5001],
+  [5011, 5013, 5001],
+]
+
+export async function shardRows(): Promise<Perk[][]> {
+  const { perks } = (await load().catch(() => null)) ?? { perks: new Map<number, Perk>() }
+  return SHARD_ROWS.map((row) => row.map((id) => perks.get(id)).filter((p): p is Perk => !!p))
 }
 
 /** Null for an id we do not know, so the caller can leave a gap rather than
