@@ -13,8 +13,9 @@ import { dirname, join } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
-import { liveGameStats, liveEvents, livePlayers } from "../src/live/client"
-import { nextObjective, type NextObjective } from "../src/data/objectives"
+import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnSpells } from "../src/live/client"
+import { spellByName, type Spell } from "../src/data/spells"
+import { nextObjective } from "../src/data/objectives"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
@@ -31,8 +32,16 @@ export type AppState = {
     allies: { locked: number; total: number }
     enemies: { locked: number; total: number }
   } | null
-  /** Only while a match is running. Null between games. */
-  objective: NextObjective | null
+  /** Raised for a few seconds when something is about to happen, then cleared.
+   *  Null the rest of the time — the overlay is a notification now, not a
+   *  panel that lives on screen for the whole match. */
+  notice: {
+    kind: "dragon" | "elder"
+    /** Seconds remaining AT THE MOMENT it was raised; the renderer ticks down. */
+    inSeconds: number
+    raisedAt: number
+    spells: Spell[]
+  } | null
 }
 
 let state: AppState = {
@@ -41,7 +50,7 @@ let state: AppState = {
   phase: null,
   patch: null,
   select: null,
-  objective: null,
+  notice: null,
 }
 
 let win: BrowserWindow | null = null
@@ -56,13 +65,10 @@ function push(patch: Partial<AppState>): void {
   // rather than to a toggle means there is no state where it is left hanging
   // over the client, which is the thing that makes overlays feel invasive.
   if (state.phase !== before) {
-    if (state.phase === "InProgress" || state.phase === "Reconnect") {
-      showOverlay()
-      startGameClock()
-    } else {
-      hideOverlay()
-      stopGameClock()
-    }
+    // The overlay is no longer tied to the phase — only a notice puts it on
+    // screen. The phase just decides whether we are watching for one.
+    if (state.phase === "InProgress" || state.phase === "Reconnect") startGameClock()
+    else stopGameClock()
   }
 }
 
@@ -123,29 +129,84 @@ async function readSelect(data: unknown): Promise<void> {
 
 /* ── the in-game clock ─────────────────────────────────────────────────────
    The 2999 API has no event stream, so this polls — but only while a match is
-   actually running, and it stops the moment one ends. Two seconds is plenty:
-   the number on screen only has to be right to the second, and this is
-   loopback. */
+   running, and it stops the moment one ends.
+
+   The overlay is raised for a few seconds and then dropped. An overlay that
+   sits on screen for forty minutes stops being read after the first two, and
+   is in the way for the other thirty-eight. */
+const NOTIFY_LEAD = 90        // seconds before the spawn — the "1:30" mark
+const NOTICE_MS = 9_000       // how long it stays up
+const POLL_MS = 2_000
+
 let tick: ReturnType<typeof setInterval> | null = null
+let noticeTimer: ReturnType<typeof setTimeout> | null = null
+/** The spawn we have already announced, on the game clock, so one dragon
+ *  produces one notice rather than one per poll. */
+let announced: number | null = null
+let ownSpells: Spell[] = []
+
+async function readOwnSpells(): Promise<void> {
+  if (ownSpells.length) return
+  const name = await liveActivePlayerName()
+  if (!name) return
+  const pair = await liveOwnSpells(name)
+  if (!pair) return
+  const resolved = await Promise.all(pair.map((n) => spellByName(n).catch(() => null)))
+  ownSpells = resolved.filter((x): x is Spell => x !== null)
+}
+
+function dropNotice(): void {
+  if (noticeTimer) clearTimeout(noticeTimer)
+  noticeTimer = null
+  push({ notice: null })
+  hideOverlay()
+}
+
+function raiseNotice(kind: "dragon" | "elder", inSeconds: number): void {
+  if (noticeTimer) clearTimeout(noticeTimer)
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells } })
+  showOverlay()
+  noticeTimer = setTimeout(dropNotice, NOTICE_MS)
+}
 
 async function readObjective(): Promise<void> {
   const stats = await liveGameStats()
-  if (!stats) return push({ objective: null })
+  if (!stats) return
+
+  void readOwnSpells()
 
   const [events, players] = await Promise.all([liveEvents(), livePlayers()])
-  push({ objective: nextObjective(events, stats.gameTime, players ?? []) })
+  const next = nextObjective(events, stats.gameTime, players ?? [])
+  if (!next) return
+
+  // Absolute spawn time on the game clock — stable across polls, unlike the
+  // remaining seconds, so it identifies THIS spawn and not a moment.
+  const spawnAt = Math.round(stats.gameTime + next.inSeconds)
+
+  if (
+    next.inSeconds <= NOTIFY_LEAD &&
+    next.inSeconds > 0 &&
+    announced !== spawnAt
+  ) {
+    announced = spawnAt
+    raiseNotice(next.kind, next.inSeconds)
+  }
 }
 
 function startGameClock(): void {
   if (tick) return
+  announced = null
+  ownSpells = []
   void readObjective()
-  tick = setInterval(() => void readObjective(), 2000)
+  tick = setInterval(() => void readObjective(), POLL_MS)
 }
 
 function stopGameClock(): void {
   if (tick) clearInterval(tick)
   tick = null
-  push({ objective: null })
+  announced = null
+  ownSpells = []
+  dropNotice()
 }
 
 function createWindow(): void {
@@ -185,8 +246,11 @@ ipcMain.handle("state:get", () => state)
 ipcMain.on("win:minimise", () => win?.minimize())
 ipcMain.on("win:close", () => win?.close())
 // Development affordance: seeing the overlay should not require a live match.
+// Development affordance: raise a notice on demand, because waiting for a real
+// dragon every time the layout changes is not a workable loop.
 ipcMain.on("overlay:preview", (_e, on: boolean) => {
-  if (on) { showOverlay(); startGameClock() } else { hideOverlay(); stopGameClock() }
+  if (on) raiseNotice("dragon", NOTIFY_LEAD)
+  else dropNotice()
 })
 
 app.whenReady().then(async () => {

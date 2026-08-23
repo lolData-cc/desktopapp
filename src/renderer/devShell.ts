@@ -20,7 +20,7 @@ const SCENES: Record<string, unknown> = {
     phase: null,
     patch: "16.16.1",
     select: null,
-    objective: null,
+    notice: null,
   },
   lobby: {
     client: "attached",
@@ -28,7 +28,7 @@ const SCENES: Record<string, unknown> = {
     phase: "Lobby",
     patch: "16.16.1",
     select: null,
-    objective: null,
+    notice: null,
   },
   select: {
     client: "attached",
@@ -41,7 +41,7 @@ const SCENES: Record<string, unknown> = {
       allies: { locked: 3, total: 5 },
       enemies: { locked: 1, total: 5 },
     },
-    objective: null,
+    notice: null,
   },
   game: {
     client: "attached",
@@ -49,7 +49,7 @@ const SCENES: Record<string, unknown> = {
     phase: "InProgress",
     patch: "16.16.1",
     select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
-    objective: { kind: "dragon", inSeconds: 214, taken: 1 },
+    notice: null,
   },
   // the state the whole feature exists for
   soon: {
@@ -58,15 +58,31 @@ const SCENES: Record<string, unknown> = {
     phase: "InProgress",
     patch: "16.16.1",
     select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
-    objective: { kind: "dragon", inSeconds: 118, taken: 1 },
+    notice: {
+      kind: "dragon",
+      inSeconds: 90,
+      raisedAt: Date.now(),
+      spells: [
+        { name: "Flash", icon: "https://cdn2.loldata.cc/16.16.1/img/spell/SummonerFlash.png" },
+        { name: "Ignite", icon: "https://cdn2.loldata.cc/16.16.1/img/spell/SummonerDot.png" },
+      ],
+    },
   },
-  up: {
+  elder: {
     client: "attached",
     summoner: { name: "yuumi45", tag: "EU1", level: 104 },
     phase: "InProgress",
     patch: "16.16.1",
     select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
-    objective: { kind: "elder", inSeconds: -4, taken: 4 },
+    notice: {
+      kind: "elder",
+      inSeconds: 90,
+      raisedAt: Date.now(),
+      spells: [
+        { name: "Flash", icon: "https://cdn2.loldata.cc/16.16.1/img/spell/SummonerFlash.png" },
+        { name: "Ignite", icon: "https://cdn2.loldata.cc/16.16.1/img/spell/SummonerDot.png" },
+      ],
+    },
   },
 }
 

@@ -1,30 +1,26 @@
 import { useEffect, useRef, useState } from "react"
 
 /**
- * What sits over the game.
+ * The notification that sits over the game.
  *
- * The build half is static: the champion locked before the match and what we
- * already publish for it. The objective clock is derived from the public game
- * clock and kill events — it is a COUNTDOWN, shown continuously, that becomes
- * prominent as it runs out. Deliberately not a notification: Riot's prohibited
- * list names alerts that fire on game state, and a thing that appears when
- * something is about to happen is an alert however it is dressed. A number that
- * was always on screen and grew louder is a display.
+ * It is on screen for a few seconds and then gone. An overlay that lives there
+ * for a whole match stops being read after the first two minutes and is in the
+ * way for the other thirty-eight.
  *
- * The window underneath is click-through, so none of this may look interactive.
+ * It is still a COUNTDOWN rather than an alarm — the number keeps running while
+ * the card is up, so what arrives is a reading, not a klaxon. The window
+ * underneath is click-through, so none of this may look interactive.
  */
-type Champion = { slug: string; key: number; name: string }
-type Objective = { kind: "dragon" | "elder"; inSeconds: number; taken: number }
-type AppState = {
-  client: "waiting" | "attached"
-  phase: string | null
-  patch: string | null
-  select: { champion: Champion | null; role: string | null } | null
-  objective: Objective | null
+type Spell = { name: string; icon: string }
+type Notice = {
+  kind: "dragon" | "elder"
+  inSeconds: number
+  raisedAt: number
+  spells: Spell[]
 }
+type AppState = { notice: Notice | null }
 
-const CDN = "https://cdn2.loldata.cc"
-const LOUD_AT = 120 // seconds — where the clock stops being background
+const DRAGON_ICON = "/img/dragon.png"
 
 const clock = (s: number) => {
   const v = Math.max(0, Math.floor(s))
@@ -32,147 +28,128 @@ const clock = (s: number) => {
 }
 
 export default function Overlay() {
-  const [s, setS] = useState<AppState | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
+  // Kept separate from `notice` so the card can animate OUT before it is
+  // unmounted; dropping it the instant state clears would make it vanish.
+  const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    void window.desktop.getState().then(setS as never)
-    return window.desktop.onState(setS as never)
+    const apply = (s: AppState) => {
+      if (s.notice) { setNotice(s.notice); setVisible(true) }
+      else setVisible(false)
+    }
+    void window.desktop.getState().then(apply as never)
+    return window.desktop.onState(apply as never)
   }, [])
 
-  const champ = s?.select?.champion ?? null
-
   return (
-    // Transparent everywhere except the callout: the rest of the screen is the
-    // game, and the window is only a carrier.
     <div className="pointer-events-none h-full w-full bg-transparent">
-      <div className="absolute right-0 top-[9%] w-[384px]">
-        {/* Feathered darkening rather than a plate. Its alpha reaches zero well
-            inside its own box, so there is no edge to notice over the art. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -inset-x-12 -inset-y-10 blur-[10px]"
-          style={{
-            background:
-              "radial-gradient(58% 62% at 52% 50%," +
-              " rgba(4,10,12,0.86) 0%," +
-              " rgba(4,10,12,0.62) 24%," +
-              " rgba(4,10,12,0.34) 40%," +
-              " rgba(4,10,12,0.12) 52%," +
-              " rgba(4,10,12,0) 62%)",
-          }}
-        />
-
-        {/* the rail, running in off the right edge */}
-        <svg
-          aria-hidden
-          viewBox="0 0 384 12"
-          preserveAspectRatio="none"
-          className="absolute inset-x-0 top-0 h-[12px] w-full overflow-visible"
-          style={{ filter: "drop-shadow(0 0 4px rgba(0,217,146,0.5))" }}
-        >
-          <path
-            d="M 2 11 L 11 2 L 384 2"
-            fill="none"
-            stroke="#00d992"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-            opacity="0.9"
-          />
-          <rect x="305" y="-2.5" width="9" height="9" transform="rotate(45 309.5 2)" fill="#00d992" />
-        </svg>
-
-        <div
-          className="relative pl-5 pr-2 pt-[14px]"
-          style={{ textShadow: "0 1px 6px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.85)" }}
-        >
-          <div className="flex items-center gap-3">
-            {champ && (
-              <img
-                src={`${CDN}/16.16.1/img/champion/${champ.slug}.png`}
-                alt=""
-                className="h-12 w-12 shrink-0 rounded-[3px] ring-1 ring-jade/30"
-                style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.9))" }}
-              />
-            )}
-
-            <div className="min-w-0">
-              <p className="font-jetbrains text-[9px] uppercase tracking-[0.28em] text-jade/85">
-                lolData · build
-              </p>
-              <p className="font-chakrapetch text-[21px] font-bold leading-tight text-flash">
-                {champ?.name ?? "No champion"}
-              </p>
-              <p className="font-jetbrains text-[10px] leading-tight text-flash/50">
-                {s?.select?.role ?? "role not assigned"}
-                {s?.patch ? ` · patch ${s.patch}` : ""}
-              </p>
-            </div>
-          </div>
-
-          {s?.objective && <ObjectiveClock o={s.objective} />}
-        </div>
-      </div>
+      {notice && <Card n={notice} visible={visible} />}
     </div>
   )
 }
 
-/**
- * The countdown.
- *
- * The shell refreshes every two seconds, which would make the number jump in
- * steps. It ticks down locally between refreshes and resnaps whenever a fresh
- * reading arrives, so the seconds run smoothly without drifting away from the
- * game clock.
- */
-function ObjectiveClock({ o }: { o: Objective }) {
-  const [left, setLeft] = useState(o.inSeconds)
-  const base = useRef({ at: Date.now(), value: o.inSeconds })
+function Card({ n, visible }: { n: Notice; visible: boolean }) {
+  const [left, setLeft] = useState(n.inSeconds)
+  const base = useRef({ at: n.raisedAt, value: n.inSeconds })
 
   useEffect(() => {
-    base.current = { at: Date.now(), value: o.inSeconds }
-    setLeft(o.inSeconds)
-  }, [o.inSeconds, o.kind])
+    base.current = { at: n.raisedAt, value: n.inSeconds }
+    setLeft(n.inSeconds)
+  }, [n.raisedAt, n.inSeconds])
 
   useEffect(() => {
     const id = setInterval(() => {
-      const elapsed = (Date.now() - base.current.at) / 1000
-      setLeft(base.current.value - elapsed)
+      setLeft(base.current.value - (Date.now() - base.current.at) / 1000)
     }, 250)
     return () => clearInterval(id)
   }, [])
 
-  const up = left <= 0
-  const loud = left <= LOUD_AT
-  const elder = o.kind === "elder"
-
-  // One accent decides the whole row, so the state reads before the words do.
-  const accent = up ? "#ff6286" : loud ? "#FFB615" : "#00d992"
+  const elder = n.kind === "elder"
+  const accent = elder ? "#FFB615" : "#00d992"
 
   return (
-    <div className="mt-3 flex items-baseline gap-2.5 border-t border-jade/[0.14] pt-2.5">
+    <div
+      className="absolute right-0 top-[13%] w-[400px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      style={{
+        // In from the right edge, out the same way. One movement, reversed.
+        transform: visible ? "translateX(0)" : "translateX(105%)",
+        opacity: visible ? 1 : 0,
+      }}
+    >
+      {/* Feathered darkening rather than a plate: its alpha reaches zero well
+          inside its own box, so there is no edge to notice over the art. */}
       <span
-        className="font-jetbrains text-[9px] uppercase tracking-[0.24em]"
-        style={{ color: accent, opacity: loud ? 0.95 : 0.6 }}
-      >
-        {elder ? "elder" : "dragon"}
-      </span>
-
-      <span
-        className="font-chakrapetch font-bold tabular-nums leading-none transition-all duration-500"
+        aria-hidden
+        className="pointer-events-none absolute -inset-x-12 -inset-y-10 blur-[10px]"
         style={{
-          color: accent,
-          fontSize: loud ? 26 : 18,
-          textShadow: loud ? `0 0 16px ${accent}66, 0 1px 6px rgba(0,0,0,0.95)` : "0 1px 6px rgba(0,0,0,0.95)",
+          background:
+            "radial-gradient(58% 62% at 54% 50%," +
+            " rgba(4,10,12,0.90) 0%," +
+            " rgba(4,10,12,0.66) 24%," +
+            " rgba(4,10,12,0.36) 40%," +
+            " rgba(4,10,12,0.13) 52%," +
+            " rgba(4,10,12,0) 62%)",
         }}
-      >
-        {up ? "UP" : clock(left)}
-      </span>
+      />
 
-      {o.taken > 0 && (
-        <span className="ml-auto font-jetbrains text-[9px] tabular-nums text-flash/35">
-          {o.taken} taken
-        </span>
-      )}
+      {/* the rail, running in off the right edge */}
+      <svg
+        aria-hidden
+        viewBox="0 0 400 12"
+        preserveAspectRatio="none"
+        className="absolute inset-x-0 top-0 h-[12px] w-full overflow-visible"
+        style={{ filter: `drop-shadow(0 0 5px ${accent}88)` }}
+      >
+        <path d="M 2 11 L 11 2 L 400 2" fill="none" stroke={accent} strokeWidth="1"
+              vectorEffect="non-scaling-stroke" opacity="0.9" />
+        <rect x="318" y="-2.5" width="9" height="9" transform="rotate(45 322.5 2)" fill={accent} />
+      </svg>
+
+      <div
+        className="relative pl-5 pr-3 pt-[15px]"
+        style={{ textShadow: "0 1px 6px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.85)" }}
+      >
+        <div className="flex items-center gap-3.5">
+          <img
+            src={DRAGON_ICON}
+            alt=""
+            className="h-11 w-11 shrink-0"
+            style={{ filter: `drop-shadow(0 0 10px ${accent}55) drop-shadow(0 2px 6px rgba(0,0,0,0.9))` }}
+          />
+
+          <div className="min-w-0">
+            <p className="font-jetbrains text-[9px] uppercase tracking-[0.28em]" style={{ color: accent }}>
+              lolData
+            </p>
+            <p className="font-chakrapetch text-[19px] font-bold leading-tight text-flash">
+              {elder ? "Elder" : "Drake"} is spawning in{" "}
+              <span className="tabular-nums" style={{ color: accent }}>{clock(left)}</span>
+            </p>
+          </div>
+        </div>
+
+        {n.spells.length > 0 && (
+          <div className="mt-3 flex items-center gap-2.5 border-t border-jade/[0.14] pt-2.5">
+            <span className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
+              your spells
+            </span>
+            {n.spells.map((sp) => (
+              <span key={sp.name} className="flex items-center gap-1.5">
+                <img
+                  src={sp.icon}
+                  alt=""
+                  className="h-7 w-7 rounded-[3px] ring-1 ring-flash/15"
+                  style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.9))" }}
+                />
+                <span className="font-chakrapetch text-[12px] font-semibold text-flash/70">
+                  {sp.name}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

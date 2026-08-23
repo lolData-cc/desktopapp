@@ -3241,10 +3241,49 @@ function get(path) {
   });
 }
 var liveGameStats = () => get("/gamestats");
+var liveActivePlayerName = () => get("/activeplayername");
+async function liveOwnSpells(riotId) {
+  const r = await get(`/playersummonerspells?riotId=${encodeURIComponent(riotId)}`);
+  const a = r?.summonerSpellOne?.displayName;
+  const b = r?.summonerSpellTwo?.displayName;
+  return a && b ? [a, b] : null;
+}
 var livePlayers = () => get("/playerlist");
 async function liveEvents() {
   const wrap = await get("/eventdata");
   return wrap?.Events ?? [];
+}
+
+// src/data/spells.ts
+var CDN2 = "https://cdn2.loldata.cc";
+var FALLBACK_PATCH2 = "16.16.1";
+var byName = null;
+var patch2 = FALLBACK_PATCH2;
+async function load2() {
+  if (byName)
+    return byName;
+  const marker = await fetch(`${CDN2}/_current_version.txt`).catch(() => null);
+  if (marker?.ok)
+    patch2 = (await marker.text()).trim() || FALLBACK_PATCH2;
+  const res = await fetch(`${CDN2}/${patch2}/data/en_US/summoner.json`);
+  if (!res.ok)
+    throw new Error(`summoner data ${res.status}`);
+  const json = await res.json();
+  const map = new Map;
+  for (const s of Object.values(json.data)) {
+    if (!map.has(s.name))
+      map.set(s.name, s.id);
+  }
+  byName = map;
+  return map;
+}
+async function spellByName(displayName) {
+  if (!displayName)
+    return null;
+  const id = (await load2()).get(displayName);
+  if (!id)
+    return null;
+  return { name: displayName, icon: `${CDN2}/${patch2}/img/spell/${id}.png` };
 }
 
 // src/data/objectives.ts
@@ -3297,22 +3336,19 @@ var state = {
   phase: null,
   patch: null,
   select: null,
-  objective: null
+  notice: null
 };
 var win = null;
-function push(patch2) {
+function push(patch3) {
   const before = state.phase;
-  state = { ...state, ...patch2 };
+  state = { ...state, ...patch3 };
   win?.webContents.send("state", state);
   sendOverlay("state", state);
   if (state.phase !== before) {
-    if (state.phase === "InProgress" || state.phase === "Reconnect") {
-      showOverlay();
+    if (state.phase === "InProgress" || state.phase === "Reconnect")
       startGameClock();
-    } else {
-      hideOverlay();
+    else
       stopGameClock();
-    }
   }
 }
 var lcu = new LcuConnection({
@@ -3361,25 +3397,69 @@ async function readSelect(data) {
     }
   });
 }
+var NOTIFY_LEAD = 90;
+var NOTICE_MS = 9000;
+var POLL_MS = 2000;
 var tick = null;
+var noticeTimer = null;
+var announced = null;
+var ownSpells = [];
+async function readOwnSpells() {
+  if (ownSpells.length)
+    return;
+  const name = await liveActivePlayerName();
+  if (!name)
+    return;
+  const pair = await liveOwnSpells(name);
+  if (!pair)
+    return;
+  const resolved = await Promise.all(pair.map((n) => spellByName(n).catch(() => null)));
+  ownSpells = resolved.filter((x) => x !== null);
+}
+function dropNotice() {
+  if (noticeTimer)
+    clearTimeout(noticeTimer);
+  noticeTimer = null;
+  push({ notice: null });
+  hideOverlay();
+}
+function raiseNotice(kind, inSeconds) {
+  if (noticeTimer)
+    clearTimeout(noticeTimer);
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), spells: ownSpells } });
+  showOverlay();
+  noticeTimer = setTimeout(dropNotice, NOTICE_MS);
+}
 async function readObjective() {
   const stats = await liveGameStats();
   if (!stats)
-    return push({ objective: null });
+    return;
+  readOwnSpells();
   const [events, players] = await Promise.all([liveEvents(), livePlayers()]);
-  push({ objective: nextObjective(events, stats.gameTime, players ?? []) });
+  const next = nextObjective(events, stats.gameTime, players ?? []);
+  if (!next)
+    return;
+  const spawnAt = Math.round(stats.gameTime + next.inSeconds);
+  if (next.inSeconds <= NOTIFY_LEAD && next.inSeconds > 0 && announced !== spawnAt) {
+    announced = spawnAt;
+    raiseNotice(next.kind, next.inSeconds);
+  }
 }
 function startGameClock() {
   if (tick)
     return;
+  announced = null;
+  ownSpells = [];
   readObjective();
-  tick = setInterval(() => void readObjective(), 2000);
+  tick = setInterval(() => void readObjective(), POLL_MS);
 }
 function stopGameClock() {
   if (tick)
     clearInterval(tick);
   tick = null;
-  push({ objective: null });
+  announced = null;
+  ownSpells = [];
+  dropNotice();
 }
 function createWindow() {
   win = new BrowserWindow2({
@@ -3411,13 +3491,10 @@ ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
 ipcMain.on("win:close", () => win?.close());
 ipcMain.on("overlay:preview", (_e, on) => {
-  if (on) {
-    showOverlay();
-    startGameClock();
-  } else {
-    hideOverlay();
-    stopGameClock();
-  }
+  if (on)
+    raiseNotice("dragon", NOTIFY_LEAD);
+  else
+    dropNotice();
 });
 app.whenReady().then(async () => {
   createWindow();

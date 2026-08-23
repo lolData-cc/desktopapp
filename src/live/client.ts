@@ -53,6 +53,18 @@ function get<T>(path: string): Promise<T | null> {
 }
 
 export const liveGameStats = () => get<GameStats>("/gamestats")
+export const liveActivePlayerName = () => get<string>("/activeplayername")
+
+/** Which two spells the player took. Identity only — Riot publishes no
+ *  cooldown for them anywhere, verified against a live game. */
+export async function liveOwnSpells(riotId: string): Promise<[string, string] | null> {
+  const r = await get<{ summonerSpellOne?: { displayName?: string }; summonerSpellTwo?: { displayName?: string } }>(
+    `/playersummonerspells?riotId=${encodeURIComponent(riotId)}`
+  )
+  const a = r?.summonerSpellOne?.displayName
+  const b = r?.summonerSpellTwo?.displayName
+  return a && b ? [a, b] : null
+}
 export const livePlayers = () => get<PlayerSlot[]>("/playerlist")
 
 export async function liveEvents(): Promise<GameEvent[]> {
