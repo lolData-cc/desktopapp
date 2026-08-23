@@ -19667,6 +19667,19 @@ ipcMain.handle("update:download", async () => {
   await downloadUpdate();
 });
 ipcMain.on("update:install", () => installUpdate());
+var GOLD_DEMOS = [
+  { ours: 15250, theirs: 7700, oursCounted: 5, theirsCounted: 5 },
+  { ours: 21400, theirs: 23900, oursCounted: 5, theirsCounted: 5 },
+  { ours: 12050, theirs: 12050, oursCounted: 5, theirsCounted: 5 },
+  { ours: 3400, theirs: 5100, oursCounted: 4, theirsCounted: 5 },
+  null
+];
+var goldDemo = -1;
+ipcMain.on("gold:demo", () => {
+  goldDemo = (goldDemo + 1) % GOLD_DEMOS.length;
+  push({ gold: GOLD_DEMOS[goldDemo] ?? null });
+  syncOverlay();
+});
 ipcMain.on("app:relaunch", () => {
   app3.relaunch();
   app3.quit();

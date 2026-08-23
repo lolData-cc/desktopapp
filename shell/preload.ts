@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("desktop", {
   downloadUpdate: () => ipcRenderer.invoke("update:download"),
   installUpdate: () => ipcRenderer.send("update:install"),
   relaunch: () => ipcRenderer.send("app:relaunch"),
+  demoGold: () => ipcRenderer.send("gold:demo"),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability: string | null) => ipcRenderer.send("hud:hint", ability),
   // Diagnostic: the overlay says how big the surface it draws into really is,

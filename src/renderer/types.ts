@@ -89,6 +89,7 @@ export type AppState = {
     | { state: "done"; name: string; replaced: boolean }
     | { state: "no-room"; pages: { id: number; name: string }[] }
     | { state: "error"; message: string }
+  gold: { ours: number; theirs: number; oursCounted: number; theirsCounted: number } | null
   account: { email: string | null; tier: string | null } | null
   update:
     | { state: "idle"; version: string }
@@ -128,6 +129,7 @@ declare global {
       downloadUpdate(): Promise<void>
       installUpdate(): void
       relaunch(): void
+      demoGold(): void
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void

@@ -527,6 +527,31 @@ ipcMain.on("update:install", () => installUpdate())
  *  quit() rather than exit(): before-quit is what stops the game clock and
  *  destroys the overlay, and skipping it would leave a click-through window
  *  over the game with nothing behind it. */
+/**
+ * Debug: put the gold bar on screen without a game.
+ *
+ * Cycles rather than toggles — the bar has four readings worth seeing (ahead,
+ * behind, level, and a scoreboard that came back short) and a single fixed
+ * pair of numbers would only ever prove one of them draws.
+ *
+ * A real poll overwrites this the moment a game is running, which is correct:
+ * fake numbers must never survive next to true ones.
+ */
+const GOLD_DEMOS: (TeamGold | null)[] = [
+  { ours: 15250, theirs: 7700, oursCounted: 5, theirsCounted: 5 },   // well ahead
+  { ours: 21400, theirs: 23900, oursCounted: 5, theirsCounted: 5 },  // behind
+  { ours: 12050, theirs: 12050, oursCounted: 5, theirsCounted: 5 },  // level
+  { ours: 3400, theirs: 5100, oursCounted: 4, theirsCounted: 5 },    // short read
+  null,                                                              // off
+]
+let goldDemo = -1
+
+ipcMain.on("gold:demo", () => {
+  goldDemo = (goldDemo + 1) % GOLD_DEMOS.length
+  push({ gold: GOLD_DEMOS[goldDemo] ?? null })
+  syncOverlay()
+})
+
 ipcMain.on("app:relaunch", () => {
   app.relaunch()
   app.quit()

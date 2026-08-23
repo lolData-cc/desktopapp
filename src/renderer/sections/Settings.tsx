@@ -39,6 +39,20 @@ export default function Settings({ s }: { s: AppState }) {
         show 5s
       </button>
 
+      {/* Steps through the bar's four readings — ahead, behind, level, and a
+          short scoreboard — because one fixed pair of numbers would only ever
+          show that it draws. */}
+      <button
+        type="button"
+        onClick={() => window.desktop.demoGold()}
+        title="Step through the gold bar's readings with made-up numbers"
+        className={`win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
+          s.gold ? "bg-jade/15 text-jade" : "text-flash/30"
+        }`}
+      >
+        gold {s.gold ? `· ${s.gold.ours > s.gold.theirs ? "ahead" : s.gold.ours < s.gold.theirs ? "behind" : "even"}` : "· off"}
+      </button>
+
       {/* Restarts the process — nothing is replaced and nothing is installed.
           It exists because the boot animation is otherwise only watchable by
           closing the app and starting it from a terminal. */}

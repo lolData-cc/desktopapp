@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("desktop", {
   downloadUpdate: () => ipcRenderer.invoke("update:download"),
   installUpdate: () => ipcRenderer.send("update:install"),
   relaunch: () => ipcRenderer.send("app:relaunch"),
+  demoGold: () => ipcRenderer.send("gold:demo"),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)
