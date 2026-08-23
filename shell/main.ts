@@ -24,7 +24,8 @@ import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
 import { linkFromArgv, linkKind, parseAuthLink, parseBuildLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
-import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnPurse } from "../src/live/client"
+import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnPurse,
+         type GameEvent, type PlayerSlot } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
 import { dragonTally, nextObjective, type DragonElement, type DragonTally } from "../src/data/objectives"
@@ -560,24 +561,54 @@ function readOpening(): void {
   })
 }
 
-async function readShop(riotId: string | null): Promise<void> {
+/**
+ * Which champion we are actually playing, from the game rather than from champ
+ * select.
+ *
+ * ⚠️ `state.select` is CLEARED the moment the phase leaves ChampSelect, so in a
+ * running game it is null — reading the profile from it meant the profile was
+ * never consulted in the only place it matters, and the notices silently fell
+ * back to the live calculation. The live player list is the source that still
+ * exists once the game has started.
+ */
+async function playingChampion(
+  players: { riotId?: string; summonerName?: string; championName?: string }[],
+  me: string | null
+): Promise<string | null> {
+  if (!me) return null
+  const mine = players.find((p) => p.riotId === me || p.summonerName === me)
+  if (!mine?.championName) return null
+  const champ = await championByName(mine.championName).catch(() => null)
+  return champ?.slug ?? null
+}
+
+/** Only when it CHANGES: this runs every poll, and a line a second would bury
+ *  everything else in the log. */
+let lastShopLog = ""
+function shopLog(format: string, ...args: unknown[]): void {
+  const line = format + JSON.stringify(args)
+  if (line === lastShopLog) return
+  lastShopLog = line
+  console.log("[shop] " + format, ...args)
+}
+
+async function readShop(riotId: string | null, championId: string | null): Promise<void> {
   // A saved profile wins over the live calculation: it is a decision the player
   // made, and a query result should not quietly overrule one. Disabled profiles
   // fall through to nothing rather than to the live build — turning a build off
   // means silence, not a different build.
-  const champ = state.select?.champion
-  const saved = champ ? await buildFor(champ.slug).catch(() => null) : null
+  const saved = championId ? await buildFor(championId).catch(() => null) : null
   if (saved && !saved.enabled) return
 
   const build = saved?.items.map((item) => ({ item })) ?? state.matchup?.slots
-  if (!riotId || !build?.length) return
+  if (!riotId || !build?.length) return shopLog("no build for %s", championId ?? "unknown champion")
 
   const purse = await liveOwnPurse(riotId).catch(() => null)
-  if (!purse) return
+  if (!purse) return shopLog("no purse for %s", riotId)
 
   const owned = new Set(purse.items.map((i) => i.itemID))
   const nextIndex = build.findIndex((s) => !owned.has(s.item))
-  if (nextIndex < 0) return                       // the build is finished
+  if (nextIndex < 0) return shopLog("build finished")
 
   const next = build[nextIndex]!
   if (announcedItems.has(next.item)) return
@@ -585,7 +616,13 @@ async function readShop(riotId: string | null): Promise<void> {
   void readBoots(purse.items)
 
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null)
-  if (!cost?.affordable) return
+  if (!cost) return shopLog("no price for item %d", next.item)
+
+  shopLog("%s slot %d/%d: %s needs %dg, have %dg%s",
+    saved ? "profile" : "live build", nextIndex + 1, build.length,
+    cost.name, cost.remaining, purse.gold, cost.affordable ? " → NOTIFY" : "")
+
+  if (!cost.affordable) return
 
   announcedItems.add(next.item)
   raiseNotice("item", 0, null, { ours: [], theirs: [] }, NOTICE_MS, {
@@ -597,7 +634,17 @@ async function readShop(riotId: string | null): Promise<void> {
   })
 }
 
-async function readObjective(): Promise<void> {
+/**
+ * One poll of the running game.
+ *
+ * ⚠️ The three things this drives are INDEPENDENT and must stay that way. They
+ * used to share the objective's early return, so a game with no objective due —
+ * which is most of the first ten minutes, and any time a drake has just died —
+ * silently stopped checking the shop and stopped updating the gold bar. The
+ * symptom was a build notice that never arrived, with nothing to suggest the
+ * check was not running at all.
+ */
+async function readGame(): Promise<void> {
   const stats = await liveGameStats()
   if (!stats) return
 
@@ -606,14 +653,12 @@ async function readObjective(): Promise<void> {
     livePlayers(),
     liveActivePlayerName().catch(() => null),
   ])
-  const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain)
-  if (!next) return
-
-  const tally = dragonTally(events, players ?? [], me)
 
   // Same read, no extra request: /playerlist already carries every inventory.
   const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null
-  void readShop(me)
+
+  const championId = await playingChampion(players ?? [], me)
+  void readShop(me, championId)
 
   const gold = await teamGold(players ?? [], myTeam).catch(() => null)
   if (gold) {
@@ -621,9 +666,24 @@ async function readObjective(): Promise<void> {
     syncOverlay()
   }
 
+  readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain)
+}
+
+function readObjective(
+  gameTime: number,
+  events: GameEvent[],
+  players: PlayerSlot[],
+  me: string | null,
+  mapTerrain: string | undefined
+): void {
+  const next = nextObjective(events, gameTime, players, mapTerrain)
+  if (!next) return
+
+  const tally = dragonTally(events, players, me)
+
   // Absolute spawn time on the game clock — stable across polls, unlike the
   // remaining seconds, so it identifies THIS spawn and not a moment.
-  const spawnAt = Math.round(stats.gameTime + next.inSeconds)
+  const spawnAt = Math.round(gameTime + next.inSeconds)
 
   if (state.pinned) {
     // Held open for inspection, but the number stays honest: it is still the
@@ -632,11 +692,7 @@ async function readObjective(): Promise<void> {
     return
   }
 
-  if (
-    next.inSeconds <= NOTIFY_LEAD &&
-    next.inSeconds > 0 &&
-    announced !== spawnAt
-  ) {
+  if (next.inSeconds <= NOTIFY_LEAD && next.inSeconds > 0 && announced !== spawnAt) {
     announced = spawnAt
     raiseNotice(next.kind, next.inSeconds, next.element, tally)
   }
@@ -653,8 +709,8 @@ function startGameClock(): void {
   announcedOpening = false
   readOpening()
   announced = null
-  void readObjective()
-  tick = setInterval(() => void readObjective(), POLL_MS)
+  void readGame()
+  tick = setInterval(() => void readGame(), POLL_MS)
 }
 
 function stopGameClock(): void {
@@ -1119,7 +1175,9 @@ async function handleLink(raw: string | null): Promise<void> {
 
 ipcMain.on("overlay:pin", (_e, on: boolean) => {
   push({ pinned: on })
-  if (on) void readObjective()
+  // A full poll rather than half of one: pinning must show the CURRENT
+  // objective, and the data it needs is exactly what a tick gathers.
+  if (on) void readGame()
   else if (state.notice) noticeTimer = setTimeout(dropNotice, NOTICE_MS)
 })
 

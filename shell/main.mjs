@@ -20020,27 +20020,46 @@ function readOpening() {
     cohortGames: m.cohortGames
   });
 }
-async function readShop(riotId) {
-  const champ = state.select?.champion;
-  const saved = champ ? await buildFor(champ.slug).catch(() => null) : null;
+async function playingChampion(players, me) {
+  if (!me)
+    return null;
+  const mine = players.find((p) => p.riotId === me || p.summonerName === me);
+  if (!mine?.championName)
+    return null;
+  const champ = await championByName(mine.championName).catch(() => null);
+  return champ?.slug ?? null;
+}
+var lastShopLog = "";
+function shopLog(format, ...args) {
+  const line = format + JSON.stringify(args);
+  if (line === lastShopLog)
+    return;
+  lastShopLog = line;
+  console.log("[shop] " + format, ...args);
+}
+async function readShop(riotId, championId) {
+  const saved = championId ? await buildFor(championId).catch(() => null) : null;
   if (saved && !saved.enabled)
     return;
   const build = saved?.items.map((item) => ({ item })) ?? state.matchup?.slots;
   if (!riotId || !build?.length)
-    return;
+    return shopLog("no build for %s", championId ?? "unknown champion");
   const purse = await liveOwnPurse(riotId).catch(() => null);
   if (!purse)
-    return;
+    return shopLog("no purse for %s", riotId);
   const owned = new Set(purse.items.map((i) => i.itemID));
   const nextIndex = build.findIndex((s) => !owned.has(s.item));
   if (nextIndex < 0)
-    return;
+    return shopLog("build finished");
   const next = build[nextIndex];
   if (announcedItems.has(next.item))
     return;
   readBoots(purse.items);
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null);
-  if (!cost?.affordable)
+  if (!cost)
+    return shopLog("no price for item %d", next.item);
+  shopLog("%s slot %d/%d: %s needs %dg, have %dg%s", saved ? "profile" : "live build", nextIndex + 1, build.length, cost.name, cost.remaining, purse.gold, cost.affordable ? " → NOTIFY" : "");
+  if (!cost.affordable)
     return;
   announcedItems.add(next.item);
   raiseNotice("item", 0, null, { ours: [], theirs: [] }, NOTICE_MS, {
@@ -20051,7 +20070,7 @@ async function readShop(riotId) {
     total: build.length
   });
 }
-async function readObjective() {
+async function readGame() {
   const stats = await liveGameStats();
   if (!stats)
     return;
@@ -20060,18 +20079,22 @@ async function readObjective() {
     livePlayers(),
     liveActivePlayerName().catch(() => null)
   ]);
-  const next = nextObjective(events, stats.gameTime, players ?? [], stats.mapTerrain);
-  if (!next)
-    return;
-  const tally = dragonTally(events, players ?? [], me);
   const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null;
-  readShop(me);
+  const championId = await playingChampion(players ?? [], me);
+  readShop(me, championId);
   const gold = await teamGold(players ?? [], myTeam).catch(() => null);
   if (gold) {
     push({ gold });
     syncOverlay();
   }
-  const spawnAt = Math.round(stats.gameTime + next.inSeconds);
+  readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain);
+}
+function readObjective(gameTime, events, players, me, mapTerrain) {
+  const next = nextObjective(events, gameTime, players, mapTerrain);
+  if (!next)
+    return;
+  const tally = dragonTally(events, players, me);
+  const spawnAt = Math.round(gameTime + next.inSeconds);
   if (state.pinned) {
     raiseNotice(next.kind, next.inSeconds, next.element, tally);
     return;
@@ -20091,8 +20114,8 @@ function startGameClock() {
   announcedOpening = false;
   readOpening();
   announced = null;
-  readObjective();
-  tick = setInterval(() => void readObjective(), POLL_MS);
+  readGame();
+  tick = setInterval(() => void readGame(), POLL_MS);
 }
 function stopGameClock() {
   if (tick)
@@ -20405,7 +20428,7 @@ async function handleLink(raw) {
 ipcMain.on("overlay:pin", (_e, on) => {
   push({ pinned: on });
   if (on)
-    readObjective();
+    readGame();
   else if (state.notice)
     noticeTimer = setTimeout(dropNotice, NOTICE_MS);
 });
