@@ -4,6 +4,7 @@ import { Attached, Waiting } from "./sections/Overview"
 import Matches from "./sections/Matches"
 import Champions from "./sections/Champions"
 import AiChat from "./sections/AiChat"
+import Patch from "./sections/Patch"
 import Settings from "./sections/Settings"
 import logo from "../assets/logo.png"
 
@@ -19,12 +20,13 @@ import logo from "../assets/logo.png"
  * the app, because a menu that mixes navigation with departure makes you read
  * every item before clicking.
  */
-type SectionId = "overview" | "matches" | "champions" | "ai"
+type SectionId = "overview" | "matches" | "champions" | "patch" | "ai"
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "matches", label: "Matches" },
   { id: "champions", label: "Champions" },
+  { id: "patch", label: "Patch" },
   { id: "ai", label: "lolData AI" },
 ]
 
@@ -63,6 +65,8 @@ export default function App() {
             <Matches s={s} />
           ) : section === "champions" ? (
             <Champions s={s} />
+          ) : section === "patch" ? (
+            <Patch s={s} />
           ) : (
             <AiChat s={s} />
           )}

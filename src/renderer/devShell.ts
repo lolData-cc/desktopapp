@@ -28,7 +28,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -49,7 +49,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -75,7 +75,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -96,7 +96,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -124,7 +124,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -151,7 +151,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -180,7 +180,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -205,7 +205,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
@@ -230,7 +230,7 @@ const SCENES: Record<string, unknown> = {
     matches: [
       { gameId: 1, playedAt: Date.now() - 900e3, durationSeconds: 1840, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 876, champLevel: 16, kills: 11, deaths: 3, assists: 9, creepScore: 187, goldEarned: 14200, visionScore: 31, items: [3157, 6653, 3020, 4645, 3089, 0], spells: [4, 11], role: "JUNGLE" },
       { gameId: 2, playedAt: Date.now() - 5400e3, durationSeconds: 1420, queueId: 420, gameMode: "CLASSIC", win: false, remake: false, championId: 267, champLevel: 13, kills: 2, deaths: 7, assists: 18, creepScore: 34, goldEarned: 8900, visionScore: 62, items: [3853, 3158, 6617, 0, 0, 0], spells: [4, 14], role: "SUPPORT" },
-      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 210, queueId: 420, gameMode: "CLASSIC", win: false, remake: true, championId: 64, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
+      { gameId: 3, playedAt: Date.now() - 9000e3, durationSeconds: 1500, queueId: 420, gameMode: "CLASSIC", win: true, remake: false, championId: 104, champLevel: 3, kills: 0, deaths: 0, assists: 0, creepScore: 12, goldEarned: 900, visionScore: 2, items: [], spells: [4, 11], role: "JUNGLE" },
       { gameId: 4, playedAt: Date.now() - 172800e3, durationSeconds: 2260, queueId: 450, gameMode: "ARAM", win: true, remake: false, championId: 876, champLevel: 18, kills: 19, deaths: 8, assists: 24, creepScore: 96, goldEarned: 18400, visionScore: 8, items: [3152, 3020, 4645, 3089, 3157, 3116], spells: [4, 32], role: null },
     ],
     runes: null,
