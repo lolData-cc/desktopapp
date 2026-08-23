@@ -184,6 +184,12 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
   const elder = n.kind === "elder"
   const accent = elder ? "#FFB615" : "#00d992"
 
+  // Riot's base dragon portrait is a dark red head with a glowing mouth — all
+  // but identical to the Infernal one. Drawn as-is it makes "we do not know yet"
+  // look exactly like one of the six specific answers, which is worse than
+  // saying nothing. Colour means the element is known; grey means it is not.
+  const unknownElement = n.kind === "dragon" && !n.element
+
   return (
     <div
       className="absolute right-0 top-[13%] w-[440px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
@@ -233,7 +239,10 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
             // A solid portrait now, not a transparent glyph, so it takes the
             // squared corner and hairline the rest of the app uses.
             className="h-11 w-11 shrink-0 rounded-[3px] ring-1 ring-jade/25"
-            style={{ boxShadow: `0 0 14px ${accent}33, 0 2px 8px rgba(0,0,0,0.9)` }}
+            style={{
+              boxShadow: `0 0 14px ${accent}33, 0 2px 8px rgba(0,0,0,0.9)`,
+              filter: unknownElement ? "grayscale(1) brightness(1.12) contrast(0.92)" : undefined,
+            }}
           />
 
           <div className="min-w-0">
