@@ -3340,14 +3340,24 @@ function lockedElement(kills) {
     return null;
   return elemental[elemental.length - 1].DragonType ?? null;
 }
-function soulTakenBy(events, players) {
-  const teamOf = new Map;
+function teamIndex(players) {
+  const map = new Map;
+  const add = (name, team) => {
+    if (!name)
+      return;
+    map.set(name, team);
+    const bare = name.split("#")[0];
+    if (bare && bare !== name)
+      map.set(bare, team);
+  };
   for (const p of players) {
-    if (p.riotId)
-      teamOf.set(p.riotId, p.team);
-    if (p.summonerName)
-      teamOf.set(p.summonerName, p.team);
+    add(p.riotId, p.team);
+    add(p.summonerName, p.team);
   }
+  return map;
+}
+function soulTakenBy(events, players) {
+  const teamOf = teamIndex(players);
   const count = {};
   for (const e of events) {
     if (e.EventName !== "DragonKill")
@@ -3362,13 +3372,7 @@ function soulTakenBy(events, players) {
   return null;
 }
 function dragonTally(events, players, myName) {
-  const teamOf = new Map;
-  for (const p of players) {
-    if (p.riotId)
-      teamOf.set(p.riotId, p.team);
-    if (p.summonerName)
-      teamOf.set(p.summonerName, p.team);
-  }
+  const teamOf = teamIndex(players);
   const myTeam = myName ? teamOf.get(myName) : undefined;
   const tally = { ours: [], theirs: [] };
   if (!myTeam)

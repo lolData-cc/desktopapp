@@ -80,12 +80,36 @@ function lockedElement(kills: GameEvent[]): DragonElement | null {
  * kill still counts toward the total but toward no team's soul, which fails
  * toward showing a plain dragon timer rather than inventing an Elder.
  */
-function soulTakenBy(events: GameEvent[], players: PlayerSlot[]): string | null {
-  const teamOf = new Map<string, string>()
-  for (const p of players) {
-    if (p.riotId) teamOf.set(p.riotId, p.team)
-    if (p.summonerName) teamOf.set(p.summonerName, p.team)
+/**
+ * Name → team, keyed every way Riot might spell it.
+ *
+ * The formats do NOT agree across endpoints, verified live: /playerlist gives
+ * "yuumi45#EU1" for both riotId and summonerName, while a DragonKill event's
+ * KillerName is the bare "yuumi45", tag stripped. Indexing only the full id
+ * meant every kill failed to attribute — silently, since an unattributed kill
+ * is dropped rather than raised.
+ *
+ * So both spellings go in. Bare game names are not globally unique, but within
+ * the ten players of one match a collision needs two identical names on
+ * opposite teams, and the alternative is attributing nothing at all.
+ */
+function teamIndex(players: PlayerSlot[]): Map<string, string> {
+  const map = new Map<string, string>()
+  const add = (name: string | undefined, team: string) => {
+    if (!name) return
+    map.set(name, team)
+    const bare = name.split("#")[0]
+    if (bare && bare !== name) map.set(bare, team)
   }
+  for (const p of players) {
+    add(p.riotId, p.team)
+    add(p.summonerName, p.team)
+  }
+  return map
+}
+
+function soulTakenBy(events: GameEvent[], players: PlayerSlot[]): string | null {
+  const teamOf = teamIndex(players)
 
   const count: Record<string, number> = {}
   for (const e of events) {
@@ -122,12 +146,7 @@ export function dragonTally(
   players: PlayerSlot[],
   myName: string | null
 ): DragonTally {
-  const teamOf = new Map<string, string>()
-  for (const p of players) {
-    if (p.riotId) teamOf.set(p.riotId, p.team)
-    if (p.summonerName) teamOf.set(p.summonerName, p.team)
-  }
-
+  const teamOf = teamIndex(players)
   const myTeam = myName ? teamOf.get(myName) : undefined
   const tally: DragonTally = { ours: [], theirs: [] }
   if (!myTeam) return tally
