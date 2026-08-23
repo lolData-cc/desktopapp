@@ -7,7 +7,7 @@
  * swappable. If this becomes Tauri later, this file is what gets rewritten;
  * everything under src/renderer keeps working untouched.
  */
-import { app, BrowserWindow, ipcMain, screen, shell } from "electron"
+import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from "electron"
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
@@ -137,7 +137,9 @@ function push(patch: Partial<AppState>): void {
   const before = state.phase
   state = { ...state, ...patch }
   win?.webContents.send("state", state)
-  sendOverlay("state", state)
+  // The overlay is told what to DRAW: hiding the bar is a content decision, so
+  // the window does not have to be torn down and rebuilt to honour a keypress.
+  sendOverlay("state", goldVisible ? state : { ...state, gold: null })
 
   // The overlay is only ever on screen during a match. Tying it to the phase
   // rather than to a toggle means there is no state where it is left hanging
@@ -309,8 +311,25 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
  * the gold bar, the ability outline — could only appear during a notification,
  * which is not when they are wanted.
  */
+/**
+ * The gold bar's toggle.
+ *
+ * ⚠️ Alt+O, not a bare O. globalShortcut takes EXCLUSIVE ownership of whatever
+ * it registers, system-wide — a bare letter would mean the key stops reaching
+ * every other application, so registering "O" would stop the letter o being
+ * typeable anywhere on the machine.
+ *
+ * Tab, which is what this stands in for, cannot be used at all: registering it
+ * would take the scoreboard away from the game, and detecting it WITHOUT
+ * registering means polling another process's keyboard state — a keylogger
+ * primitive, and precisely the behaviour Vanguard watches for while League is
+ * running. The risk there is the player's account, not our API key.
+ */
+const GOLD_HOTKEY = "Alt+O"
+let goldVisible = true
+
 function overlayWanted(): boolean {
-  return state.notice !== null || state.gold !== null || state.levelHint !== null
+  return state.notice !== null || (state.gold !== null && goldVisible) || state.levelHint !== null
 }
 
 function syncOverlay(): void {
@@ -727,6 +746,15 @@ if (!gotLock) {
     // Read the player's own HUD scale before anything is drawn over the game, so
     // the first frame is already in the right place rather than being corrected
     // afterwards. A missing config is not fatal — the default stands.
+    // Registered once and released on quit. A shortcut left behind outlives the
+    // process that owns it and the key stops working until the next reboot.
+    const registered = globalShortcut.register(GOLD_HOTKEY, () => {
+      goldVisible = !goldVisible
+      push({})            // re-send state so the overlay redraws without the bar
+      syncOverlay()
+    })
+    console.log("[hotkey] %s registered=%s", GOLD_HOTKEY, registered)
+
     const hud = await readHudSettings()
     push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } })
 
@@ -748,7 +776,11 @@ if (!gotLock) {
 }
 
 
-app.on("before-quit", () => { stopGameClock(); destroyOverlay() })
+app.on("before-quit", () => {
+  stopGameClock()
+  destroyOverlay()
+  globalShortcut.unregisterAll()
+})
 
 app.on("window-all-closed", () => {
   lcu.stop()

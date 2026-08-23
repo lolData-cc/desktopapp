@@ -18345,7 +18345,7 @@ var require_main2 = __commonJS((exports) => {
 });
 
 // shell/main.ts
-import { app as app3, BrowserWindow as BrowserWindow3, ipcMain, screen as screen2, shell } from "electron";
+import { app as app3, BrowserWindow as BrowserWindow3, globalShortcut, ipcMain, screen as screen2, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname as dirname2, join as join4, resolve } from "node:path";
 
@@ -19408,7 +19408,7 @@ function push(patch2) {
   const before = state.phase;
   state = { ...state, ...patch2 };
   win?.webContents.send("state", state);
-  sendOverlay("state", state);
+  sendOverlay("state", goldVisible ? state : { ...state, gold: null });
   if (state.phase !== before) {
     if (state.phase === "InProgress" || state.phase === "Reconnect")
       startGameClock();
@@ -19514,8 +19514,10 @@ var tick = null;
 var noticeTimer = null;
 var announced = null;
 var hideTimer = null;
+var GOLD_HOTKEY = "Alt+O";
+var goldVisible = true;
 function overlayWanted() {
-  return state.notice !== null || state.gold !== null || state.levelHint !== null;
+  return state.notice !== null || state.gold !== null && goldVisible || state.levelHint !== null;
 }
 function syncOverlay() {
   if (overlayWanted()) {
@@ -19790,6 +19792,12 @@ if (!gotLock) {
     console.log("[link] %s:// ok=%s via=%s%s", PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : "");
     createWindow();
     createOverlay(join4(__dirname2, "preload.mjs"));
+    const registered = globalShortcut.register(GOLD_HOTKEY, () => {
+      goldVisible = !goldVisible;
+      push({});
+      syncOverlay();
+    });
+    console.log("[hotkey] %s registered=%s", GOLD_HOTKEY, registered);
     const hud = await readHudSettings();
     push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
     const saved = await readSession();
@@ -19806,6 +19814,7 @@ if (!gotLock) {
 app3.on("before-quit", () => {
   stopGameClock();
   destroyOverlay();
+  globalShortcut.unregisterAll();
 });
 app3.on("window-all-closed", () => {
   lcu.stop();
