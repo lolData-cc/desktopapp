@@ -1601,9 +1601,18 @@ if (!gotLock) {
     // has to travel with the association or the link would launch a bare Electron
     // with nothing loaded.
     const dev = process.defaultApp && process.argv.length >= 2
-    const launch = dev
-      ? { exe: process.execPath, args: [resolve(process.argv[1]!)] }
-      : { exe: process.execPath, args: [] }
+    // The label is what Windows puts in "How do you want to open this link?".
+    // Without it the prompt names the EXECUTABLE, which in development is
+    // electron.exe — so the player was being asked to trust "Electron" with no
+    // way to tell what that was or whether they had installed it.
+    const launch = {
+      exe: process.execPath,
+      args: dev ? [resolve(process.argv[1]!)] : [],
+      label: "LolData",
+      // Ours in a packaged build; in development the source icon, since
+      // electron.exe's own would be the Electron atom.
+      icon: dev ? join(__dirname, "..", "build", "icon.ico") : process.execPath,
+    }
 
     const claimed = dev
       ? app.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args)
@@ -1611,8 +1620,9 @@ if (!gotLock) {
 
     const result = await ensureProtocol(PROTOCOL, claimed, launch)
     console.log(
-      "[link] %s:// ok=%s via=%s%s",
-      PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : ""
+      "[link] %s:// ok=%s via=%s named=%s%s",
+      PROTOCOL, result.ok, result.via, result.named ?? false,
+      result.command ? ` cmd=${result.command}` : ""
     )
 
     createWindow()

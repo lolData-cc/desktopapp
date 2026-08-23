@@ -18696,9 +18696,22 @@ async function keyExists(protocol) {
     return false;
   }
 }
+async function nameApplication(protocol, label, icon) {
+  try {
+    const key = `${KEY(protocol)}\\Application`;
+    await run2("reg", ["add", key, "/v", "ApplicationName", "/d", label, "/f"]);
+    await run2("reg", ["add", key, "/v", "ApplicationIcon", "/d", `${icon},0`, "/f"]);
+    await run2("reg", ["add", `${KEY(protocol)}\\DefaultIcon`, "/ve", "/d", `${icon},0`, "/f"]);
+    await run2("reg", ["add", KEY(protocol), "/v", "FriendlyTypeName", "/d", label, "/f"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function ensureProtocol(protocol, electronClaimed, launch) {
   if (electronClaimed && await keyExists(protocol)) {
-    return { ok: true, via: "electron" };
+    const named2 = await nameApplication(protocol, launch.label, launch.icon);
+    return { ok: true, via: "electron", named: named2 };
   }
   const parts = [launch.exe, ...launch.args, "%1"].map((p) => `"${p}"`).join(" ");
   try {
@@ -18708,7 +18721,8 @@ async function ensureProtocol(protocol, electronClaimed, launch) {
   } catch {
     return { ok: false, via: "none" };
   }
-  return await keyExists(protocol) ? { ok: true, via: "registry", command: parts } : { ok: false, via: "none" };
+  const named = await nameApplication(protocol, launch.label, launch.icon);
+  return await keyExists(protocol) ? { ok: true, via: "registry", command: parts, named } : { ok: false, via: "none" };
 }
 
 // shell/splash.ts
@@ -20803,10 +20817,15 @@ if (!gotLock) {
   app3.whenReady().then(async () => {
     createSplash();
     const dev = process.defaultApp && process.argv.length >= 2;
-    const launch = dev ? { exe: process.execPath, args: [resolve(process.argv[1])] } : { exe: process.execPath, args: [] };
+    const launch = {
+      exe: process.execPath,
+      args: dev ? [resolve(process.argv[1])] : [],
+      label: "LolData",
+      icon: dev ? join4(__dirname2, "..", "build", "icon.ico") : process.execPath
+    };
     const claimed = dev ? app3.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app3.setAsDefaultProtocolClient(PROTOCOL);
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
-    console.log("[link] %s:// ok=%s via=%s%s", PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : "");
+    console.log("[link] %s:// ok=%s via=%s named=%s%s", PROTOCOL, result.ok, result.via, result.named ?? false, result.command ? ` cmd=${result.command}` : "");
     createWindow();
     createOverlay(join4(__dirname2, "preload.mjs"));
     const registered = globalShortcut.register(GOLD_HOTKEY, () => {
