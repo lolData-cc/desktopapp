@@ -18705,7 +18705,7 @@ async function ensureProtocol(protocol, electronClaimed, launch) {
 import { BrowserWindow as BrowserWindow2 } from "electron";
 import { join as join2 } from "node:path";
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
-var MIN_VISIBLE_MS = 2300;
+var MIN_VISIBLE_MS = 2100;
 var MAX_VISIBLE_MS = 6000;
 var splash = null;
 var shownAt = 0;

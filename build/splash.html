@@ -6,170 +6,158 @@
 <!--
   The boot animation.
 
-  No panel, no card, no shadowed box. The window is transparent and the only
-  things that exist are the mark and the motion around it — a container would be
-  an arbitrary rectangle floating on the desktop, which is what an opening
-  animation must not look like.
+  No panel and no background: the window is transparent and the only things
+  that exist are the mark and the motion around it.
 
-  The elaboration is all in the MOVEMENT rather than in added objects: rings
-  that expand and pass, hairlines converging from the diagonals, an arc that
-  sweeps once around, and the mark resolving through a bloom. Nothing on screen
-  that is not either the logo or a trace of it arriving.
+  ⚠️ EVERY animation here is on transform or opacity, and nothing else. Those
+  two are the only properties a compositor can handle on its own — anything
+  else drags the main thread into each frame:
 
-  Sequence, ~2.1s end to end:
-    0ms    four hairlines run in from the diagonals
-    260ms  the first ring passes outward
-    340ms  the mark resolves — scale, unblur, bloom
-    620ms  the sweep arc makes one turn
-    700ms  a second, slower ring
-    880ms  LOLDATA resolves letter by letter
+    - the first version animated `width` on the converging lines, which forces
+      a layout recalculation per frame
+    - and `filter: blur()` on the mark, which forces a re-rasterisation per
+      frame
+
+  Both were visible as stutter, and both are gone. It matters more here than
+  elsewhere because a transparent window already gives up part of the GPU path
+  on Windows, so there is no headroom to waste.
+
+  Sequence, ~1.9s:
+    0ms    the mark scales up out of nothing
+    120ms  the bloom passes over it
+    240ms  the first ring goes out
+    520ms  the radar arc makes one turn
+    620ms  a second, slower ring
+    760ms  LOLDATA lands letter by letter
 -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
-    background: transparent;      /* nothing behind anything */
+    background: transparent;
     overflow: hidden;
     user-select: none; cursor: default;
     -webkit-app-region: drag;
   }
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    display: grid; place-items: center;
-  }
+  .stage { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
 
   /* ── the mark ──────────────────────────────────────────────────────── */
   .mark {
     position: relative;
     width: 96px; height: 96px;
-    animation: resolve 900ms cubic-bezier(.16,1,.3,1) 340ms both;
+    will-change: transform, opacity;
+    animation: rise 780ms cubic-bezier(.16,1,.3,1) both;
   }
-  .mark img { width: 100%; height: 100%; display: block; }
-  @keyframes resolve {
-    0%   { opacity: 0; transform: scale(.62); filter: blur(14px) brightness(2.4) saturate(.4) }
-    45%  { opacity: 1; filter: blur(3px) brightness(1.5) saturate(.9) }
-    100% { opacity: 1; transform: scale(1);  filter: blur(0)  brightness(1)   saturate(1) }
+  .mark img {
+    width: 100%; height: 100%; display: block;
+    /* static, not animated — a drop-shadow that changes per frame is another
+       re-rasterisation, and this reads the same held still */
+    filter: drop-shadow(0 0 16px rgba(0,217,146,.4));
   }
-  /* the light it throws while it lands, gone once it has */
-  .mark::after {
-    content: ""; position: absolute; inset: -30%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(0,217,146,.5) 0%, rgba(0,217,146,.12) 38%, transparent 68%);
-    animation: bloom 1100ms cubic-bezier(.16,1,.3,1) 340ms both;
-    pointer-events: none;
-  }
-  @keyframes bloom {
-    0%   { opacity: 0;  transform: scale(.4) }
-    30%  { opacity: .95; transform: scale(1.05) }
-    100% { opacity: 0;  transform: scale(1.5) }
+  @keyframes rise {
+    from { opacity: 0; transform: scale(.72) }
+    to   { opacity: 1; transform: scale(1) }
   }
 
-  /* ── rings that pass outward ───────────────────────────────────────── */
+  /* light thrown as it lands — transform and opacity only */
+  .bloom {
+    position: absolute;
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,217,146,.55) 0%, rgba(0,217,146,.14) 40%, transparent 70%);
+    will-change: transform, opacity;
+    animation: bloom 1000ms cubic-bezier(.16,1,.3,1) 120ms both;
+  }
+  @keyframes bloom {
+    0%   { opacity: 0;  transform: scale(.5) }
+    28%  { opacity: 1;  transform: scale(1.15) }
+    100% { opacity: 0;  transform: scale(2.1) }
+  }
+
+  /* ── rings ─────────────────────────────────────────────────────────── */
   .ring {
     position: absolute;
     width: 96px; height: 96px;
     border-radius: 50%;
     border: 1px solid rgba(0,217,146,.55);
-    animation: pass 1400ms cubic-bezier(.22,1,.36,1) both;
+    will-change: transform, opacity;
+    animation: pass 1500ms cubic-bezier(.22,1,.36,1) 240ms both;
   }
-  .ring.b { animation-delay: 700ms; animation-duration: 1700ms; border-color: rgba(0,217,146,.3) }
-  .ring.a { animation-delay: 260ms }
+  .ring.b {
+    animation-delay: 620ms; animation-duration: 1800ms;
+    border-color: rgba(0,217,146,.28);
+  }
   @keyframes pass {
-    0%   { opacity: 0;  transform: scale(.7) }
-    18%  { opacity: .9 }
-    100% { opacity: 0;  transform: scale(3.1) }
+    0%   { opacity: 0;  transform: scale(.72) }
+    16%  { opacity: .9 }
+    100% { opacity: 0;  transform: scale(3.2) }
   }
 
-  /* ── hairlines converging from the diagonals ───────────────────────── */
-  .tick {
+  /* ── the radar arc ─────────────────────────────────────────────────── */
+  .radar {
     position: absolute;
-    width: 54px; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(0,217,146,.75));
-    transform-origin: right center;
-    animation: converge 820ms cubic-bezier(.16,1,.3,1) both;
+    width: 138px; height: 138px;
+    will-change: transform, opacity;
+    animation: turn 1600ms cubic-bezier(.42,0,.24,1) 520ms both;
   }
-  .tick:nth-child(1) { transform: rotate(225deg) translateX(-96px) }
-  .tick:nth-child(2) { transform: rotate(315deg) translateX(-96px) }
-  .tick:nth-child(3) { transform: rotate(45deg)  translateX(-96px) }
-  .tick:nth-child(4) { transform: rotate(135deg) translateX(-96px) }
-  .tick:nth-child(2) { animation-delay: 60ms }
-  .tick:nth-child(3) { animation-delay: 120ms }
-  .tick:nth-child(4) { animation-delay: 180ms }
-  @keyframes converge {
-    0%   { opacity: 0; width: 4px }
-    40%  { opacity: 1; width: 54px }
-    100% { opacity: 0; width: 8px }
-  }
-
-  /* ── one sweep around the mark ─────────────────────────────────────── */
-  .sweep {
-    position: absolute;
-    width: 132px; height: 132px;
-    animation: turn 1500ms cubic-bezier(.45,0,.25,1) 620ms both;
-  }
-  .sweep circle {
+  .radar circle {
     fill: none; stroke: #00d992; stroke-width: 1; stroke-linecap: round;
-    /* a short arc, not a full ring: it reads as something passing */
-    stroke-dasharray: 42 372;
+    /* a short arc rather than a ring: it reads as something sweeping past */
+    stroke-dasharray: 46 388;
   }
   @keyframes turn {
-    0%   { opacity: 0;  transform: rotate(-90deg) }
-    12%  { opacity: .85 }
-    88%  { opacity: .85 }
-    100% { opacity: 0;  transform: rotate(290deg) }
+    0%   { opacity: 0;   transform: rotate(-90deg) }
+    10%  { opacity: .9 }
+    86%  { opacity: .9 }
+    100% { opacity: 0;   transform: rotate(300deg) }
   }
 
   /* ── the word ──────────────────────────────────────────────────────── */
   .word {
-    position: absolute;
-    top: calc(50% + 74px);
+    position: absolute; top: calc(50% + 76px);
     display: flex; gap: .34em;
     font-family: "Chakra Petch", "Segoe UI", sans-serif;
     font-size: 13px; font-weight: 700;
     color: #d7d8d9;
+    text-shadow: 0 0 14px rgba(0,217,146,.45);
   }
   .word span {
     display: inline-block;
-    animation: land 620ms cubic-bezier(.16,1,.3,1) both;
-    text-shadow: 0 0 14px rgba(0,217,146,.45);
+    will-change: transform, opacity;
+    animation: land 560ms cubic-bezier(.16,1,.3,1) both;
   }
-  /* letters resolving one at a time rather than a word appearing */
-  .word span:nth-child(1) { animation-delay: 880ms }
-  .word span:nth-child(2) { animation-delay: 940ms }
-  .word span:nth-child(3) { animation-delay: 1000ms }
-  .word span:nth-child(4) { animation-delay: 1060ms }
-  .word span:nth-child(5) { animation-delay: 1120ms }
-  .word span:nth-child(6) { animation-delay: 1180ms }
-  .word span:nth-child(7) { animation-delay: 1240ms }
+  .word span:nth-child(1) { animation-delay: 760ms }
+  .word span:nth-child(2) { animation-delay: 815ms }
+  .word span:nth-child(3) { animation-delay: 870ms }
+  .word span:nth-child(4) { animation-delay: 925ms }
+  .word span:nth-child(5) { animation-delay: 980ms }
+  .word span:nth-child(6) { animation-delay: 1035ms }
+  .word span:nth-child(7) { animation-delay: 1090ms }
   @keyframes land {
-    0%   { opacity: 0; transform: translateY(-7px) scale(1.5); filter: blur(5px) }
-    100% { opacity: .9; transform: none; filter: blur(0) }
+    from { opacity: 0;  transform: translateY(-6px) scale(1.4) }
+    to   { opacity: .9; transform: none }
   }
 
-  /* leaves as one piece, upward — it is being replaced, not dismissed */
   body.leaving .stage { animation: out 300ms cubic-bezier(.7,0,.84,0) both }
   @keyframes out { to { opacity: 0; transform: translateY(-10px) scale(.97) } }
 
   @media (prefers-reduced-motion: reduce) {
-    .mark, .mark::after, .ring, .tick, .sweep, .word span { animation: none }
-    .ring, .tick, .sweep, .mark::after { opacity: 0 }
+    .mark, .bloom, .ring, .radar, .word span { animation: none }
+    .bloom, .ring, .radar { opacity: 0 }
     .mark { opacity: 1 } .word span { opacity: .9 }
   }
 </style>
 </head>
 <body>
   <div class="stage">
-    <span class="tick"></span><span class="tick"></span>
-    <span class="tick"></span><span class="tick"></span>
-
-    <span class="ring a"></span>
+    <span class="ring"></span>
     <span class="ring b"></span>
 
-    <svg class="sweep" viewBox="0 0 132 132" aria-hidden="true">
-      <circle cx="66" cy="66" r="66" />
+    <svg class="radar" viewBox="0 0 138 138" aria-hidden="true">
+      <circle cx="69" cy="69" r="68" />
     </svg>
 
+    <span class="bloom"></span>
     <div class="mark"><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAcsUlEQVR4nO1da5BcR3X++s7sSlrtSitpwbYkY0nID8muWMbY2Mi2JCiwwfgBVCDEvJyqUCRAjKAgQJIy+Z8EmRQORfEQFBUecYBKAAeILZmAbAzYMmATyyYWtiVZ6LEra1f7mns7dbr7dJ++c2e1q52ZnZHnlFYzcx99+/Y5fd59WuEUodzbu1ml+mKt1GYNtUFB9wOgvw40HoYA7HV/u5Hgvsrw8M5TaUjN5OL+/v7+4YnKBwHc1kF2a4HSei8Udpay9O/Hxsb2Tvu+6SL++GTlk0obxHegxUFBb58uIZyUALoWLPygVur2zoxvQ46g8cnJsZEvT3ndVCdLC3u3dWZ9m4PGtsro8NYZEYCR9ZOVb0Njc0M714Fmwe5Kd3kLhoZIeTw5AXT19D6sgQ1N6VoHmgMaOyujw1vyh5Mitt9B/mkICpvLC3o/VX1YQNfCvndrrb/U1I51oKmgtN46OTqyzf/mL/Pn969Kk3SHhl7V3C51oMkwVOkur2Z9wIuANElv7yD/BQH95fEKmfWBA9DsrySVp+a0Wx1oKlS6y0uICyQ8+5v7+A7MNZQnKrd5DtDV0/dUh/2/4GCocmJ4iaKoHjLsmOvedGAOIMOWBBk2zcWzOzD3oJS+uIyO06clIbvxZdA3vAz6/OVA7zyoxw9A/edDUDsfg9pf5dE9JdBQm1V5Ye/D0B0iaBXQy5cgu/1N0JeuhqLALrQ9oZzLZv8gSu/5PNSB2ROBht6ryj29g51Qb2uA7puP9LN/BnXeWTaqr7PicM2BQZTffidwfGy2jzRmYAf5rYL8O2+FWnsmdKqBLIOiyZ/Rd00uXPNnfp/Zj+ytV9bjsf1VwaAOzA3yM4d80KRnROcQr+kYf3/LFXV5docAWgCyv7kZes0ZDsmpmf1MAB7haRYIgo4vnAd91uyZN1kBHZhDyD5xI9RV51tERxLfId8dNTogIV6ZX9BECLPXAToEMJeQffxG6Os2WMROCY4bEBUQXSCDeu4YMNwhgLaF7GM3QF97sWHnbOrRzKZ/ZnY7s4++uzPGKrDfADw07czvKaFDAHMA2buvAa692Mh6zfY9Idog34oBi3j33ROII4KDx5Bsv68ufekQQJNBv+sa4B1XWzOPMe5PkglAYF1AQSMI35ODQ1BbvwocPFaX/nQIoImg33k19DuuMhq9FefaoJXYfUYavmLEM2RG7ht/AB0fHoP6u7vqhnyCDgE0CQjx2S0bjcxXjFtm71b0W/PPUEaOCIgjjIxBfeRfgd8drGu/OgTQBNBvvwr6TzfamUzINYLesnTj5CFOoNzcJwXQMX0Gg/yP1h/5BB0CaDDoWyzyPeK9Rm8RT5DXBaRVYO5oEPIJOgTQQNC3bIR+25VW4aMZ7pBukGoYgLXrnZC3s99dx6eTf/p+w5BP0CGABoF+1YXQb71S4Ja0fqHPs2LnP5xG4Lx9Zv5/6nvAPY+ikdAhgAYhH7ddF6J3CWnywtVL098j2gIrhEwc6o67gXsbi3yCDgHUGfSr1gMfuDZ273KEj4HYQlAB3DFWCAH1jfubgnyCDgHUEy5/KfC+a60sd4LeyH37IyKCvKbvFcJv3g984wE0CzoEUC9Y/SLg/a+1k9tp+zajx7F0z+KDc9d/d8RikP/N5iGfoEMA9YBVLwJufzMwvxvauHgJgn1vI3h2hptIXqwO2v8J8f/WXOSfHgTwokXAZWuAgUXAiXH79+g+4PeHmvP8VQMe+SZhg46pkG1D3ED4fYJFYA44XeCuB4C7HsRcQLmtEf/eV0OtX+k9aJaTuvl36BjUv9wD/HZfY/vwoTcA87uCG9c83H3IhF72Ahp/vzj57z+bM+SbvpV7ek+WjdB6cPUFUO+6BnpBl1Cnwqd1p/MA/xz41oONQf7fvhEY6Cs4KSN5FvwvdvRQHwnxjejbac0Brj4f6j2vtkOcWZnqkW99rNBSxX7TZfbHt35eX+R/4maoZb02X8/NcpHBZeW/+2m8wC7gQzqCURB/8MicI7/9COAly4A/f7WVtexFlTKVESB5Gn2/+TIbav9OHYhgYBHUx2+CZuSzgGcWT8BsXmj+njjoy08eB776E7QCtA8BvGSZHXjnYDED73QoA4lLpSpYSGEI5eaXQ58YA37461Pvw0Af8LEbgKW9NjOX5btw+nj5LpgScwPDKwj5n2+dtbjltkH+R2+Emt/tvWVsWvmZT0kW4hZpc3OunfqTV0KPTAA/fXzmfRjog/prQn5fmOlR3N4poNLHH07Ya3+6B/hC6yC/PQjg7GVQH7kBaoG1seXYentbsn+RRUP6QZKPwt26yeJt1wyIYKAPyUct8o2dL2L3HrnGv++eLUmAw77PHgW+tgutBq1NADTw73sttHGwFDjP5QB7A1zE3Y1pKJIv3J3JrZuQ0fFde07eh555UB9+A/SShZ7VM0GpyNsXc6aon88chv6H7wInJtBq0LoEsKwPyYevt/LWJ1MQSPUqdrHKJAu2CCIkuRPmPjIjDx8H9hyYGvkfut5o+7aJENcPs9w9w/clePrM+WePQP9jayK/dZeGEfI/dD3Qb2cdJVESBzBI4CVTbpmUXToFs6DSrqOzsRdFOgGddosszZ+5P7N5eRSlfe9roFYuq438rdcDK5aGZ/nnUrv5BZy55Vx0/PDxlkZ+azqCCPlbXwdNM5+zJb1iJRZOOWdKDDKNOnxjAcDx9sgLPzqB7FPfNzNVQvKJm4GVS4WmEZTK6mfGwR3zrKPHoandI8NoZWgtAljWi9Jtr4deutD8zA+qT54UqVNi9VzM9jm86kOyMhcvRqQenQDuuBuaFDVCPuXtv+Jc0bEgbqYG1+7RYWTb7jafrQ6tQwA04//qOqilvUKhy8n4yPAX85j9/+a/GPGGWBLjJKi6T4IaHEH26buhXrcBuHyt8CwLU9ITECdw5PgBXXJkGNmn/2tGyFc93VbUEBwdhm4i12gNAljai+QD1wE086WZJyws++nYuMiv8C7Y/YPQv3oayesuFh5Cbog/AhFxW5CXjE4CC7rNb++vL3p+uCPW+Gnm//MPpo98eu9brrJ1AWRL+waRfetnwJONSwZtGQIg+z55/7XA8iV8pFpWR3a+1P7df/uPIvvMD408V2/bCEWZOZL9y+cVtK8LtYca/fX9CdFH8wxC/mcI+SPTe+8VS+17k4krOJzsT/adX0Df9xhOWzPQIP8vXwtQoQPvTmXvXgim0JT3iyX9UimHvP2DyO78gZ299PtrPzX3Jpe91Nzn19L75NvAtxU3L/vkv8j7ZGIHG5JC/SPxcecMkE8z/9bNQHc5JJDInEDX1+SmS5E9ccC842lnBhrk/8VroM5aAqTV5pVfSMEmHKfWeTNLQx85juyLOzzyGfTXd0H//HfePEtcoIZNOePH9+1ri9jomfYaXsnjTUhuQ/6dGJ/RzDdw0dnQi3uiPvl3Nn1zxEB9uOnlOC05gHrnNabYkQ2PiiXRRtiaXJpils9HB4eRffa/zewrguzru5D090CtOSPnmfPNCuB07HwYkYHmvHND++wOQI9NIvvsj2r2oRZQEouSLuX842QK+ZmNreE1JxwgecuVUGteHDtzzCxjR45wqkjOwPVyjkyNfIbsyz+G3nc0bivntFF8ztXgiZw++dlpftvrNM18Qv4psGfVT7OfuV3+WaFPRjxQqhm5oU8XAkj++AqoDavES9oXlizYePUEcfgCSZlTtj53cuQbICfP5+4xSmJUaYtiNrnKW4qujypyZUY0eVbsPY1atHuKsllWAMt9RmKIo5wNVNObSgDJm1+BhJDPg1pA9TwQRhyYmRkGPjsyjJQGfiYsd3QC6efuRbZvMCDQEZVyv+WzA1E4RDn9xNzjzmeUvj0bxcw91xC2aFdyItOX1BEiTgMCSF51EZIN5wRW7l5cEoH198es2s+KoyPIPn8vMDQzeWtgbMLcq8k+d22ygqcF+/VKnyBEjywXQ8juegB6tommLqbBSq0XQ1l1vxqNoKYQQLLlQiSb1zs5nwkqD7XvWL5agmDEw8v8yhfuOTXkM4xNIP3iDmjiHsziMzH4PCPdrJR9YuSQcyZ7uA7FmXLtBu1fEqPgOif1TrQwASSbL0Syab1nb75IArNZx+a8Ahhxgsz46dMv7QCGTsy+M4MjSL+4E/roiJt9WcSBpKLHuomfkXfvrg/yCTixRRB8PqIYiaUGQkMJgBCfXLNODDAjP1aEjIUlX5rZ7okJpNt31gf5DEMjtk3DCRA91/5ZopSWQLbjUWQPPFG/PvD7swjwdn8Yl0gvaEc/gEH+1Rf4DF7vN3MOHXaj2qII4kbOrhodR/qV/wEO1qc2fgRDI6hsvw+lTeug/ugcf9g4Y9njRwM/dALpf/wCus6rjLziyUlNWW49g188ks8uahMCKF2zDmrj+b66lZllfimUS9BkXzpd4inAUwbSr/y4rtWwquDYiEEu7nsMyeVrkZyxGHqxC0M/fQj64DFkj/weGI+9jHUBYepxkInf3U4OzjXSJqeRDJG2IYDSVRcg2XiByJMPRQ8IlOG7cY6eTfUJbCD97i8ai3wJx04g+9GvDPdtGrC8D2tIIuJXMvaQC2a1NAFQACa5ith+0XCGpMkQzaleM1/53kPIfvM0TmvISNmjLxxrdsRArmGn9TcrRFs3JTC56CUob7nIafqsPYsgDn8ypbPTQ5g9p4J8RUGVOQY1r8v8TRvMeGRiDGSuY4GF0OocIFl7JkrXXexz5j11C0rmvJq80sch18q9v5428pOzB5C88jyoMxabkKpp55nDSH/5FPSTz9XjlaYFyaUvRbL2DKizXWLpeMU8P931OPSx2pYLa/xVIjD6zImGViUAtagHpWs3BH812dB8TpY8kws5zEdQAiv370H2y+ntXFt65XkoXXGeWAfiyq2uWIZkxQAq9z+O7P5p5PvPAtS8LpRvejnUygH7PmbSaqCrBLVuBcprXox0x2PIHnumuAFnBfhEU7tqVKSZi7T26szX1hIBpSvPNS/OARu2aykGb/3tnhk4rTewPRqEdNeeaSMsuWQNSpefG0RL5MmzMf3yFeehdMnq2b7WlFDatN4QHLPrfOq56u5CefN6KFpFXAB2rHhsqiOfMgZhrm1lAlC0WtZH0TLhSbMvmf/j5Az6XnlgD9IHpjlbadZdck7sMvamVDim0xTJK9YC8xrj4khWLkOyboV9x5z72h5zW750lYw5XARe85cewPwYijhEI2XA7EXAUlo1E7P5KFU7Z8awVlD52RPIHnxy2s9JViyF6l0QVgeLQSFb2TuZ6EBXGcmaM5H99tnZvl4VWOSLhA0JLlOYRyBZvhRqXhl6vFLTDMzdHqehmAMyH7L+MPtpMjYJ5RQxA2JPm+q8aftSlQefnBHyzX20NJvYYcHaDJ+zJ4oyqL75p/pGU4LqnR85a3gdos3izF8MoG8BMH48Psxu5lxmqveOsjZg1pq2uh/g0PNQy5dEqdjGkUHnnMNHYoyQn1K+3kxB5OfFLTKnCcvDxSSsP+gQzLFKrkOS7BfTBCFwXldVV4iLJRzt9GOGKuVYOtBaVgcghFZFr4RNSzKZFcT0kb2nhnwCGbXjSB1nE7m1g1EkrVEetCz4Lazyx8qa/fMJLC7kXOjJi8YoP2ZC+WuHYFC2/yjS/92Hktvu1C/YoJMihTt9fB8qp1KYgYEVIwdm0skp7wMLgVucDNSyPvOX9C2APvK8yTjSx0dP3g/WAcTiBF45ZL15bpOHArlurpELSJHrd3TIFZFsZSWQoLLzUeD5UZQuXWNZIx3kjisg/c3TxtafFbB55BBtRKhf8RMTwMkUZ9W3AF0UrVy+NJ6hNIEffcb4EqZFiPlMXlmdLJIJBe9C3CKHeF7z6MWBqDzXKKibrVR56P+Q7tmP5LyzoJb2QU1WkB0fQ7ZnP3Qd9rfzeYTC05jXMat0kKJ2+hag+/UvsztvpqK4gxvp8vqVJjI4+f2HoCdy2rt9bMSWox2+Pe5De4VefZ/3mLeanObHJcXMezeWAupqLBOi04em59GbcducHuY3WgoTMazm8Uynpgjouu4Ss/bfK3PKB+V9BI5M29KFZ6PycPW7MPsOymgwCaMVRM6tW2AIBfbvKSCUubGi0yWHcPv6hVYgogDMEgp29sjACZdqE0El/zsHyZn9UAvnhWxgCM4is5QyjdK6lbF5y8DJHE4JjJ7p2uDjNfUQ5w2N3iX3O7xTGwSDmgI+qig2VeATUuwy9ywY+9LZA7HshZhhIv5u5HC5BLWkFzqfkcSubJnNJMW5lNtS0RPAFkIk7515mG+vwSpAOxEAa98Wy/nd1fx2q+yYKZp9FKxxwRsfbAFBMF3Mb672tXBedRtCg68iwILfxcvSXB5gpOXzBtHhPln0olHQRgTgYuS8rt+bei7FjK5x5pcLz9VoIyiPym3eKGWwtyZMW8XI4whkVTWwPNLyJeMY2EfC9/nIH+OaibnxeUptRAAiT17kEEbJkwZ5khPkIO9Y0aFtWYJgSu+r93BzShcv8OSbXLYPE0ENQvREaLiAIxxp8zNxN9gV2HQCUF1llM9fDizuQULlYEbGkQ2OoLJnH/TI+NT3urh7VB8gQgSfq6GAuRAyz1Tt52BcSs7fWYg85gCWSduycOFyFilT5vK5aKlnFIl8vuQaYrfw04EAaFVs98b1SBZSGRb3YlQnYKAP5XPPwiQ5YR6tkRVkNG0XfzeFH0yLYnhIiw72czGYhQB+5ik/1NKUs7Y3PaNQgTOzmj19sQkY9EmRCFtACMEKcU90Di4bCApeRPfiDWUCTSMAUqjmbboQqlx2io6Q0+7Fu9atgJ6YRPpEdfFGTgAx4J0jcQHIKosgD2yqeQeCjs8ZRcz2xSey5IEXjzjCsbf5ee+fPaUHl5ea+YyfovoE3MBpwgG6L10LVSpFrlTvMBOj1XXBCmR7D0FPxl44v1rY/iqoASS8cbU0Zy4U6RuFh6DRB3dzvJO3u44dSOI+nwspr/NRyupuGJnP2T+eCKW8D32Iq5y2KQGonnlIXH396Lj7nxUh86tUQumcAVTyyZ2SAHiwGRH5YIrPQM71g924eTeijjtlemScMbWRJ+9jh1LUjCHOYuT5NZB8twheREQduyzalwBKi3pi/7mI5PnkCsHtkr6CVG8pT/0slaHHHCKLsee9dr54lDK9iPwIbIP70vQCfNibr5UBKOlg8kRSrAOw04f3PfAeaZ4I7v3acmlY9VMS74HLR7qkLz0KpuQgrC8QZVkNIsNMlQk2RcBihNm9kgWmhXIZiYOCNnjpOlsd/pl5KVSDe1MQKskHg6LoMPs6Gov85iqByEfRBIurCokVgXPBSgSZH/FMDfJdn7QPMA4XoYtwHagp9DefziXK2fGeBHwvv1NNf0JOnJk2xXuEYpSNh+aZgRx6zU9TaQnwVCjKguFcgGBrOcyFffnsZ84aiNoIOoBn+Vn49Aq9IcwaKBCciDGcGSUw8dwoJHMWz2Jbco7rAgpR4cbFtOSJobG+oOYQgH/H2mZapETVYH28mCK6RiSgRKZUoQ7g0tPZ767zbcVextpmYBAbpl+ubW/Xe6wVE5FVJMXqH9aHHOJlYbyI27UvAbiiTIUeWp6R8fWFbWRp1aAG5Um0VysY5AnQ+fK1NBmdY0caGrUUSYc8MUfDRtGybzUQ53MA/XXcNbYECjKL2l4HcEpP+O3wxHLVj3dIhoiATThHMDn3QZxX4TyGhcAKnK/2rf2S7FCO1ilweoqYhCckh2anDXrzL7eLaH4spCLp/ZpKuIYjPQPtzwGC9h0r+/Fu2lPIPBGCNTa6XwsQuKhV8uyRIuZr0rQ5HyBi39p3jFO8ayphYvZK9uwVPlFz0Pe76lV4bSD3IUwAI/95t5MmOAKapgOEUG1eSw7BHJ+idBINnkmGTbBQWNYbiIXBmFCirqiDMINP7tnwxNr9UAVuiOmCrY4W+/z9JhhiJ9SilVXtawX4ggh5G7l6F5Ai2cn2t2f1RtGWaGfu4Z5RSERxUgkDIzJEFglq2OGcAsbvIHM2ovyNqZRAx40EGzJEnEv/CquC2lwJtLMm7LhlB8hp4gRsLnGKVIEZaMumBvYtVlBZZEQ+gFqyl3WR3LI1JTiTDwrVFkVyLaSvblO0lLtGPkCIJ/CSsqCHWLJwFkUT9MCmEIBPcHRpUNb1mpmKXKzxBnZXK4nChmG1972ywyQQUrR1bA3ZG8XhIRDAstxfXIsAAvK8HsJLFp0pKDeRK2yEM4pcCnikM/jrOWzdWCWgORxAJGJENXE8BxQl03y8PQc8acU5i8BgNdhZm9vIMepHrvCi8uF3wRBEgYYi8MUbi3YRy/v/ayijdF5sdcuExMU04lVVp0E0MPLusdODXy6nSeXNxdCEGDR5DwvfyLFeQ3diDd5F/MAXeRYs+lvDi+fZuvcEBl9ylWfPNVWrH2wy+nqJPqhxEm7YdgTgkzDyiY4FdXGmYnrRoDKCxPSV5txUfgDzSOFSNsdlgor7nCyYfVzYKZr8gVjs2kB5vGg8XO6/X10iRUZe86fnkQOsjReGpKNjUTq1JQinODHiWFxSadaCpWS0O0e4xiVeVhVXDhMwG6luIx0eD4Ti3bnaunG5P+ZhFknZRPWOn75d1mnkc01TocoHfc9oy/p8G+MTwbGVr1PMItD0MUM2NgFdydqbADJK/KSET7Z/6QVdZW7j9OBZRZROpWMG44IKBHTMZAmZ69xAmTo6rh1fhTxDSmVmj1dX6aocPhbvDJK5IJVZ2u3yDV2/MtoO5kR1kqrpG6/8cf2PvzvkpRnSweHCGj8VKlvvagN5AvL9cu/nagilU1Qba6ulYePP/MGtnQ+LK6KS6G4gJvYdKVyUSQNJ5ziv3zhTuFCU5AKZxuTBocKBp1oFdM67c9O4Ho+fiZnGBPW3ANLjo0ifPyE2keK+iDZcO+NPF7cxeXDQchK/FIxnfLyPQDo2gYn98Za2jSCABlRjLh64iQNH3YznNXRhXRx9Vg4fN9fUgsk/DNnzfqsZJwpIJDuxQgNG19WC8WcPGSKIEah9n+hz/NnDqEyxN8HY7w4gHRmL3kPJfkxmGNt7sHh1sW/jOWCsEt/n27Gsn54zVRt1gCFV6ul7SkGvQpMg6e5C9xlLUKJ1AbSlK7HEkTHDWiePVrP+IigvXoiuZYtQpvo7jjukoxOYOHgU6TSXonctXYTykoUoU+Epx/pJNk88N5M2+tA1sAil+XYJGYkheoeJw8emjbiugcXoHlhsF6I6LkL3Tx461vAScQB2086h3wZwM+YAaE/f2e6JQwtN8hnEc9JGMrt3MfsbF7iDGwoa30mU1jub98Tc8+vwsrNFXN3amOW7mHpCzUQ+gcLuRGv1SHOf2oGWgQw7jdlb7umlPdAau0VlB1oKtNZ709GR1WwGbpvj/nSg2aCwMzg9+/v7yxOVxm1R3YGWg0pWWY2xsb2WAwwNDUF1uMALBTT0dkI+fQ9xF8sFqCxWRxc43WW/TrcwAQRX8NDQkNL67+eycx1oAmh8kpFfFQuYHB3Z1hEFpzFobEvHRr4sDxWG3ssLendAYXPTOtaBZsDuyonhS6YVDazMK7+RbmhKtzrQeNDYWekub5l+OHhoaMhQS0cctD9obKuMDm8xlt5M8wEqI8NbtVK3aqg6bZvdgWYB7XysUv3Byujw1lklhKQjx7enWWmLhtpe1x52oLHKXnd59eT4yB0nu3RmSefz+1eVkvR2AJubmUPQgWnO+AzbKvPLd9Ri90VwyqsOyvN7NyHBZmhsgMIqDaxSHSdSU4CQDSjy2+zOoHcmWu2ujA3fdyqN/T+fjDvtlFo2QwAAAABJRU5ErkJggg==" /></div>
 
     <div class="word">

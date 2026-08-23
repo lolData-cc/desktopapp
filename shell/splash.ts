@@ -24,8 +24,8 @@
 import { BrowserWindow } from "electron"
 import { join } from "node:path"
 
-/** Long enough for the sequence in splash.html to finish (~2.1s) plus its exit. */
-const MIN_VISIBLE_MS = 2300
+/** Long enough for the sequence in splash.html to finish (~1.9s) plus its exit. */
+const MIN_VISIBLE_MS = 2100
 /** Past this we stop waiting: something is wrong and a stuck splash is worse
  *  than a main window that is not quite ready. */
 const MAX_VISIBLE_MS = 6000
