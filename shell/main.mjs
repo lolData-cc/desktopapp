@@ -18348,6 +18348,7 @@ var require_main2 = __commonJS((exports) => {
 import { app as app3, BrowserWindow as BrowserWindow3, globalShortcut, ipcMain, screen as screen2, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname as dirname2, join as join4, resolve } from "node:path";
+import { readFile as readFile4, writeFile as writeFile2, mkdir as mkdir2 } from "node:fs/promises";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -20521,6 +20522,36 @@ async function applyPage(champion, patch2, page) {
 }
 ipcMain.handle("profile:refresh", async () => {
   await readProfile();
+});
+var MODEL_DIR = () => join4(app3.getPath("userData"), "models");
+ipcMain.handle("model:get", async (_e, championId, key) => {
+  if (!/^[A-Za-z0-9]{1,32}$/.test(championId))
+    return null;
+  if (!Number.isInteger(key) || key < 1 || key > 1e5)
+    return null;
+  const id = `${key}000`;
+  const file2 = join4(MODEL_DIR(), `${championId}-${id}.glb`);
+  try {
+    const cached = await readFile4(file2);
+    return cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength);
+  } catch {}
+  try {
+    const url = `https://cdn.modelviewer.lol/lol/models/${championId.toLowerCase()}/${id}/model-compressed.wasm?c=1`;
+    const res = await fetch(url);
+    if (!res.ok)
+      throw new Error(String(res.status));
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length < 20 || buf.subarray(0, 4).toString() !== "glTF") {
+      throw new Error("not a glTF");
+    }
+    await mkdir2(MODEL_DIR(), { recursive: true });
+    await writeFile2(file2, buf);
+    console.log("[model] %s cached, %s MB", championId, (buf.length / 1048576).toFixed(1));
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  } catch (e) {
+    console.log("[model] %s failed: %s", championId, e?.message);
+    return null;
+  }
 });
 ipcMain.handle("settings:set", async (_e, patch2) => {
   const settings = await writeSettings(patch2);

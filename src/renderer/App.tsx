@@ -9,6 +9,7 @@ import Builds from "./sections/Builds"
 import BuildEditor from "./sections/BuildEditor"
 import Preferences from "./sections/Preferences"
 import CyberBackdrop from "./CyberBackdrop"
+import Recap, { isPostGame } from "./sections/Recap"
 import Settings from "./sections/Settings"
 import UpdateBar from "./UpdateBar"
 import logo from "../assets/logo.png"
@@ -45,11 +46,20 @@ export default function App() {
   // Which profile is open for editing. Held here rather than inside Builds so
   // that leaving the section closes the editor instead of hiding it.
   const [editing, setEditing] = useState<string | null>(null)
+  // Dismissed for THIS game only: keyed on the match so the next one opens
+  // again by itself, which is the whole point of a recap.
+  const [recapSeen, setRecapSeen] = useState<number | null>(null)
 
   useEffect(() => {
     void window.desktop.getState().then(setS)
     return window.desktop.onState(setS)
   }, [])
+
+  // The game just ended and this one has not been waved away yet.
+  const showRecap =
+    isPostGame(s?.phase ?? null) &&
+    !!s?.matches?.length &&
+    recapSeen !== s.matches[0]!.gameId
 
   return (
     <div className="relative flex h-full flex-col bg-liquirice text-flash">
@@ -74,10 +84,18 @@ export default function App() {
           {/* Only on the Overview, and only when there is no live board: over
               ten rows of numbers this would be noise, and the board is the one
               screen already full. */}
-          {section === "overview" && !s?.scoreboard && <CyberBackdrop />}
+          {section === "overview" && !s?.scoreboard && !showRecap && <CyberBackdrop />}
           <div className="relative h-full">
           {section === "overview" ? (
-            s?.client === "attached" ? <Attached s={s} /> : <Waiting />
+            s?.client === "attached" ? (
+              showRecap ? (
+                <Recap s={s} onClose={() => setRecapSeen(s.matches?.[0]?.gameId ?? -1)} />
+              ) : (
+                <Attached s={s} />
+              )
+            ) : (
+              <Waiting />
+            )
           ) : !s ? null : section === "builds" ? (
             editing ? (
               <BuildEditor s={s} championId={editing} onBack={() => setEditing(null)} />

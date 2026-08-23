@@ -10,6 +10,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from "electron"
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
+import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, championByName, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
@@ -1136,6 +1137,64 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
 }
 
 ipcMain.handle("profile:refresh", async () => { await readProfile() })
+
+/**
+ * A champion's 3D model, cached on disk.
+ *
+ * ⚠️ These are NOT Riot's files and not ours: they are Khada's conversion work
+ * (modelviewer.lol), served from their CDN, which they pay for with Ko-fi,
+ * Patreon and ads on their own site. Caching to disk is the difference between
+ * one fetch per champion per user and one per view — the reason this is
+ * defensible at all. Do not make it fetch again for something a file already
+ * answers.
+ *
+ * The URL ends in .wasm and is not wasm: it is a binary glTF with meshopt
+ * compression and KTX2 textures. The extension is theirs, presumably to
+ * discourage exactly this, which is a further reason to be light about it.
+ *
+ * Fetched here rather than in the interface because it belongs on disk, and
+ * because a 16MB download has no business being redone by a component that
+ * re-renders.
+ */
+const MODEL_DIR = () => join(app.getPath("userData"), "models")
+
+ipcMain.handle("model:get", async (_e, championId: string, key: number) => {
+  if (!/^[A-Za-z0-9]{1,32}$/.test(championId)) return null
+  if (!Number.isInteger(key) || key < 1 || key > 100000) return null
+
+  // Base skin only, for now: the recap is about the champion, and a per-skin
+  // fetch would multiply the traffic by however many skins a player owns.
+  const id = `${key}000`
+  const file = join(MODEL_DIR(), `${championId}-${id}.glb`)
+
+  try {
+    const cached = await readFile(file)
+    return cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength)
+  } catch {
+    // Not cached yet — fall through and fetch it once.
+  }
+
+  try {
+    const url = `https://cdn.modelviewer.lol/lol/models/${championId.toLowerCase()}/${id}/model-compressed.wasm?c=1`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(String(res.status))
+    const buf = Buffer.from(await res.arrayBuffer())
+
+    // A glTF or nothing: an error page written to the cache would be served
+    // forever as if it were a model.
+    if (buf.length < 20 || buf.subarray(0, 4).toString() !== "glTF") {
+      throw new Error("not a glTF")
+    }
+
+    await mkdir(MODEL_DIR(), { recursive: true })
+    await writeFile(file, buf)
+    console.log("[model] %s cached, %s MB", championId, (buf.length / 1048576).toFixed(1))
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+  } catch (e) {
+    console.log("[model] %s failed: %s", championId, (e as Error)?.message)
+    return null
+  }
+})
 
 ipcMain.handle("settings:set", async (_e, patch: Partial<AppSettings>) => {
   const settings = await writeSettings(patch)

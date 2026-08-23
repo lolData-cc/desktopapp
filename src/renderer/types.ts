@@ -192,6 +192,9 @@ declare global {
       refreshProfile(): Promise<void>
       setSetting(patch: Partial<AppSettings>): Promise<AppSettings>
       revealSettings(): Promise<void>
+      /** A champion's model as a GLB, cached on disk by the shell. Null when
+       *  it could not be fetched. */
+      model(championId: string, key: number): Promise<ArrayBuffer | null>
       signIn(): void
       signOut(): Promise<void>
       askAi(messages: ChatMessage[]): Promise<ChatResult>
