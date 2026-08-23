@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld("desktop", {
   demoOverlay: () => ipcRenderer.send("overlay:demo"),
   importRunes: () => ipcRenderer.invoke("runes:import"),
   chooseRunes: (index) => ipcRenderer.send("runes:choose", index),
+  refreshProfile: () => ipcRenderer.invoke("profile:refresh"),
+  signIn: () => ipcRenderer.send("account:signin"),
+  signOut: () => ipcRenderer.invoke("account:signout"),
+  askAi: (messages) => ipcRenderer.invoke("ai:ask", messages),
+  openExternal: (url) => ipcRenderer.send("shell:open", url),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)

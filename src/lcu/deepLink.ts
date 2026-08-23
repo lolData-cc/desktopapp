@@ -96,6 +96,56 @@ export function parseRuneLink(raw: string): RuneLink | null {
   }
 }
 
+export type AuthLink = { token: string; email: string | null; tier: string | null }
+
+/**
+ * loldata://auth?token=… — a session handed back after signing in on the site.
+ *
+ * The token is a bearer credential, so it is shape-checked before being kept
+ * and NEVER logged. A JWT is three dot-separated base64url segments; anything
+ * else is refused rather than sent to the API to find out.
+ *
+ * This does not verify the signature — we are not the issuer and could not. The
+ * API rejects a forged token, which is the check that matters; this one only
+ * stops obvious rubbish from being stored and replayed.
+ */
+const JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/
+const TIER = /^(free|premium|elite)$/i
+
+export function parseAuthLink(raw: string): AuthLink | null {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return null
+  }
+  if (url.protocol !== `${PROTOCOL}:` || url.hostname !== "auth") return null
+
+  const token = (url.searchParams.get("token") ?? "").trim()
+  if (!JWT.test(token) || token.length > 4096) return null
+
+  const email = (url.searchParams.get("email") ?? "").trim()
+  const tier = (url.searchParams.get("tier") ?? "").trim()
+
+  return {
+    token,
+    email: EMAIL.test(email) ? email : null,
+    tier: TIER.test(tier) ? tier.toLowerCase() : null,
+  }
+}
+
+/** Which verb a link carries, without parsing it twice. */
+export function linkKind(raw: string): "runes" | "auth" | null {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== `${PROTOCOL}:`) return null
+    return u.hostname === "runes" ? "runes" : u.hostname === "auth" ? "auth" : null
+  } catch {
+    return null
+  }
+}
+
 /** The first loldata:// argument Windows passed when it launched us. */
 export function linkFromArgv(argv: string[]): string | null {
   return argv.find((a) => a.startsWith(`${PROTOCOL}://`)) ?? null

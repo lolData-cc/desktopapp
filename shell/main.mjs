@@ -3107,7 +3107,9 @@ class LcuConnection {
     return {
       name: data.gameName ?? data.displayName ?? "",
       tag: data.tagLine ?? "",
-      level: data.summonerLevel ?? 0
+      level: data.summonerLevel ?? 0,
+      puuid: data.puuid ?? "",
+      iconId: data.profileIconId ?? 0
     };
   }
   async phase() {
@@ -3351,9 +3353,9 @@ async function load2() {
   try {
     const raw = await readFile2(file(), "utf8");
     const parsed = JSON.parse(raw);
-    cache2 = { chosen: parsed?.chosen ?? {} };
+    cache2 = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null };
   } catch {
-    cache2 = { chosen: {} };
+    cache2 = { chosen: {}, session: null };
   }
   return cache2;
 }
@@ -3367,6 +3369,112 @@ async function rememberChoice(champion, signature) {
     await mkdir(dirname(file()), { recursive: true });
     await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
   } catch {}
+}
+async function readSession() {
+  return (await load2()).session ?? null;
+}
+async function writeSession(session) {
+  const store = await load2();
+  store.session = session;
+  try {
+    await mkdir(dirname(file()), { recursive: true });
+    await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
+  } catch {}
+}
+
+// src/data/ai.ts
+var API2 = "https://api2.loldata.cc";
+async function askAi(token, messages, signal) {
+  if (!token) {
+    return { ok: false, reason: "signed-out", message: "Sign in to use lolData AI." };
+  }
+  let res;
+  try {
+    res = await fetch(`${API2}/api/ai/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ messages }),
+      signal
+    });
+  } catch {
+    return { ok: false, reason: "failed", message: "Could not reach lolData." };
+  }
+  const body = await res.json().catch(() => null);
+  if (res.ok && body?.reply)
+    return { ok: true, reply: body.reply };
+  const said = body?.error ?? body?.message ?? "";
+  if (res.status === 401)
+    return { ok: false, reason: "signed-out", message: said || "Sign in to use lolData AI." };
+  if (res.status === 403)
+    return { ok: false, reason: "not-premium", message: said || "lolData AI needs a premium plan." };
+  if (res.status === 402 || /credit/i.test(said)) {
+    return { ok: false, reason: "no-credits", message: said || "You are out of AI credits." };
+  }
+  return { ok: false, reason: "failed", message: said || `lolData AI returned ${res.status}.` };
+}
+
+// src/lcu/history.ts
+var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+function readRole(t) {
+  const lane = t?.lane;
+  if (!lane || lane === "NONE")
+    return t?.role === "DUO_SUPPORT" ? "SUPPORT" : null;
+  if (lane === "BOTTOM")
+    return t?.role === "DUO_SUPPORT" ? "SUPPORT" : "BOTTOM";
+  if (lane === "JUNGLE" || lane === "MIDDLE" || lane === "TOP")
+    return lane;
+  return null;
+}
+function toMatch(g, puuid) {
+  const identity = g.participantIdentities?.find((i) => i.player?.puuid === puuid);
+  const me = identity && g.participants?.find((p) => p.participantId === identity.participantId);
+  if (!me)
+    return null;
+  const st = me.stats ?? {};
+  const items = [0, 1, 2, 3, 4, 5, 6].map((i) => num(st[`item${i}`])).filter((id) => id > 0);
+  const duration = num(g.gameDuration);
+  return {
+    gameId: g.gameId,
+    playedAt: num(g.gameCreation),
+    durationSeconds: duration,
+    queueId: num(g.queueId),
+    gameMode: g.gameMode ?? "CLASSIC",
+    win: st.win === true,
+    remake: duration < 300 || st.gameEndedInEarlySurrender === true,
+    championId: num(me.championId),
+    champLevel: num(st.champLevel),
+    kills: num(st.kills),
+    deaths: num(st.deaths),
+    assists: num(st.assists),
+    creepScore: num(st.totalMinionsKilled) + num(st.neutralMinionsKilled),
+    goldEarned: num(st.goldEarned),
+    visionScore: num(st.visionScore),
+    items,
+    spells: [num(me.spell1Id), num(me.spell2Id)],
+    role: readRole(me.timeline)
+  };
+}
+async function recentMatches(lcu, puuid, count = 20) {
+  const { data } = await lcu.request("GET", `/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=${count - 1}`);
+  const games = data?.games?.games ?? [];
+  return games.map((g) => toMatch(g, puuid)).filter((m) => m !== null).sort((a, b) => b.playedAt - a.playedAt);
+}
+async function rankedSummary(lcu) {
+  const { data } = await lcu.request("GET", "/lol-ranked/v1/current-ranked-stats");
+  if (!data)
+    return null;
+  const solo = data.queueMap?.RANKED_SOLO_5x5;
+  const entry = solo?.tier ? solo : data.highestRankedEntry;
+  if (!entry?.tier)
+    return null;
+  return {
+    tier: entry.tier || null,
+    division: entry.division === "NA" ? null : entry.division || null,
+    leaguePoints: num(entry.leaguePoints),
+    wins: num(entry.wins),
+    losses: num(entry.losses),
+    queue: entry.queueType ?? "RANKED_SOLO_5x5"
+  };
 }
 
 // src/lcu/deepLink.ts
@@ -3424,6 +3532,39 @@ function parseRuneLink(raw) {
       shards
     }
   };
+}
+var JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+var EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/;
+var TIER = /^(free|premium|elite)$/i;
+function parseAuthLink(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== `${PROTOCOL}:` || url.hostname !== "auth")
+    return null;
+  const token = (url.searchParams.get("token") ?? "").trim();
+  if (!JWT.test(token) || token.length > 4096)
+    return null;
+  const email = (url.searchParams.get("email") ?? "").trim();
+  const tier = (url.searchParams.get("tier") ?? "").trim();
+  return {
+    token,
+    email: EMAIL.test(email) ? email : null,
+    tier: TIER.test(tier) ? tier.toLowerCase() : null
+  };
+}
+function linkKind(raw) {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== `${PROTOCOL}:`)
+      return null;
+    return u.hostname === "runes" ? "runes" : u.hostname === "auth" ? "auth" : null;
+  } catch {
+    return null;
+  }
 }
 function linkFromArgv(argv) {
   return argv.find((a) => a.startsWith(`${PROTOCOL}://`)) ?? null;
@@ -3619,6 +3760,8 @@ var DEV_URL2 = process.env.VITE_DEV_SERVER_URL;
 var state = {
   client: "waiting",
   summoner: null,
+  ranked: null,
+  matches: null,
   phase: null,
   patch: null,
   select: null,
@@ -3626,6 +3769,7 @@ var state = {
   levelHint: null,
   runes: null,
   runeImport: { state: "idle" },
+  account: null,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null }
 };
@@ -3638,8 +3782,12 @@ function push(patch2) {
   if (state.phase !== before) {
     if (state.phase === "InProgress" || state.phase === "Reconnect")
       startGameClock();
-    else
+    else {
       stopGameClock();
+      if (before === "InProgress" || before === "PreEndOfGame" || before === "EndOfGame") {
+        readProfile();
+      }
+    }
   }
 }
 var lcu = new LcuConnection({
@@ -3656,10 +3804,11 @@ var lcu = new LcuConnection({
       currentPatch().catch(() => null)
     ]);
     push({ client: "attached", summoner, phase, patch: patchVersion });
+    readProfile();
     if (phase === "ChampSelect")
       await readSelect(await lcu.champSelect());
   },
-  onDisconnect: () => push({ client: "waiting", summoner: null, phase: null, select: null }),
+  onDisconnect: () => push({ client: "waiting", summoner: null, ranked: null, matches: null, phase: null, select: null }),
   onEvent: (e) => {
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
       const phase = e.data;
@@ -3693,6 +3842,16 @@ async function readRunes(champion, role) {
     },
     runeImport: { state: "idle" }
   });
+}
+async function readProfile() {
+  const summoner = state.summoner;
+  if (!summoner?.puuid)
+    return;
+  const [ranked, matches] = await Promise.all([
+    rankedSummary(lcu).catch(() => null),
+    recentMatches(lcu, summoner.puuid, 20).catch(() => [])
+  ]);
+  push({ ranked, matches });
 }
 async function readSelect(data) {
   const s = data;
@@ -3788,10 +3947,11 @@ function stopGameClock() {
 }
 function createWindow() {
   win = new BrowserWindow2({
-    width: 980,
-    height: 620,
-    minWidth: 760,
-    minHeight: 520,
+    width: 1280,
+    height: 840,
+    minWidth: 1040,
+    minHeight: 700,
+    icon: join3(__dirname2, "../build/icon.png"),
     show: false,
     frame: false,
     backgroundColor: "#040A0C",
@@ -3848,6 +4008,22 @@ async function applyPage(champion, patch2, page) {
     push({ runeImport: { state: "error", message: e?.message ?? "import failed" } });
   }
 }
+ipcMain.handle("profile:refresh", async () => {
+  await readProfile();
+});
+ipcMain.on("account:signin", () => {
+  shell.openExternal(`${SITE}/login?desktop=1`);
+});
+ipcMain.handle("account:signout", async () => {
+  await setSession(null);
+});
+ipcMain.handle("ai:ask", async (_e, messages) => {
+  return askAi(session?.token ?? null, messages);
+});
+ipcMain.on("shell:open", (_e, url) => {
+  if (/^https?:\/\//i.test(url))
+    shell.openExternal(url);
+});
 ipcMain.on("runes:choose", (_e, index) => {
   const r = state.runes;
   if (!r || index < 0 || index >= r.variants.length)
@@ -3861,9 +4037,28 @@ ipcMain.handle("runes:import", async () => {
     return;
   await applyPage(champ.name, state.patch ?? "", r.variants[r.chosen].page);
 });
+var session = null;
+var SITE = "https://loldata.cc";
+async function setSession(next) {
+  session = next;
+  await writeSession(next);
+  push({ account: next ? { email: next.email, tier: next.tier } : null });
+}
 async function handleLink(raw) {
   if (!raw)
     return;
+  if (linkKind(raw) === "auth") {
+    const auth = parseAuthLink(raw);
+    console.log("[link] auth received, valid=%s", !!auth);
+    if (auth) {
+      await setSession(auth);
+      if (win) {
+        win.show();
+        win.focus();
+      }
+    }
+    return;
+  }
   const link = parseRuneLink(raw);
   console.log("[link] received, valid=%s champion=%s", !!link, link?.champion ?? "-");
   if (!link) {
@@ -3923,6 +4118,9 @@ if (!gotLock) {
     createOverlay(join3(__dirname2, "preload.mjs"));
     const hud = await readHudSettings();
     push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
+    const saved = await readSession();
+    if (saved)
+      await setSession(saved);
     await lcu.start();
     console.log("[link] own argv=%s", JSON.stringify(process.argv));
     handleLink(linkFromArgv(process.argv));

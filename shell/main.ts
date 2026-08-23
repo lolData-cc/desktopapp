@@ -16,8 +16,10 @@ import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } 
 import { ensureProtocol } from "./protocol"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
-import { chosenFor, rememberChoice, signatureOf } from "./prefs"
-import { linkFromArgv, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
+import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session } from "./prefs"
+import { askAi, type ChatMessage } from "../src/data/ai"
+import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
+import { linkFromArgv, linkKind, parseAuthLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName } from "../src/live/client"
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
@@ -29,7 +31,13 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL
 /** Everything the interface is allowed to know. Our words, not Riot's. */
 export type AppState = {
   client: "waiting" | "attached"
-  summoner: { name: string; tag: string; level: number } | null
+  summoner: { name: string; tag: string; level: number; puuid: string; iconId: number } | null
+  /** Solo queue standing, or the client's highest entry when there is no solo
+   *  rank. Null for an unranked account, which is a state and not a failure. */
+  ranked: RankedSummary | null
+  /** Recent games, read from the client rather than from our own API: local,
+   *  instant, and needing no account. */
+  matches: Match[] | null
   phase: Phase | null
   patch: string | null
   select: {
@@ -74,6 +82,9 @@ export type AppState = {
     | { state: "done"; name: string; replaced: boolean }
     | { state: "no-room"; pages: { id: number; name: string }[] }
     | { state: "error"; message: string }
+  /** The signed-in lolData account, WITHOUT its token — the renderer never
+   *  needs the credential and therefore never gets it. */
+  account: { email: string | null; tier: string | null } | null
   /** Debug only: hold the overlay on screen instead of letting it expire.
    *  Runtime rather than a build constant, so the notification behaviour can be
    *  inspected without a rebuild — and so it can never be left on by accident
@@ -91,6 +102,8 @@ export type AppState = {
 let state: AppState = {
   client: "waiting",
   summoner: null,
+  ranked: null,
+  matches: null,
   phase: null,
   patch: null,
   select: null,
@@ -98,6 +111,7 @@ let state: AppState = {
   levelHint: null,
   runes: null,
   runeImport: { state: "idle" },
+  account: null,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null },
 }
@@ -117,7 +131,13 @@ function push(patch: Partial<AppState>): void {
     // The overlay is no longer tied to the phase — only a notice puts it on
     // screen. The phase just decides whether we are watching for one.
     if (state.phase === "InProgress" || state.phase === "Reconnect") startGameClock()
-    else stopGameClock()
+    else {
+      stopGameClock()
+      // Coming out of a game is exactly when the history has changed.
+      if (before === "InProgress" || before === "PreEndOfGame" || before === "EndOfGame") {
+        void readProfile()
+      }
+    }
   }
 }
 
@@ -135,12 +155,17 @@ const lcu = new LcuConnection({
     ])
     push({ client: "attached", summoner, phase, patch: patchVersion })
 
+    // The profile and history are not needed to attach, so they load after —
+    // the window should show something the moment the client is there.
+    void readProfile()
+
     // Pull what is already true. LCU events only fire on CHANGES, so attaching
     // mid-select would otherwise leave the window blank until someone locked in.
     if (phase === "ChampSelect") await readSelect(await lcu.champSelect())
   },
 
-  onDisconnect: () => push({ client: "waiting", summoner: null, phase: null, select: null }),
+  onDisconnect: () =>
+    push({ client: "waiting", summoner: null, ranked: null, matches: null, phase: null, select: null }),
 
   onEvent: (e) => {
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
@@ -180,6 +205,24 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
     },
     runeImport: { state: "idle" },
   })
+}
+
+/**
+ * Rank and recent games.
+ *
+ * Both are read from the client, and both are allowed to fail quietly: a fresh
+ * account has no rank and no history, which is a state to display rather than
+ * an error to raise.
+ */
+async function readProfile(): Promise<void> {
+  const summoner = state.summoner
+  if (!summoner?.puuid) return
+
+  const [ranked, matches] = await Promise.all([
+    rankedSummary(lcu).catch(() => null),
+    recentMatches(lcu, summoner.puuid, 20).catch(() => []),
+  ])
+  push({ ranked, matches })
 }
 
 async function readSelect(data: unknown): Promise<void> {
@@ -322,10 +365,13 @@ function stopGameClock(): void {
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 980,
-    height: 620,
-    minWidth: 760,
-    minHeight: 520,
+    // Room for a nav rail and a list of matches beside it. The old 980x620 was
+    // sized for a single panel and left the section layout cramped.
+    width: 1280,
+    height: 840,
+    minWidth: 1040,
+    minHeight: 700,
+    icon: join(__dirname, "../build/icon.png"),
     show: false,
     // Frameless with our own title bar: a native chrome bar on a dark HUD reads
     // like two applications stacked on each other.
@@ -412,6 +458,28 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
   }
 }
 
+ipcMain.handle("profile:refresh", async () => { await readProfile() })
+
+// ── account ────────────────────────────────────────────────────────────────
+
+/** Signing in happens in the BROWSER, never here. This app must never see a
+ *  password; the site hands back a session over loldata://auth instead. */
+ipcMain.on("account:signin", () => {
+  void shell.openExternal(`${SITE}/login?desktop=1`)
+})
+
+ipcMain.handle("account:signout", async () => { await setSession(null) })
+
+ipcMain.handle("ai:ask", async (_e, messages: ChatMessage[]) => {
+  return askAi(session?.token ?? null, messages)
+})
+
+ipcMain.on("shell:open", (_e, url: string) => {
+  // Only ever http(s), and only ever outward: this is reachable from the
+  // renderer, and a bare shell.openExternal would happily run a local file.
+  if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+})
+
 ipcMain.on("runes:choose", (_e, index: number) => {
   const r = state.runes
   if (!r || index < 0 || index >= r.variants.length) return
@@ -427,6 +495,17 @@ ipcMain.handle("runes:import", async () => {
   await applyPage(champ.name, state.patch ?? "", r.variants[r.chosen]!.page)
 })
 
+/** Held in the main process only. The renderer gets the ACCOUNT, never this. */
+let session: Session | null = null
+
+const SITE = "https://loldata.cc"
+
+async function setSession(next: Session | null): Promise<void> {
+  session = next
+  await writeSession(next)
+  push({ account: next ? { email: next.email, tier: next.tier } : null })
+}
+
 /**
  * A loldata:// link from the website.
  *
@@ -436,6 +515,18 @@ ipcMain.handle("runes:import", async () => {
  */
 async function handleLink(raw: string | null): Promise<void> {
   if (!raw) return
+
+  if (linkKind(raw) === "auth") {
+    const auth = parseAuthLink(raw)
+    // Deliberately says only whether it parsed. The token must not reach a log.
+    console.log("[link] auth received, valid=%s", !!auth)
+    if (auth) {
+      await setSession(auth)
+      if (win) { win.show(); win.focus() }
+    }
+    return
+  }
+
   const link = parseRuneLink(raw)
   console.log("[link] received, valid=%s champion=%s", !!link, link?.champion ?? "-")
   if (!link) {
@@ -534,6 +625,10 @@ if (!gotLock) {
     // afterwards. A missing config is not fatal — the default stands.
     const hud = await readHudSettings()
     push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } })
+
+    // A session from a previous run, so signing in survives a restart.
+    const saved = await readSession()
+    if (saved) await setSession(saved)
 
     await lcu.start()
 

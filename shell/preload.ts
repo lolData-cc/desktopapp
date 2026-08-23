@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld("desktop", {
   demoOverlay: () => ipcRenderer.send("overlay:demo"),
   importRunes: () => ipcRenderer.invoke("runes:import"),
   chooseRunes: (index: number) => ipcRenderer.send("runes:choose", index),
+  refreshProfile: () => ipcRenderer.invoke("profile:refresh"),
+  // Signing in opens a BROWSER. This surface deliberately has no way to send a
+  // password anywhere — the site hands a session back over loldata://auth.
+  signIn: () => ipcRenderer.send("account:signin"),
+  signOut: () => ipcRenderer.invoke("account:signout"),
+  askAi: (messages: unknown) => ipcRenderer.invoke("ai:ask", messages),
+  openExternal: (url: string) => ipcRenderer.send("shell:open", url),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability: string | null) => ipcRenderer.send("hud:hint", ability),
   // Diagnostic: the overlay says how big the surface it draws into really is,

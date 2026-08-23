@@ -20,7 +20,18 @@ import type { PageSignature } from "../src/lcu/runes"
 
 export { signatureOf, type PageSignature } from "../src/lcu/runes"
 
-type Stored = { chosen: Record<string, PageSignature> }
+/**
+ * A signed-in session.
+ *
+ * The token is a bearer credential and is treated like one: never logged, never
+ * put in a URL, never sent anywhere but our own API over https. It IS written
+ * to disk in the clear, which is what a desktop app has to do to stay signed in
+ * — the file sits in the per-user app data directory, readable only by that
+ * user, and signing out deletes it.
+ */
+export type Session = { token: string; email: string | null; tier: string | null }
+
+type Stored = { chosen: Record<string, PageSignature>; session?: Session | null }
 
 let cache: Stored | null = null
 
@@ -31,9 +42,9 @@ async function load(): Promise<Stored> {
   try {
     const raw = await readFile(file(), "utf8")
     const parsed = JSON.parse(raw) as Stored
-    cache = { chosen: parsed?.chosen ?? {} }
+    cache = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null }
   } catch {
-    cache = { chosen: {} }
+    cache = { chosen: {}, session: null }
   }
   return cache
 }
@@ -57,5 +68,22 @@ export async function rememberChoice(champion: string, signature: PageSignature)
   } catch {
     // Failing to persist is not worth interrupting an import that worked; the
     // choice simply does not survive a restart.
+  }
+}
+
+export async function readSession(): Promise<Session | null> {
+  return (await load()).session ?? null
+}
+
+/** Null clears it — which is what signing out means, on disk as well. */
+export async function writeSession(session: Session | null): Promise<void> {
+  const store = await load()
+  store.session = session
+  try {
+    await mkdir(dirname(file()), { recursive: true })
+    await writeFile(file(), JSON.stringify(store, null, 2), "utf8")
+  } catch {
+    // Not worth interrupting a sign-in that otherwise worked; it simply will
+    // not survive a restart.
   }
 }

@@ -141,13 +141,23 @@ export class LcuConnection {
 
   // ── the small, typed surface the rest of the app is allowed to use ──────
 
-  async currentSummoner(): Promise<{ name: string; tag: string; level: number } | null> {
+  async currentSummoner(): Promise<{
+    name: string
+    tag: string
+    level: number
+    /** Needed to find the player in a match's participant list. */
+    puuid: string
+    /** The icon they actually chose — the app should look like their account. */
+    iconId: number
+  } | null> {
     const { data } = await this.request<any>("GET", "/lol-summoner/v1/current-summoner")
     if (!data) return null
     return {
       name: data.gameName ?? data.displayName ?? "",
       tag: data.tagLine ?? "",
       level: data.summonerLevel ?? 0,
+      puuid: data.puuid ?? "",
+      iconId: data.profileIconId ?? 0,
     }
   }
 
