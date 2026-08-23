@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld("desktop", {
     return () => ipcRenderer.off("state", handler);
   },
   minimise: () => ipcRenderer.send("win:minimise"),
-  close: () => ipcRenderer.send("win:close")
+  close: () => ipcRenderer.send("win:close"),
+  previewOverlay: (on) => ipcRenderer.send("overlay:preview", on)
 });

@@ -12,6 +12,9 @@ import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
+import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
+import { liveGameStats, liveEvents, livePlayers } from "../src/live/client"
+import { nextObjective, type NextObjective } from "../src/data/objectives"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
@@ -28,6 +31,8 @@ export type AppState = {
     allies: { locked: number; total: number }
     enemies: { locked: number; total: number }
   } | null
+  /** Only while a match is running. Null between games. */
+  objective: NextObjective | null
 }
 
 let state: AppState = {
@@ -36,22 +41,41 @@ let state: AppState = {
   phase: null,
   patch: null,
   select: null,
+  objective: null,
 }
 
 let win: BrowserWindow | null = null
 
 function push(patch: Partial<AppState>): void {
+  const before = state.phase
   state = { ...state, ...patch }
   win?.webContents.send("state", state)
+  sendOverlay("state", state)
+
+  // The overlay is only ever on screen during a match. Tying it to the phase
+  // rather than to a toggle means there is no state where it is left hanging
+  // over the client, which is the thing that makes overlays feel invasive.
+  if (state.phase !== before) {
+    if (state.phase === "InProgress" || state.phase === "Reconnect") {
+      showOverlay()
+      startGameClock()
+    } else {
+      hideOverlay()
+      stopGameClock()
+    }
+  }
 }
 
 // ── the League connection ──────────────────────────────────────────────────
 
 const lcu = new LcuConnection({
   onConnect: async () => {
+    // Anything that throws in here used to vanish: the promise rejected, the
+    // state stayed "waiting", and the window said "Open League" with the client
+    // plainly running. A failure has to be visible, not silent.
     const [summoner, phase, patchVersion] = await Promise.all([
-      lcu.currentSummoner(),
-      lcu.phase(),
+      lcu.currentSummoner().catch((e) => { console.error("[lcu] summoner:", e?.message); return null }),
+      lcu.phase().catch((e) => { console.error("[lcu] phase:", e?.message); return null }),
       currentPatch().catch(() => null),
     ])
     push({ client: "attached", summoner, phase, patch: patchVersion })
@@ -97,6 +121,33 @@ async function readSelect(data: unknown): Promise<void> {
 
 // ── window ─────────────────────────────────────────────────────────────────
 
+/* ── the in-game clock ─────────────────────────────────────────────────────
+   The 2999 API has no event stream, so this polls — but only while a match is
+   actually running, and it stops the moment one ends. Two seconds is plenty:
+   the number on screen only has to be right to the second, and this is
+   loopback. */
+let tick: ReturnType<typeof setInterval> | null = null
+
+async function readObjective(): Promise<void> {
+  const stats = await liveGameStats()
+  if (!stats) return push({ objective: null })
+
+  const [events, players] = await Promise.all([liveEvents(), livePlayers()])
+  push({ objective: nextObjective(events, stats.gameTime, players ?? []) })
+}
+
+function startGameClock(): void {
+  if (tick) return
+  void readObjective()
+  tick = setInterval(() => void readObjective(), 2000)
+}
+
+function stopGameClock(): void {
+  if (tick) clearInterval(tick)
+  tick = null
+  push({ objective: null })
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 980,
@@ -133,14 +184,22 @@ function createWindow(): void {
 ipcMain.handle("state:get", () => state)
 ipcMain.on("win:minimise", () => win?.minimize())
 ipcMain.on("win:close", () => win?.close())
+// Development affordance: seeing the overlay should not require a live match.
+ipcMain.on("overlay:preview", (_e, on: boolean) => {
+  if (on) { showOverlay(); startGameClock() } else { hideOverlay(); stopGameClock() }
+})
 
 app.whenReady().then(async () => {
   createWindow()
+  createOverlay(join(__dirname, "preload.mjs"))
   await lcu.start()
 })
 
+app.on("before-quit", () => { stopGameClock(); destroyOverlay() })
+
 app.on("window-all-closed", () => {
   lcu.stop()
+  destroyOverlay()
   if (process.platform !== "darwin") app.quit()
 })
 

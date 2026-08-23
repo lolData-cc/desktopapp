@@ -20,6 +20,7 @@ const SCENES: Record<string, unknown> = {
     phase: null,
     patch: "16.16.1",
     select: null,
+    objective: null,
   },
   lobby: {
     client: "attached",
@@ -27,6 +28,7 @@ const SCENES: Record<string, unknown> = {
     phase: "Lobby",
     patch: "16.16.1",
     select: null,
+    objective: null,
   },
   select: {
     client: "attached",
@@ -39,13 +41,32 @@ const SCENES: Record<string, unknown> = {
       allies: { locked: 3, total: 5 },
       enemies: { locked: 1, total: 5 },
     },
+    objective: null,
   },
   game: {
     client: "attached",
     summoner: { name: "yuumi45", tag: "EU1", level: 104 },
     phase: "InProgress",
     patch: "16.16.1",
-    select: null,
+    select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
+    objective: { kind: "dragon", inSeconds: 214, taken: 1 },
+  },
+  // the state the whole feature exists for
+  soon: {
+    client: "attached",
+    summoner: { name: "yuumi45", tag: "EU1", level: 104 },
+    phase: "InProgress",
+    patch: "16.16.1",
+    select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
+    objective: { kind: "dragon", inSeconds: 118, taken: 1 },
+  },
+  up: {
+    client: "attached",
+    summoner: { name: "yuumi45", tag: "EU1", level: 104 },
+    phase: "InProgress",
+    patch: "16.16.1",
+    select: { champion: { slug: "Nami", key: 267, name: "Nami" }, role: "UTILITY" },
+    objective: { kind: "elder", inSeconds: -4, taken: 4 },
   },
 }
 

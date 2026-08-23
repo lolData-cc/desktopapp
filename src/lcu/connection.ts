@@ -9,6 +9,7 @@
  */
 import NodeWebSocket from "ws"
 import { findClient, type LcuCredentials } from "./credentials"
+import { lcuFetch } from "./http"
 
 /** The client presents a self-signed certificate on 127.0.0.1. */
 const TLS = { rejectUnauthorized: false }
@@ -48,22 +49,7 @@ export class LcuConnection {
     body?: unknown
   ): Promise<{ status: number; data: T | null }> {
     if (!this.creds) throw new Error("not connected to the client")
-    const res = await fetch(`https://127.0.0.1:${this.creds.port}${path}`, {
-      method,
-      headers: {
-        Authorization: this.creds.authHeader,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      // Bun accepts per-request TLS options; this never disables verification
-      // globally, which would outlive the reason for it.
-      tls: TLS,
-    } as RequestInit)
-
-    const text = await res.text()
-    let data: T | null = null
-    if (text) { try { data = JSON.parse(text) as T } catch { data = null } }
-    return { status: res.status, data }
+    return lcuFetch<T>(this.creds.port, this.creds.authHeader, method, path, body)
   }
 
   /**

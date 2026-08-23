@@ -23,6 +23,7 @@ declare global {
       onState(fn: (s: AppState) => void): () => void
       minimise(): void
       close(): void
+      previewOverlay(on: boolean): void
     }
   }
 }
@@ -79,6 +80,7 @@ function TitleBar() {
       </span>
 
       <div className="no-drag ml-auto flex items-center">
+        <OverlayToggle />
         <button
           type="button"
           onClick={() => window.desktop.minimise()}
@@ -99,6 +101,23 @@ function TitleBar() {
         </button>
       </div>
     </header>
+  )
+}
+
+/** Shows the overlay without needing a live match — the alternative is
+ *  queueing into a game every time its layout changes. */
+function OverlayToggle() {
+  const [on, setOn] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => { const next = !on; setOn(next); window.desktop.previewOverlay(next) }}
+      className={`win-btn mr-1 h-6 rounded-[3px] px-2.5 font-jetbrains text-[8.5px] uppercase tracking-[0.16em] ${
+        on ? "bg-jade/15 text-jade" : "text-flash/30"
+      }`}
+    >
+      overlay
+    </button>
   )
 }
 

@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   minimise: () => ipcRenderer.send("win:minimise"),
   close: () => ipcRenderer.send("win:close"),
+  previewOverlay: (on: boolean) => ipcRenderer.send("overlay:preview", on),
 })

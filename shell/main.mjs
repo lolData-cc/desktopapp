@@ -2899,9 +2899,9 @@ var require_websocket_server = __commonJS((exports, module) => {
 });
 
 // shell/main.ts
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow as BrowserWindow2, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join as join2 } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -2970,6 +2970,45 @@ async function findClient() {
   return await fromProcess() ?? await fromLockfile();
 }
 
+// src/lcu/http.ts
+import { request as httpsRequest } from "node:https";
+function lcuFetch(port, authHeader, method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
+    const req = httpsRequest({
+      host: "127.0.0.1",
+      port,
+      path,
+      method,
+      rejectUnauthorized: false,
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+        ...payload ? { "Content-Type": "application/json", "Content-Length": payload.length } : {}
+      }
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        let data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = null;
+          }
+        }
+        resolve({ status: res.statusCode ?? 0, data });
+      });
+    });
+    req.on("error", reject);
+    if (payload)
+      req.write(payload);
+    req.end();
+  });
+}
+
 // src/lcu/connection.ts
 var TLS = { rejectUnauthorized: false };
 var isBun = () => typeof globalThis.Bun !== "undefined";
@@ -2986,25 +3025,7 @@ class LcuConnection {
   async request(method, path, body) {
     if (!this.creds)
       throw new Error("not connected to the client");
-    const res = await fetch(`https://127.0.0.1:${this.creds.port}${path}`, {
-      method,
-      headers: {
-        Authorization: this.creds.authHeader,
-        ...body !== undefined ? { "Content-Type": "application/json" } : {}
-      },
-      ...body !== undefined ? { body: JSON.stringify(body) } : {},
-      tls: TLS
-    });
-    const text = await res.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
-      }
-    }
-    return { status: res.status, data };
+    return lcuFetch(this.creds.port, this.creds.authHeader, method, path, body);
   }
   async start() {
     this.stopped = false;
@@ -3131,26 +3152,180 @@ async function currentPatch() {
   return patch;
 }
 
+// shell/overlay.ts
+import { BrowserWindow, screen } from "electron";
+import { join } from "node:path";
+var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
+var DEV_URL = process.env.VITE_DEV_SERVER_URL;
+var overlay = null;
+function createOverlay(preloadPath) {
+  const { bounds } = screen.getPrimaryDisplay();
+  overlay = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  overlay.setAlwaysOnTop(true, "screen-saver");
+  overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  overlay.setIgnoreMouseEvents(true, { forward: true });
+  const url = DEV_URL ? `${DEV_URL}?overlay=1` : `file://${join(__dirname, "../dist/index.html")}?overlay=1`;
+  overlay.loadURL(url);
+  overlay.on("closed", () => {
+    overlay = null;
+  });
+  return overlay;
+}
+function showOverlay() {
+  if (!overlay || overlay.isDestroyed())
+    return;
+  if (!overlay.isVisible())
+    overlay.showInactive();
+  overlay.setAlwaysOnTop(true, "screen-saver");
+}
+function hideOverlay() {
+  if (!overlay || overlay.isDestroyed())
+    return;
+  if (overlay.isVisible())
+    overlay.hide();
+}
+function sendOverlay(channel, payload) {
+  if (!overlay || overlay.isDestroyed())
+    return;
+  overlay.webContents.send(channel, payload);
+}
+function destroyOverlay() {
+  if (overlay && !overlay.isDestroyed())
+    overlay.destroy();
+  overlay = null;
+}
+
+// src/live/client.ts
+import { request as httpsRequest2 } from "node:https";
+var PORT = 2999;
+function get(path) {
+  return new Promise((resolve) => {
+    const req = httpsRequest2({ host: "127.0.0.1", port: PORT, path: `/liveclientdata${path}`, method: "GET", rejectUnauthorized: false }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        if (res.statusCode !== 200)
+          return resolve(null);
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
+var liveGameStats = () => get("/gamestats");
+var livePlayers = () => get("/playerlist");
+async function liveEvents() {
+  const wrap = await get("/eventdata");
+  return wrap?.Events ?? [];
+}
+
+// src/data/objectives.ts
+var FIRST_DRAGON_AT = 5 * 60;
+var DRAGON_RESPAWN = 5 * 60;
+var ELDER_RESPAWN = 6 * 60;
+var ELDER_EARLIEST = 35 * 60;
+var SOUL_AT = 4;
+function soulTakenBy(events, players) {
+  const teamOf = new Map;
+  for (const p of players) {
+    if (p.riotId)
+      teamOf.set(p.riotId, p.team);
+    if (p.summonerName)
+      teamOf.set(p.summonerName, p.team);
+  }
+  const count = {};
+  for (const e of events) {
+    if (e.EventName !== "DragonKill")
+      continue;
+    const team = e.KillerName ? teamOf.get(e.KillerName) : undefined;
+    if (!team)
+      continue;
+    count[team] = (count[team] ?? 0) + 1;
+    if (count[team] >= SOUL_AT)
+      return team;
+  }
+  return null;
+}
+function nextObjective(events, gameTime, players = []) {
+  const kills = events.filter((e) => e.EventName === "DragonKill").sort((a, b) => a.EventTime - b.EventTime);
+  if (kills.length === 0) {
+    return { kind: "dragon", inSeconds: FIRST_DRAGON_AT - gameTime, taken: 0 };
+  }
+  const last = kills[kills.length - 1];
+  const soul = soulTakenBy(events, players);
+  if (soul) {
+    const due = Math.min(last.EventTime + ELDER_RESPAWN, Math.max(ELDER_EARLIEST, gameTime));
+    return { kind: "elder", inSeconds: due - gameTime, taken: kills.length };
+  }
+  return { kind: "dragon", inSeconds: last.EventTime + DRAGON_RESPAWN - gameTime, taken: kills.length };
+}
+
 // shell/main.ts
 var __dirname2 = dirname(fileURLToPath(import.meta.url));
-var DEV_URL = process.env.VITE_DEV_SERVER_URL;
+var DEV_URL2 = process.env.VITE_DEV_SERVER_URL;
 var state = {
   client: "waiting",
   summoner: null,
   phase: null,
   patch: null,
-  select: null
+  select: null,
+  objective: null
 };
 var win = null;
 function push(patch2) {
+  const before = state.phase;
   state = { ...state, ...patch2 };
   win?.webContents.send("state", state);
+  sendOverlay("state", state);
+  if (state.phase !== before) {
+    if (state.phase === "InProgress" || state.phase === "Reconnect") {
+      showOverlay();
+      startGameClock();
+    } else {
+      hideOverlay();
+      stopGameClock();
+    }
+  }
 }
 var lcu = new LcuConnection({
   onConnect: async () => {
     const [summoner, phase, patchVersion] = await Promise.all([
-      lcu.currentSummoner(),
-      lcu.phase(),
+      lcu.currentSummoner().catch((e) => {
+        console.error("[lcu] summoner:", e?.message);
+        return null;
+      }),
+      lcu.phase().catch((e) => {
+        console.error("[lcu] phase:", e?.message);
+        return null;
+      }),
       currentPatch().catch(() => null)
     ]);
     push({ client: "attached", summoner, phase, patch: patchVersion });
@@ -3186,8 +3361,28 @@ async function readSelect(data) {
     }
   });
 }
+var tick = null;
+async function readObjective() {
+  const stats = await liveGameStats();
+  if (!stats)
+    return push({ objective: null });
+  const [events, players] = await Promise.all([liveEvents(), livePlayers()]);
+  push({ objective: nextObjective(events, stats.gameTime, players ?? []) });
+}
+function startGameClock() {
+  if (tick)
+    return;
+  readObjective();
+  tick = setInterval(() => void readObjective(), 2000);
+}
+function stopGameClock() {
+  if (tick)
+    clearInterval(tick);
+  tick = null;
+  push({ objective: null });
+}
 function createWindow() {
-  win = new BrowserWindow({
+  win = new BrowserWindow2({
     width: 980,
     height: 620,
     minWidth: 760,
@@ -3196,7 +3391,7 @@ function createWindow() {
     frame: false,
     backgroundColor: "#040A0C",
     webPreferences: {
-      preload: join(__dirname2, "preload.mjs"),
+      preload: join2(__dirname2, "preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -3207,24 +3402,39 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
-  if (DEV_URL)
-    win.loadURL(DEV_URL);
+  if (DEV_URL2)
+    win.loadURL(DEV_URL2);
   else
-    win.loadFile(join(__dirname2, "../dist/index.html"));
+    win.loadFile(join2(__dirname2, "../dist/index.html"));
 }
 ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
 ipcMain.on("win:close", () => win?.close());
+ipcMain.on("overlay:preview", (_e, on) => {
+  if (on) {
+    showOverlay();
+    startGameClock();
+  } else {
+    hideOverlay();
+    stopGameClock();
+  }
+});
 app.whenReady().then(async () => {
   createWindow();
+  createOverlay(join2(__dirname2, "preload.mjs"));
   await lcu.start();
+});
+app.on("before-quit", () => {
+  stopGameClock();
+  destroyOverlay();
 });
 app.on("window-all-closed", () => {
   lcu.stop();
+  destroyOverlay();
   if (process.platform !== "darwin")
     app.quit();
 });
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0)
+  if (BrowserWindow2.getAllWindows().length === 0)
     createWindow();
 });
