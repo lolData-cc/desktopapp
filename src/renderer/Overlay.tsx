@@ -25,9 +25,20 @@ type Notice = {
   element: DragonElement | null
   /** Who has taken which drakes so far. */
   tally: DragonTally
-  item?: { id: number; name: string; cost: number; index: number; total: number }
+  item?: {
+    id: number; name: string; cost: number; index: number; total: number
+    /** Worked out live from the inventory rather than read off the plan. */
+    smart?: boolean
+    cohort?: number
+    lift?: number
+  }
   boots?: { item: number; name: string; reason: string; keys: number[] }
-  build?: { items: number[]; shapeLabel: string; cohortGames: number }
+  build?: {
+    items: number[]; shapeLabel: string; cohortGames: number
+    /** The plan was set aside mid-game because the actual build diverged. */
+    recalibrated?: boolean
+    note?: string
+  }
 }
 type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
 type AppState = {
@@ -574,9 +585,15 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
               {boots
                 ? "boots · this matchup"
                 : opening
-                  ? `build · ${n.build!.cohortGames.toLocaleString()} games`
+                  ? n.build!.recalibrated
+                    ? `recalibrated · ${n.build!.cohortGames.toLocaleString()} games`
+                    : `build · ${n.build!.cohortGames.toLocaleString()} games`
                   : shopping
-                ? `next item · ${n.item!.index} of ${n.item!.total}`
+                ? n.item!.smart
+                  // A live answer, not a line of the plan — and it says how many
+                  // games it came from, because "smart" on its own is a claim.
+                  ? `smart pick · ${(n.item!.cohort ?? 0).toLocaleString()} games`
+                  : `next item · ${n.item!.index} of ${n.item!.total}`
                 : soul === "ours"
                   ? "soul point · yours"
                   : soul === "theirs"
@@ -592,10 +609,17 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
                   <span style={{ color: accent }}>recommended</span>
                 </>
               ) : opening ? (
-                <>
-                  Build for{" "}
-                  <span style={{ color: accent }}>this comp</span>
-                </>
+                n.build!.recalibrated ? (
+                  <>
+                    Build{" "}
+                    <span style={{ color: accent }}>recalibrated</span>
+                  </>
+                ) : (
+                  <>
+                    Build for{" "}
+                    <span style={{ color: accent }}>this comp</span>
+                  </>
+                )
               ) : shopping ? (
                 <>
                   {n.item!.name} is{" "}
@@ -625,6 +649,24 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
                 <ChampFace key={k} champKey={k} />
               ))}
             </span>
+          </div>
+        ) : opening && n.build!.recalibrated ? (
+          <div className="relative mt-3 flex items-center gap-3 pt-2.5">
+            <span aria-hidden className="ds-rule absolute inset-x-0 top-0 h-px bg-jade/[0.18]" />
+            <span className="ds-late font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
+              read off
+            </span>
+            <span className="ds-late font-chakrapetch text-[13px] font-bold text-flash/70">
+              {n.build!.shapeLabel}
+            </span>
+            {n.build!.note && (
+              <span
+                className="ds-late ml-auto font-chakrapetch text-[15px] font-bold tabular-nums"
+                style={{ color: accent }}
+              >
+                {n.build!.note}
+              </span>
+            )}
           </div>
         ) : opening ? (
           <div className="relative mt-3 flex items-center gap-2 pt-2.5">

@@ -179,6 +179,45 @@ export default function BuildEditor({
       </div>
 
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+        {/* A setting rather than a hidden behaviour: it changes what the app
+            tells you mid-game, and it costs a query each time the inventory
+            moves, so it is the player's call. */}
+        <button
+          type="button"
+          onClick={() => void window.desktop.smartBuild(championId, !profile.smart)}
+          className="mb-5 flex w-full items-center gap-3 rounded-[3px] px-3 py-2.5 text-left transition"
+          style={{
+            background: profile.smart ? "rgba(0,217,146,0.06)" : "rgba(215,216,217,0.025)",
+            boxShadow: profile.smart
+              ? "inset 0 0 0 1px rgba(0,217,146,0.28)"
+              : "inset 0 0 0 1px rgba(215,216,217,0.05)",
+          }}
+        >
+          <span
+            className="grid h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition"
+            style={{ background: profile.smart ? "rgba(0,217,146,0.32)" : "rgba(215,216,217,0.10)" }}
+          >
+            <span
+              className="h-4 w-4 rounded-full transition-transform"
+              style={{
+                background: profile.smart ? "#00d992" : "rgba(215,216,217,0.35)",
+                transform: profile.smart ? "translateX(16px)" : "translateX(0)",
+              }}
+            />
+          </span>
+
+          <span className="min-w-0">
+            <span className="block font-chakrapetch text-[13px] font-bold uppercase tracking-[0.1em]">
+              smart build
+            </span>
+            <span className="block max-w-[64ch] font-chakrapetch text-[11.5px] leading-snug text-flash/35">
+              If you buy something that is not in this plan, stop following it and ask what
+              players who reached your actual inventory built next. Off, the order below is
+              followed to the letter.
+            </span>
+          </span>
+        </button>
+
         <Label>build order</Label>
         <p className="mb-2 max-w-[70ch] font-chakrapetch text-[11.5px] leading-snug text-flash/30">
           The order the in-game notices follow. You are told about slot 1 first, and only

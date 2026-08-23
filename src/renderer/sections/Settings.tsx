@@ -39,6 +39,17 @@ export default function Settings({ s }: { s: AppState }) {
         show 5s
       </button>
 
+      {/* The notice least likely to turn up by accident: it needs a smart
+          profile AND a game you departed from. */}
+      <button
+        type="button"
+        onClick={() => window.desktop.demoRecal()}
+        title="Preview the smart-build recalibration notice"
+        className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30"
+      >
+        recalibration
+      </button>
+
       {/* Steps through the bar's four readings — ahead, behind, level, and a
           short scoreboard — because one fixed pair of numbers would only ever
           show that it draws. */}

@@ -109,6 +109,7 @@ export type AppState = {
     items: number[]
     runes?: string | null
     enabled: boolean
+    smart?: boolean
     source: "champ-select" | "site"
     savedAt: number
     patch: string | null
@@ -142,6 +143,7 @@ declare global {
       close(): void
       pinOverlay(on: boolean): void
       demoOverlay(): void
+      demoRecal(): void
       importRunes(): Promise<void>
       chooseRunes(index: number): void
       refreshProfile(): Promise<void>
@@ -157,6 +159,7 @@ declare global {
       saveBuild(): Promise<void>
       updateBuild(championId: string, items: number[], runes: string | null): Promise<void>
       toggleBuild(championId: string, enabled: boolean): Promise<void>
+      smartBuild(championId: string, smart: boolean): Promise<void>
       deleteBuild(championId: string): Promise<void>
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void

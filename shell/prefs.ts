@@ -53,6 +53,10 @@ export type BuildProfile = {
   /** The rune page signature, when one was saved with it. */
   runes?: PageSignature | null
   enabled: boolean
+  /** Re-ask the data when the actual build stops matching the plan. Off by
+   *  default: it costs a query per inventory change, and a plan followed to the
+   *  letter needs no second opinion. */
+  smart?: boolean
   /** Where it came from, so the interface can say. */
   source: "champ-select" | "site"
   savedAt: number

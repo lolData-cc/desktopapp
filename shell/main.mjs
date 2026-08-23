@@ -19689,6 +19689,59 @@ var ccCarriers = (champs) => champs.filter((c) => isHeavyCC(c.id));
 // src/data/itemCatalog.ts
 var CDN5 = "https://cdn2.loldata.cc";
 var FALLBACK_PATCH5 = "16.16.1";
+var cache2 = null;
+var loading4 = null;
+async function load6() {
+  if (cache2)
+    return cache2;
+  if (loading4)
+    return loading4;
+  loading4 = (async () => {
+    let patch2 = FALLBACK_PATCH5;
+    const marker = await fetch(`${CDN5}/_current_version.txt`).catch(() => null);
+    if (marker?.ok)
+      patch2 = (await marker.text()).trim() || FALLBACK_PATCH5;
+    const res = await fetch(`${CDN5}/${patch2}/data/en_US/item.json`);
+    if (!res.ok)
+      throw new Error(`item data ${res.status}`);
+    const json = await res.json();
+    const out = [];
+    for (const [id, it] of Object.entries(json.data)) {
+      const cost = it.gold?.total ?? 0;
+      if (!it.gold?.purchasable)
+        continue;
+      if (it.maps && it.maps["11"] === false)
+        continue;
+      if (it.inStore === false || it.hideFromAll)
+        continue;
+      if (it.requiredAlly || it.requiredChampion)
+        continue;
+      const tags = it.tags ?? [];
+      const boots = tags.includes("Boots") && cost >= 900;
+      if (it.into?.length && !boots)
+        continue;
+      if (cost < 500)
+        continue;
+      out.push({
+        id: Number(id),
+        name: it.name,
+        cost,
+        icon: `${CDN5}/${patch2}/img/item/${id}.png`,
+        tags,
+        boots
+      });
+    }
+    out.sort((a, b) => Number(b.boots) - Number(a.boots) || a.cost - b.cost || a.name.localeCompare(b.name));
+    cache2 = out;
+    return out;
+  })();
+  try {
+    return await loading4;
+  } finally {
+    loading4 = null;
+  }
+}
+var allItems = () => load6();
 var boots = null;
 async function bootsIds() {
   if (boots)
@@ -19713,8 +19766,77 @@ async function bootsIds() {
   return out;
 }
 
-// src/data/compAdvice.ts
+// src/data/smartBuild.ts
 var API3 = "https://api2.loldata.cc";
+var MIN_COHORT = 300;
+var MIN_PICKRATE = 20;
+var MIN_ITEM_GAMES = 40;
+var pool = null;
+var names = null;
+async function itemPool() {
+  if (!pool || !names) {
+    const items = await allItems();
+    pool = items.map((i) => i.id);
+    names = new Map(items.map((i) => [i.id, i.name]));
+  }
+  return { pool, names };
+}
+async function rank(champion, role, owned, itemPoolIds, signal) {
+  try {
+    const res = await fetch(`${API3}/api/explorer/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject: {
+          champion,
+          ...role ? { role } : {},
+          ...owned.length ? { items: owned } : {}
+        },
+        constraints: [],
+        filters: { scope: "current_patch" },
+        output: { kind: "rank", dimension: "item", limit: 12, minGames: MIN_ITEM_GAMES, itemPool: itemPoolIds }
+      }),
+      signal
+    });
+    if (!res.ok)
+      return null;
+    const json = await res.json();
+    return json?.error ? null : json.rows ?? [];
+  } catch {
+    return null;
+  }
+}
+async function nextBest(champion, role, owned, signal) {
+  const { pool: ids, names: byId } = await itemPool();
+  let use = owned.filter((id) => ids.includes(id));
+  const ownedSet = new Set(use);
+  for (;; ) {
+    const rows = await rank(champion, role, use, ids, signal);
+    if (!rows)
+      return null;
+    const cohort = rows[0]?.cohort_games ?? 0;
+    if (cohort < MIN_COHORT && use.length > 0) {
+      use = use.slice(0, -1);
+      continue;
+    }
+    const best = rows.find((r) => !ownedSet.has(r.dimension) && r.pickrate >= MIN_PICKRATE && r.games >= MIN_ITEM_GAMES);
+    if (!best)
+      return null;
+    return {
+      item: best.dimension,
+      name: byId.get(best.dimension) ?? `Item ${best.dimension}`,
+      winrate: best.winrate,
+      lift: best.lift,
+      pickrate: best.pickrate,
+      cohort,
+      applied: use
+    };
+  }
+}
+var inventoryKey = (championId, owned) => `${championId}:${[...owned].sort((a, b) => a - b).join(",")}`;
+
+// src/data/compAdvice.ts
+var API4 = "https://api2.loldata.cc";
 function compShapes(enemyCategories) {
   const counts = new Map;
   for (const cats of enemyCategories) {
@@ -19732,7 +19854,7 @@ var graphFor = (champion, role, shapes) => ({
 });
 async function post(path, body, signal) {
   try {
-    const res = await fetch(`${API3}${path}`, {
+    const res = await fetch(`${API4}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -19746,7 +19868,7 @@ async function post(path, body, signal) {
     return null;
   }
 }
-var MIN_COHORT = 400;
+var MIN_COHORT2 = 400;
 var MIN_SLOT_GAMES = 150;
 async function buildForComp(champion, role, shapes, signal) {
   let use = [...shapes];
@@ -19754,7 +19876,7 @@ async function buildForComp(champion, role, shapes, signal) {
     const data = await post("/api/explorer/buildpath", graphFor(champion, role, use), signal);
     if (!data)
       return null;
-    if (data.cohortGames >= MIN_COHORT || use.length === 0) {
+    if (data.cohortGames >= MIN_COHORT2 || use.length === 0) {
       return {
         slots: pickPath(data.slots),
         cohortGames: data.cohortGames,
@@ -19952,6 +20074,7 @@ async function readSelect(data) {
 var NOTIFY_LEAD = 90;
 var NOTICE_MS = 9000;
 var OPENING_MS = 14000;
+var RECAL_MS = 11000;
 var POLL_MS = 2000;
 var DEMO_MS = 5000;
 var EXIT_MS = 660;
@@ -20059,6 +20182,31 @@ async function playingChampion(players, me) {
   const champ = await championByName(mine.championName).catch(() => null);
   return champ?.slug ?? null;
 }
+var smartCache = null;
+var smartPending = "";
+var recalibrated = null;
+function describeOwned(items) {
+  if (!items.length)
+    return "your build so far";
+  return `${items.length} item${items.length === 1 ? "" : "s"} you have built`;
+}
+async function smartPick(profile, inventory2) {
+  const finals = new Set((await allItems()).map((i) => i.id));
+  const owned = inventory2.map((i) => i.itemID).filter((id) => finals.has(id));
+  const plan = new Set(profile.items);
+  if (!owned.some((id) => !plan.has(id)))
+    return null;
+  const key = inventoryKey(profile.championId, owned);
+  if (smartCache?.key === key)
+    return smartCache.value;
+  if (smartPending === key)
+    return null;
+  smartPending = key;
+  const value = await nextBest(profile.championName, profile.role, owned).catch(() => null);
+  smartCache = { key, value };
+  smartPending = "";
+  return value;
+}
 var lastShopLog = "";
 function shopLog(format, ...args) {
   const line = format + JSON.stringify(args);
@@ -20070,9 +20218,9 @@ function shopLog(format, ...args) {
 async function enemyChampions(players, myTeam) {
   if (!myTeam)
     return [];
-  const names = players.filter((p) => p.team !== myTeam).map((p) => p.championName).filter((n) => !!n);
+  const names2 = players.filter((p) => p.team !== myTeam).map((p) => p.championName).filter((n) => !!n);
   const keys = [];
-  for (const name of names) {
+  for (const name of names2) {
     const champ = await championByName(name).catch(() => null);
     if (champ)
       keys.push(champ.key);
@@ -20094,6 +20242,45 @@ async function readShop(riotId, championId, enemies) {
   const nextIndex = build.findIndex((s) => !owned.has(s.item));
   if (nextIndex < 0)
     return shopLog("build finished");
+  if (saved?.smart) {
+    const smart = await smartPick(saved, purse.items).catch(() => null);
+    if (smart) {
+      if (recalibrated?.item !== smart.item) {
+        recalibrated = { item: smart.item, at: Date.now() };
+        shopLog("recalibrated to %s (%d games)", smart.name, smart.cohort);
+        raiseNotice("build", 0, null, { ours: [], theirs: [] }, RECAL_MS, undefined, undefined, {
+          items: [smart.item],
+          shapeLabel: describeOwned(smart.applied),
+          cohortGames: smart.cohort,
+          recalibrated: true,
+          note: smart.lift >= 0 ? `+${smart.lift.toFixed(1)}pp` : `${smart.lift.toFixed(1)}pp`
+        });
+        return;
+      }
+      if (Date.now() - (recalibrated?.at ?? 0) < RECAL_MS)
+        return;
+      if (announcedItems.has(smart.item))
+        return;
+      const smartCost = await costToComplete(smart.item, purse.items, purse.gold).catch(() => null);
+      if (!smartCost)
+        return shopLog("no price for smart item %d", smart.item);
+      shopLog("smart: %s needs %dg, have %dg (from %d games)%s", smart.name, smartCost.remaining, purse.gold, smart.cohort, smartCost.affordable ? " → NOTIFY" : "");
+      if (!smartCost.affordable)
+        return;
+      announcedItems.add(smart.item);
+      raiseNotice("item", 0, null, { ours: [], theirs: [] }, NOTICE_MS, {
+        id: smart.item,
+        name: smartCost.name,
+        cost: smartCost.remaining,
+        index: 0,
+        total: 0,
+        smart: true,
+        cohort: smart.cohort,
+        lift: smart.lift
+      });
+      return;
+    }
+  }
   const next = build[nextIndex];
   if (announcedItems.has(next.item))
     return;
@@ -20153,6 +20340,9 @@ function startGameClock() {
   warmItemCosts();
   warmItemTree();
   announcedItems = new Set;
+  smartCache = null;
+  smartPending = "";
+  recalibrated = null;
   announcedBoots = false;
   announcedOpening = false;
   readOpening();
@@ -20274,12 +20464,12 @@ async function profileFromRunes(championName, patch2, runes) {
 }
 async function backfillRuneProfiles() {
   const choices = await chosenAll().catch(() => ({}));
-  const names = Object.keys(choices);
-  console.log("[builds] backfill: %d remembered import(s): %s", names.length, names.join(", ") || "none");
-  if (!names.length)
+  const names2 = Object.keys(choices);
+  console.log("[builds] backfill: %d remembered import(s): %s", names2.length, names2.join(", ") || "none");
+  if (!names2.length)
     return;
   let made = 0;
-  for (const name of names) {
+  for (const name of names2) {
     if (await runesBackfilledFor(name).catch(() => true)) {
       console.log("[builds] backfill: %s already offered, skipping", name);
       continue;
@@ -20370,6 +20560,13 @@ ipcMain.handle("builds:save", async () => {
     patch: m.patch
   };
   await saveBuild(profile);
+  await pushBuilds();
+});
+ipcMain.handle("builds:smart", async (_e, championId, smart) => {
+  const existing = await buildFor(championId).catch(() => null);
+  if (!existing)
+    return;
+  await saveBuild({ ...existing, smart });
   await pushBuilds();
 });
 ipcMain.handle("builds:update", async (_e, championId, items, runes) => {
@@ -20490,6 +20687,15 @@ ipcMain.on("overlay:demo", async () => {
     }
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
+});
+ipcMain.on("overlay:demo-recal", () => {
+  raiseNotice("build", 0, null, { ours: [], theirs: [] }, DEMO_MS, undefined, undefined, {
+    items: [4633],
+    shapeLabel: "3 items you have built",
+    cohortGames: 531,
+    recalibrated: true,
+    note: "+2.6pp"
+  });
 });
 var gotLock = app3.requestSingleInstanceLock();
 if (!gotLock) {

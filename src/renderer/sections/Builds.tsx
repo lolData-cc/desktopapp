@@ -135,6 +135,11 @@ function Row({
             + runes
           </span>
         )}
+        {b.smart && (
+          <span className="ml-1 font-jetbrains text-[8.5px] uppercase tracking-[0.14em] text-citrine/50">
+            smart
+          </span>
+        )}
       </div>
 
       <button

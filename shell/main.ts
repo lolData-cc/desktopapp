@@ -33,7 +33,8 @@ import { teamGold, type TeamGold } from "../src/data/teamGold"
 import { warmItemCosts } from "../src/data/itemCost"
 import { costToComplete, warmItemTree } from "../src/data/affordability"
 import { classifyAll, ccCarriers, CC_HEAVY_AT, type ChampInfo } from "../src/data/champClass"
-import { bootsIds } from "../src/data/itemCatalog"
+import { bootsIds, allItems } from "../src/data/itemCatalog"
+import { nextBest, inventoryKey, type NextBest } from "../src/data/smartBuild"
 import { buildForComp, compShapes, describeShapes, type BuildSlot, type CompShape } from "../src/data/compAdvice"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -70,9 +71,22 @@ export type AppState = {
     /** Who has taken which drakes so far. Empty for an item notice. */
     tally: DragonTally
     /** Set only on an item notice: what just became affordable. */
-    item?: { id: number; name: string; cost: number; index: number; total: number }
+    item?: {
+      id: number; name: string; cost: number; index: number; total: number
+      /** Worked out live from the inventory rather than read off the plan. */
+      smart?: boolean
+      /** How specific that answer was, when it was a live one. */
+      cohort?: number
+      lift?: number
+    }
     boots?: { item: number; name: string; reason: string; keys: number[] }
-    build?: { items: number[]; shapeLabel: string; cohortGames: number }
+    build?: {
+      items: number[]; shapeLabel: string; cohortGames: number
+      /** The plan was set aside mid-game because the actual build diverged. */
+      recalibrated?: boolean
+      /** What that decision was read from, in the player's own items. */
+      note?: string
+    }
   } | null
   /** What to build against the team you are actually facing, worked out in
    *  champion select — where the comp is known and there is still time to act
@@ -380,6 +394,8 @@ const NOTIFY_LEAD = 90        // seconds before the spawn — the "1:30" mark
 const NOTICE_MS = 9_000       // how long it stays up
 /** The opening build is a LIST, not an alert — six icons need reading time. */
 const OPENING_MS = 14_000
+/** A recalibration is a change of plan, so it is held like the opening one. */
+const RECAL_MS = 11_000
 const POLL_MS = 2_000
 
 /** How long the debug button holds a demo notice up. Shorter than a real one
@@ -458,9 +474,15 @@ function raiseNotice(
   element: DragonElement | null,
   tally: DragonTally,
   ms: number = NOTICE_MS,
-  item?: { id: number; name: string; cost: number; index: number; total: number },
+  item?: {
+    id: number; name: string; cost: number; index: number; total: number
+    smart?: boolean; cohort?: number; lift?: number
+  },
   boots?: { item: number; name: string; reason: string; keys: number[] },
-  build?: { items: number[]; shapeLabel: string; cohortGames: number }
+  build?: {
+    items: number[]; shapeLabel: string; cohortGames: number
+    recalibrated?: boolean; note?: string
+  }
 ): void {
   if (noticeTimer) clearTimeout(noticeTimer)
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots, build } })
@@ -600,6 +622,53 @@ async function playingChampion(
   return champ?.slug ?? null
 }
 
+/**
+ * The live answer, when the plan has been departed from.
+ *
+ * Null while the player is still following their build — which is the common
+ * case and must stay free. The query is asked once per INVENTORY, not once per
+ * poll: the answer cannot change until something is bought, and a request every
+ * two seconds for the whole game would be indefensible.
+ */
+let smartCache: { key: string; value: NextBest | null } | null = null
+let smartPending = ""
+/** The recommendation whose recalibration has already been announced, and when
+ *  — so the "purchasable" notice does not immediately paint over the notice
+ *  that just explained why the plan changed. */
+let recalibrated: { item: number; at: number } | null = null
+
+/** "off Liandry's, Steelcaps and Rylai's" — the items the answer was read from,
+ *  so a recalibration says what it noticed rather than just asserting. */
+function describeOwned(items: number[]): string {
+  if (!items.length) return "your build so far"
+  return `${items.length} item${items.length === 1 ? "" : "s"} you have built`
+}
+
+async function smartPick(
+  profile: BuildProfile,
+  inventory: { itemID: number }[]
+): Promise<NextBest | null> {
+  const finals = new Set((await allItems()).map((i) => i.id))
+  const owned = inventory.map((i) => i.itemID).filter((id) => finals.has(id))
+
+  // Following the plan is not a deviation, and needs no second opinion.
+  const plan = new Set(profile.items)
+  if (!owned.some((id) => !plan.has(id))) return null
+
+  const key = inventoryKey(profile.championId, owned)
+  if (smartCache?.key === key) return smartCache.value
+
+  // One request in flight per inventory; the poll would otherwise start a
+  // second before the first came back.
+  if (smartPending === key) return null
+  smartPending = key
+
+  const value = await nextBest(profile.championName, profile.role, owned).catch(() => null)
+  smartCache = { key, value }
+  smartPending = ""
+  return value
+}
+
 /** Only when it CHANGES: this runs every poll, and a line a second would bury
  *  everything else in the log. */
 let lastShopLog = ""
@@ -653,6 +722,56 @@ async function readShop(
   const owned = new Set(purse.items.map((i) => i.itemID))
   const nextIndex = build.findIndex((s) => !owned.has(s.item))
   if (nextIndex < 0) return shopLog("build finished")
+
+  // ── SMART BUILD ────────────────────────────────────────────────────────
+  // A plan the player has stopped following is answering a question nobody is
+  // asking. When they have bought something that is not in it, the plan is set
+  // aside and the data is asked about the inventory they ACTUALLY have.
+  if (saved?.smart) {
+    const smart = await smartPick(saved, purse.items).catch(() => null)
+    if (smart) {
+      // Said ONCE per change of answer: the plan you saved is no longer what
+      // you are being told, and that is worth a sentence rather than a silent
+      // substitution.
+      if (recalibrated?.item !== smart.item) {
+        recalibrated = { item: smart.item, at: Date.now() }
+        shopLog("recalibrated to %s (%d games)", smart.name, smart.cohort)
+        raiseNotice("build", 0, null, { ours: [], theirs: [] }, RECAL_MS, undefined, undefined, {
+          items: [smart.item],
+          shapeLabel: describeOwned(smart.applied),
+          cohortGames: smart.cohort,
+          recalibrated: true,
+          note: smart.lift >= 0 ? `+${smart.lift.toFixed(1)}pp` : `${smart.lift.toFixed(1)}pp`,
+        })
+        return
+      }
+
+      // Let the recalibration finish being read before replacing it.
+      if (Date.now() - (recalibrated?.at ?? 0) < RECAL_MS) return
+
+      if (announcedItems.has(smart.item)) return
+      const smartCost = await costToComplete(smart.item, purse.items, purse.gold).catch(() => null)
+      if (!smartCost) return shopLog("no price for smart item %d", smart.item)
+
+      shopLog("smart: %s needs %dg, have %dg (from %d games)%s",
+        smart.name, smartCost.remaining, purse.gold, smart.cohort,
+        smartCost.affordable ? " → NOTIFY" : "")
+      if (!smartCost.affordable) return
+
+      announcedItems.add(smart.item)
+      raiseNotice("item", 0, null, { ours: [], theirs: [] }, NOTICE_MS, {
+        id: smart.item,
+        name: smartCost.name,
+        cost: smartCost.remaining,
+        index: 0,
+        total: 0,
+        smart: true,
+        cohort: smart.cohort,
+        lift: smart.lift,
+      })
+      return
+    }
+  }
 
   const next = build[nextIndex]!
   if (announcedItems.has(next.item)) return
@@ -748,6 +867,9 @@ function startGameClock(): void {
   warmItemCosts()
   warmItemTree()
   announcedItems = new Set()
+  smartCache = null
+  smartPending = ""
+  recalibrated = null
   announcedBoots = false
   announcedOpening = false
   readOpening()
@@ -1089,6 +1211,13 @@ ipcMain.handle("builds:save", async () => {
  * but a build that reaches the notifier with a hole in it produces a notice
  * about nothing, and the cost of checking is a line.
  */
+ipcMain.handle("builds:smart", async (_e, championId: string, smart: boolean) => {
+  const existing = await buildFor(championId).catch(() => null)
+  if (!existing) return
+  await saveBuild({ ...existing, smart })
+  await pushBuilds()
+})
+
 ipcMain.handle("builds:update", async (_e, championId: string, items: number[], runes: string | null) => {
   const existing = await buildFor(championId).catch(() => null)
   if (!existing) return
@@ -1242,6 +1371,24 @@ ipcMain.on("overlay:demo", async () => {
     }
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS)
+})
+
+/**
+ * Preview a recalibration without a game.
+ *
+ * Deliberately a separate button: it is the notice with the least chance of
+ * appearing by accident, since it needs a smart profile AND a game where you
+ * departed from it, and "I cannot see the thing I just built" is a bad way to
+ * work on it.
+ */
+ipcMain.on("overlay:demo-recal", () => {
+  raiseNotice("build", 0, null, { ours: [], theirs: [] }, DEMO_MS, undefined, undefined, {
+    items: [4633],
+    shapeLabel: "3 items you have built",
+    cohortGames: 531,
+    recalibrated: true,
+    note: "+2.6pp",
+  })
 })
 
 /**

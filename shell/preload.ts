@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("desktop", {
   close: () => ipcRenderer.send("win:close"),
   pinOverlay: (on: boolean) => ipcRenderer.send("overlay:pin", on),
   demoOverlay: () => ipcRenderer.send("overlay:demo"),
+  demoRecal: () => ipcRenderer.send("overlay:demo-recal"),
   importRunes: () => ipcRenderer.invoke("runes:import"),
   chooseRunes: (index: number) => ipcRenderer.send("runes:choose", index),
   refreshProfile: () => ipcRenderer.invoke("profile:refresh"),
@@ -34,6 +35,7 @@ contextBridge.exposeInMainWorld("desktop", {
   updateBuild: (id: string, items: number[], runes: string | null) =>
     ipcRenderer.invoke("builds:update", id, items, runes),
   toggleBuild: (id: string, on: boolean) => ipcRenderer.invoke("builds:toggle", id, on),
+  smartBuild: (id: string, on: boolean) => ipcRenderer.invoke("builds:smart", id, on),
   deleteBuild: (id: string) => ipcRenderer.invoke("builds:delete", id),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability: string | null) => ipcRenderer.send("hud:hint", ability),
