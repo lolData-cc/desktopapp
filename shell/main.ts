@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
+import { ensureProtocol } from "./protocol"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { popularRunes, type RuneSuggestion } from "../src/data/runeSource"
 import { linkFromArgv, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
@@ -373,6 +374,7 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
   push({ runeImport: { state: "working" } })
   try {
     const result = await importPage(lcu, champion, patch, page)
+    console.log("[runes] %s → %s", champion, result.ok ? "imported" : result.reason)
     if (result.ok) {
       push({ runeImport: { state: "done", name: pageName(champion, patch), replaced: result.replaced } })
     } else if (result.reason === "no-room") {
@@ -402,6 +404,7 @@ ipcMain.handle("runes:import", async () => {
 async function handleLink(raw: string | null): Promise<void> {
   if (!raw) return
   const link = parseRuneLink(raw)
+  console.log("[link] received, valid=%s champion=%s", !!link, link?.champion ?? "-")
   if (!link) {
     push({ runeImport: { state: "error", message: "that link was not a valid rune page" } })
     return
@@ -451,9 +454,15 @@ ipcMain.on("overlay:demo", async () => {
  */
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
+  // Quit, and do NOTHING else. app.quit() does not stop whenReady from firing
+  // first, so a second instance launched by a link used to run its own startup
+  // on the way out — reading the same URL from its own argv and importing it a
+  // second time, concurrently with the instance it had just forwarded to. Two
+  // delete-and-create cycles racing over one rune page.
   app.quit()
 } else {
   app.on("second-instance", (_e, argv) => {
+    console.log("[link] second-instance argv=%s", JSON.stringify(argv))
     void handleLink(linkFromArgv(argv))
   })
   // macOS delivers it as an event instead of an argument.
@@ -461,32 +470,46 @@ if (!gotLock) {
     e.preventDefault()
     void handleLink(url)
   })
+
+  app.whenReady().then(async () => {
+    // Claim loldata:// so the website's button has something to reach. In dev the
+    // executable is Electron itself, so the script path has to travel with it or
+    // the link would launch a bare Electron with nothing loaded.
+    // Development runs Electron with the app directory as an argument, so that
+    // has to travel with the association or the link would launch a bare Electron
+    // with nothing loaded.
+    const dev = process.defaultApp && process.argv.length >= 2
+    const launch = dev
+      ? { exe: process.execPath, args: [resolve(process.argv[1]!)] }
+      : { exe: process.execPath, args: [] }
+
+    const claimed = dev
+      ? app.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args)
+      : app.setAsDefaultProtocolClient(PROTOCOL)
+
+    const result = await ensureProtocol(PROTOCOL, claimed, launch)
+    console.log(
+      "[link] %s:// ok=%s via=%s%s",
+      PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : ""
+    )
+
+    createWindow()
+    createOverlay(join(__dirname, "preload.mjs"))
+
+    // Read the player's own HUD scale before anything is drawn over the game, so
+    // the first frame is already in the right place rather than being corrected
+    // afterwards. A missing config is not fatal — the default stands.
+    const hud = await readHudSettings()
+    push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } })
+
+    await lcu.start()
+
+    // Launched BY a link rather than sent one: the URL is already in our argv.
+    console.log("[link] own argv=%s", JSON.stringify(process.argv))
+    void handleLink(linkFromArgv(process.argv))
+  })
 }
 
-app.whenReady().then(async () => {
-  // Claim loldata:// so the website's button has something to reach. In dev the
-  // executable is Electron itself, so the script path has to travel with it or
-  // the link would launch a bare Electron with nothing loaded.
-  if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [resolve(process.argv[1]!)])
-  } else {
-    app.setAsDefaultProtocolClient(PROTOCOL)
-  }
-
-  createWindow()
-  createOverlay(join(__dirname, "preload.mjs"))
-
-  // Read the player's own HUD scale before anything is drawn over the game, so
-  // the first frame is already in the right place rather than being corrected
-  // afterwards. A missing config is not fatal — the default stands.
-  const hud = await readHudSettings()
-  push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } })
-
-  await lcu.start()
-
-  // Launched BY a link rather than sent one: the URL is already in our argv.
-  void handleLink(linkFromArgv(process.argv))
-})
 
 app.on("before-quit", () => { stopGameClock(); destroyOverlay() })
 

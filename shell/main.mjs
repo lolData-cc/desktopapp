@@ -3225,6 +3225,34 @@ function destroyOverlay() {
   overlay = null;
 }
 
+// shell/protocol.ts
+import { execFile } from "node:child_process";
+import { promisify as promisify2 } from "node:util";
+var run2 = promisify2(execFile);
+var KEY = (protocol) => `HKCU\\Software\\Classes\\${protocol}`;
+async function keyExists(protocol) {
+  try {
+    await run2("reg", ["query", `${KEY(protocol)}\\shell\\open\\command`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function ensureProtocol(protocol, electronClaimed, launch) {
+  if (electronClaimed && await keyExists(protocol)) {
+    return { ok: true, via: "electron" };
+  }
+  const parts = [launch.exe, ...launch.args, "%1"].map((p) => `"${p}"`).join(" ");
+  try {
+    await run2("reg", ["add", KEY(protocol), "/ve", "/d", `URL:${protocol} Protocol`, "/f"]);
+    await run2("reg", ["add", KEY(protocol), "/v", "URL Protocol", "/d", "", "/f"]);
+    await run2("reg", ["add", `${KEY(protocol)}\\shell\\open\\command`, "/ve", "/d", parts, "/f"]);
+  } catch {
+    return { ok: false, via: "none" };
+  }
+  return await keyExists(protocol) ? { ok: true, via: "registry", command: parts } : { ok: false, via: "none" };
+}
+
 // src/lcu/runes.ts
 var PAGE_MARKER = "LolData";
 var pageName = (champion, patch2) => `${champion} - ${PAGE_MARKER} ${patch2}`;
@@ -3770,6 +3798,7 @@ async function applyPage(champion, patch2, page) {
   push({ runeImport: { state: "working" } });
   try {
     const result = await importPage(lcu, champion, patch2, page);
+    console.log("[runes] %s → %s", champion, result.ok ? "imported" : result.reason);
     if (result.ok) {
       push({ runeImport: { state: "done", name: pageName(champion, patch2), replaced: result.replaced } });
     } else if (result.reason === "no-room") {
@@ -3792,6 +3821,7 @@ async function handleLink(raw) {
   if (!raw)
     return;
   const link = parseRuneLink(raw);
+  console.log("[link] received, valid=%s champion=%s", !!link, link?.champion ?? "-");
   if (!link) {
     push({ runeImport: { state: "error", message: "that link was not a valid rune page" } });
     return;
@@ -3832,26 +3862,28 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", (_e, argv) => {
+    console.log("[link] second-instance argv=%s", JSON.stringify(argv));
     handleLink(linkFromArgv(argv));
   });
   app.on("open-url", (e, url) => {
     e.preventDefault();
     handleLink(url);
   });
+  app.whenReady().then(async () => {
+    const dev = process.defaultApp && process.argv.length >= 2;
+    const launch = dev ? { exe: process.execPath, args: [resolve(process.argv[1])] } : { exe: process.execPath, args: [] };
+    const claimed = dev ? app.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app.setAsDefaultProtocolClient(PROTOCOL);
+    const result = await ensureProtocol(PROTOCOL, claimed, launch);
+    console.log("[link] %s:// ok=%s via=%s%s", PROTOCOL, result.ok, result.via, result.command ? ` cmd=${result.command}` : "");
+    createWindow();
+    createOverlay(join2(__dirname2, "preload.mjs"));
+    const hud = await readHudSettings();
+    push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
+    await lcu.start();
+    console.log("[link] own argv=%s", JSON.stringify(process.argv));
+    handleLink(linkFromArgv(process.argv));
+  });
 }
-app.whenReady().then(async () => {
-  if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [resolve(process.argv[1])]);
-  } else {
-    app.setAsDefaultProtocolClient(PROTOCOL);
-  }
-  createWindow();
-  createOverlay(join2(__dirname2, "preload.mjs"));
-  const hud = await readHudSettings();
-  push({ hud: { ...state.hud, scale: hud.globalScale, source: hud.source } });
-  await lcu.start();
-  handleLink(linkFromArgv(process.argv));
-});
 app.on("before-quit", () => {
   stopGameClock();
   destroyOverlay();

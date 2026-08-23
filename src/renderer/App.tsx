@@ -312,7 +312,38 @@ function Attached({ s }: { s: AppState }) {
       )}
 
       {sel?.champion && <RunePanel s={s} />}
+      <RuneImportNotice imp={s.runeImport} />
     </div>
+  )
+}
+
+/**
+ * What came of the last import, wherever it was started from.
+ *
+ * Separate from the rune panel on purpose: a link from the website can arrive
+ * while the app is sitting on any screen at all, and a result that only renders
+ * inside champ select would mean the website's button silently did nothing most
+ * of the time.
+ */
+function RuneImportNotice({ imp }: { imp: AppState["runeImport"] }) {
+  if (imp.state === "idle" || imp.state === "working") return null
+
+  return (
+    <p className="rise mt-5 max-w-[440px] font-jetbrains text-[9.5px] leading-relaxed text-flash/40">
+      {imp.state === "done" ? (
+        <>
+          saved as <span className="text-jade">{imp.name}</span>
+          {imp.replaced ? " · replaced the previous loldata page" : ""}
+        </>
+      ) : imp.state === "no-room" ? (
+        <>
+          <span className="text-citrine">no free rune page slot.</span> delete one in the client
+          and try again — we will not remove a page you made.
+        </>
+      ) : (
+        <span className="text-citrine">{imp.message}</span>
+      )}
+    </p>
   )
 }
 
@@ -397,24 +428,6 @@ function RunePanel({ s }: { s: AppState }) {
         </button>
       </div>
 
-      {/* One line under the button, and only when there is something to say. */}
-      {imp.state !== "idle" && imp.state !== "working" && (
-        <p className="mt-3 font-jetbrains text-[9.5px] leading-relaxed text-flash/40">
-          {imp.state === "done" ? (
-            <>
-              saved as <span className="text-jade">{imp.name}</span>
-              {imp.replaced ? " · replaced the previous loldata page" : ""}
-            </>
-          ) : imp.state === "no-room" ? (
-            <>
-              <span className="text-citrine">no free rune page slot.</span> delete one in the
-              client and press import again — we will not remove a page you made.
-            </>
-          ) : (
-            <span className="text-citrine">{imp.message}</span>
-          )}
-        </p>
-      )}
     </div>
   )
 }
