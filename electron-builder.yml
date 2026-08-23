@@ -1,0 +1,78 @@
+# Packaging and the update feed.
+#
+# Two things this file decides: what gets shipped, and where the app looks for
+# a newer version.
+#
+# ── On architectures ────────────────────────────────────────────────────────
+# x64 only, by default, and that is a considered choice rather than a shortcut.
+# League of Legends itself requires 64-bit Windows, so anyone who cannot run an
+# x64 build cannot run the game this app exists to sit beside — an ia32 build
+# would double the artifacts and the testing surface for a population of zero.
+# arm64 is listed and commented out for the same reason in a different shape:
+# League does not run natively on Windows-on-ARM either.
+#
+# Both are one uncommented line away if that ever stops being true.
+#
+# ── On signing ──────────────────────────────────────────────────────────────
+# Nothing here is code-signed. Windows SmartScreen will warn on first run and
+# some people will not get past that warning. Fixing it needs a paid certificate
+# (an OV cert is a few hundred a year, and EV is what actually skips the
+# reputation-building period), which is a purchase, not a build setting.
+appId: cc.loldata.desktop
+productName: lolData
+copyright: lolData
+
+directories:
+  output: release
+  buildResources: build
+
+# No spaces: this becomes a URL on the CDN, and "lolData Setup 0.0.1.exe"
+# would be percent-encoded in every link and every update manifest.
+artifactName: lolData-Setup-${version}-${arch}.${ext}
+
+# Only what the app actually runs. Sources, configs and the whole toolchain stay
+# out — a packaged app that ships its own build system is just a bigger download.
+files:
+  - dist/**/*
+  - shell/main.mjs
+  - shell/preload.mjs
+  - build/icon.png
+  - package.json
+
+win:
+  # A ready-made .ico, which skips the builder's own PNG converter — that runs
+  # as a WebAssembly module and failed to allocate on this machine. Built by
+  # scripts/icon.ts with 256x256 FIRST: the builder checks the leading frame,
+  # so an .ico that starts at 16x16 is rejected as "16x16" however many
+  # larger frames follow it.
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    # - target: nsis
+    #   arch: [ia32]      # see the note above
+    # - target: nsis
+    #   arch: [arm64]
+
+nsis:
+  oneClick: false
+  perMachine: false          # per-user install needs no administrator prompt
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: lolData
+  # The app claims loldata:// itself on first run, but the installer declaring
+  # it too means a link works before the app has ever been opened.
+  include: build/installer.nsh
+
+protocols:
+  - name: lolData
+    schemes: [loldata]
+
+# Where the app asks whether it is out of date. A generic feed rather than
+# GitHub Releases because this repository has no remote — and because our own
+# CDN is where everything else already lives.
+publish:
+  - provider: generic
+    url: https://cdn.loldata.cc/desktop
+    channel: latest

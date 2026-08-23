@@ -6,6 +6,7 @@ import Champions from "./sections/Champions"
 import AiChat from "./sections/AiChat"
 import Patch from "./sections/Patch"
 import Settings from "./sections/Settings"
+import UpdateBar from "./UpdateBar"
 import logo from "../assets/logo.png"
 
 /**
@@ -73,6 +74,7 @@ export default function App() {
         </main>
       </div>
 
+      {s && <UpdateBar s={s} />}
       {showSettings && s && <Settings s={s} />}
       <StatusStrip s={s} />
     </div>

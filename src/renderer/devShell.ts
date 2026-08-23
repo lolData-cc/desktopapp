@@ -23,6 +23,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -44,6 +46,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -70,6 +74,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -91,6 +97,8 @@ const SCENES: Record<string, unknown> = {
     notice: null,
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -119,6 +127,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -146,6 +156,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -175,6 +187,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -200,6 +214,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [
@@ -225,6 +241,8 @@ const SCENES: Record<string, unknown> = {
     },
     levelHint: null,
     pinned: false,
+    canUpdate: true,
+    update: { state: "available", version: "0.0.1", next: "0.0.2", notes: null },
     ranked: { tier: "DIAMOND", division: "III", leaguePoints: 9, wins: 148, losses: 133, queue: "RANKED_SOLO_5x5" },
     account: { email: "marco@loldata.cc", tier: "premium" },
     matches: [

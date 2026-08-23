@@ -90,6 +90,15 @@ export type AppState = {
     | { state: "no-room"; pages: { id: number; name: string }[] }
     | { state: "error"; message: string }
   account: { email: string | null; tier: string | null } | null
+  update:
+    | { state: "idle"; version: string }
+    | { state: "checking"; version: string }
+    | { state: "current"; version: string; checkedAt: number }
+    | { state: "available"; version: string; next: string; notes: string | null }
+    | { state: "downloading"; version: string; next: string; percent: number }
+    | { state: "ready"; version: string; next: string }
+    | { state: "failed"; version: string; message: string }
+  canUpdate: boolean
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; source: string | null }
 }
@@ -115,6 +124,9 @@ declare global {
       signOut(): Promise<void>
       askAi(messages: ChatMessage[]): Promise<ChatResult>
       openExternal(url: string): void
+      checkUpdate(): Promise<void>
+      downloadUpdate(): Promise<void>
+      installUpdate(): void
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void

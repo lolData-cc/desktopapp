@@ -14,6 +14,7 @@ import { LcuConnection, type Phase } from "../src/lcu/connection"
 import { championById, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
+import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
 import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session } from "./prefs"
@@ -85,6 +86,11 @@ export type AppState = {
   /** The signed-in lolData account, WITHOUT its token — the renderer never
    *  needs the credential and therefore never gets it. */
   account: { email: string | null; tier: string | null } | null
+  /** Version, and whether a newer one is waiting. Nothing downloads or
+   *  restarts without the player pressing something. */
+  update: UpdateState
+  /** False in development, where there is no packaged app to replace. */
+  canUpdate: boolean
   /** Debug only: hold the overlay on screen instead of letting it expire.
    *  Runtime rather than a build constant, so the notification behaviour can be
    *  inspected without a rebuild — and so it can never be left on by accident
@@ -112,6 +118,8 @@ let state: AppState = {
   runes: null,
   runeImport: { state: "idle" },
   account: null,
+  update: { state: "idle", version: app.getVersion() },
+  canUpdate: false,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, source: null },
 }
@@ -460,6 +468,12 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
 
 ipcMain.handle("profile:refresh", async () => { await readProfile() })
 
+// ── updates ────────────────────────────────────────────────────────────────
+
+ipcMain.handle("update:check", async () => { await checkForUpdate() })
+ipcMain.handle("update:download", async () => { await downloadUpdate() })
+ipcMain.on("update:install", () => installUpdate())
+
 // ── account ────────────────────────────────────────────────────────────────
 
 /** Signing in happens in the BROWSER, never here. This app must never see a
@@ -629,6 +643,11 @@ if (!gotLock) {
     // A session from a previous run, so signing in survives a restart.
     const saved = await readSession()
     if (saved) await setSession(saved)
+
+    // One check at startup, then only when asked. Nothing downloads by itself.
+    const initial = initUpdater((update) => push({ update }))
+    push({ update: initial, canUpdate: canUpdate() })
+    void checkForUpdate()
 
     await lcu.start()
 

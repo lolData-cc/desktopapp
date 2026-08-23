@@ -4,3 +4,7 @@ dist/
 
 # Never commit anything that could carry a client session credential.
 lockfile
+
+# Packaging output. It lives outside the project (OneDrive locks files mid-sync
+# and breaks the build's renames), but keep this in case anyone points it back.
+release/

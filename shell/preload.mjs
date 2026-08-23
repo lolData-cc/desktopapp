@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("desktop", {
   signOut: () => ipcRenderer.invoke("account:signout"),
   askAi: (messages) => ipcRenderer.invoke("ai:ask", messages),
   openExternal: (url) => ipcRenderer.send("shell:open", url),
+  checkUpdate: () => ipcRenderer.invoke("update:check"),
+  downloadUpdate: () => ipcRenderer.invoke("update:download"),
+  installUpdate: () => ipcRenderer.send("update:install"),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)
