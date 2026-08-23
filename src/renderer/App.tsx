@@ -9,6 +9,7 @@ import Builds from "./sections/Builds"
 import BuildEditor from "./sections/BuildEditor"
 import Preferences from "./sections/Preferences"
 import CyberBackdrop from "./CyberBackdrop"
+import Boundary from "./Boundary"
 import Recap, { isPostGame } from "./sections/Recap"
 import Settings from "./sections/Settings"
 import UpdateBar from "./UpdateBar"
@@ -101,6 +102,10 @@ export default function App() {
               ten rows of numbers this would be noise, and the board is the one
               screen already full. */}
           {section === "overview" && !s?.scoreboard && !showRecap && <CyberBackdrop />}
+          {/* One section throwing must not blank the window. Keyed on the
+              section so leaving a broken screen clears the fault instead of
+              latching it until restart. */}
+          <Boundary resetKey={`${section}:${editing ?? ""}:${preview ?? ""}`}>
           <div className="relative h-full">
           {section === "overview" ? (
             s?.client === "attached" ? (
@@ -134,6 +139,7 @@ export default function App() {
             <AiChat s={s} />
           )}
           </div>
+          </Boundary>
         </main>
       </div>
 

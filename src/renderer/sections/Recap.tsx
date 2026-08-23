@@ -71,17 +71,6 @@ export default function Recap({
     return () => { alive = false }
   }, [played, newest?.championId])
 
-  const slug = played?.championId ?? fallbackSlug
-  const key = played?.championKey ?? newest?.championId ?? 0
-
-  if (!slug) {
-    return (
-      <div className="grid h-full place-items-center">
-        <p className="font-chakrapetch text-[13px] text-flash/35">Waiting on the result…</p>
-      </div>
-    )
-  }
-
   /**
    * The verdict plays once per opening — on MOUNT, not on every change.
    *
@@ -108,6 +97,23 @@ export default function Recap({
   }, [focused])
 
   const showVerdict = !verdictDone && focused
+
+  const slug = played?.championId ?? fallbackSlug
+  const key = played?.championKey ?? newest?.championId ?? 0
+
+  // ⚠️ EVERY hook is above this line, and must stay there.
+  //
+  // This returned early while three hooks were still declared below it. On the
+  // first render slug is null — the champion name resolves asynchronously — so
+  // React saw two hooks; on the next it saw five, threw, and unmounted the
+  // whole tree. The app went black.
+  if (!slug) {
+    return (
+      <div className="grid h-full place-items-center">
+        <p className="font-chakrapetch text-[13px] text-flash/35">Waiting on the result…</p>
+      </div>
+    )
+  }
 
   const mins = match ? Math.max(1, match.durationSeconds / 60) : 1
   const kda = match ? (match.kills + match.assists) / Math.max(1, match.deaths) : 0
