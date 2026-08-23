@@ -307,3 +307,40 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0, 217, 146, 0.38); }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── cursors ──────────────────────────────────────────────────────────────
+   The same two the website uses, so the app does not feel like a different
+   product wearing the same colours.
+
+   ⚠️ Referenced RELATIVELY, never as "/cursors/…". The app is loaded over
+   file:// in production, where a leading slash resolves to the root of the
+   DISK — the same mistake that once broke every dragon icon. Vite rewrites
+   these relative to this stylesheet and hashes them into the bundle. */
+html,
+body,
+#root {
+  cursor: url("../assets/cursors/base.svg") 8 8, auto;
+}
+
+button,
+a,
+[role="button"],
+summary,
+select,
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: url("../assets/cursors/clicker.svg") 16 6, pointer;
+}
+
+/* A control that cannot be used should not answer like one that can. */
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Text still behaves like text. */
+input[type="text"],
+input:not([type]),
+textarea {
+  cursor: text;
+}

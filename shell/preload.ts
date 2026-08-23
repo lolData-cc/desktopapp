@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("desktop", {
   importRunes: () => ipcRenderer.invoke("runes:import"),
   chooseRunes: (index: number) => ipcRenderer.send("runes:choose", index),
   refreshProfile: () => ipcRenderer.invoke("profile:refresh"),
+  setSetting: (patch: unknown) => ipcRenderer.invoke("settings:set", patch),
+  revealSettings: () => ipcRenderer.invoke("settings:reveal"),
   // Signing in opens a BROWSER. This surface deliberately has no way to send a
   // password anywhere — the site hands a session back over loldata://auth.
   signIn: () => ipcRenderer.send("account:signin"),
@@ -35,7 +37,6 @@ contextBridge.exposeInMainWorld("desktop", {
   updateBuild: (id: string, items: number[], runes: string | null) =>
     ipcRenderer.invoke("builds:update", id, items, runes),
   toggleBuild: (id: string, on: boolean) => ipcRenderer.invoke("builds:toggle", id, on),
-  smartBuild: (id: string, on: boolean) => ipcRenderer.invoke("builds:smart", id, on),
   deleteBuild: (id: string) => ipcRenderer.invoke("builds:delete", id),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
   calibrateTopRight: (patch: unknown) => ipcRenderer.send("hud:calibrate-topright", patch),

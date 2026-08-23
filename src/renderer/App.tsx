@@ -7,6 +7,7 @@ import AiChat from "./sections/AiChat"
 import Patch from "./sections/Patch"
 import Builds from "./sections/Builds"
 import BuildEditor from "./sections/BuildEditor"
+import Preferences from "./sections/Preferences"
 import Settings from "./sections/Settings"
 import UpdateBar from "./UpdateBar"
 import logo from "../assets/logo.png"
@@ -23,7 +24,7 @@ import logo from "../assets/logo.png"
  * the app, because a menu that mixes navigation with departure makes you read
  * every item before clicking.
  */
-type SectionId = "overview" | "builds" | "matches" | "champions" | "patch" | "ai"
+type SectionId = "overview" | "builds" | "matches" | "champions" | "patch" | "ai" | "settings"
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -83,6 +84,8 @@ export default function App() {
             <Champions s={s} />
           ) : section === "patch" ? (
             <Patch s={s} />
+          ) : section === "settings" ? (
+            <Preferences s={s} />
           ) : (
             <AiChat s={s} />
           )}
@@ -273,6 +276,22 @@ function Rank({ r }: { r: AppState["ranked"] }) {
 
 /* ── the rail ────────────────────────────────────────────────────────────── */
 
+/** Angular rather than the usual cogwheel: everything else in this rail is
+ *  built from straight lines and a rotated square, and a soft round gear would
+ *  be the one shape from a different set. */
+const Gear = ({ active }: { active: boolean }) => (
+  <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden className="shrink-0">
+    <path
+      d="M8 1.6 L10 3 L12.4 2.6 L13.4 4.9 L15 6.6 L14.2 8 L15 9.4 L13.4 11.1 L12.4 13.4 L10 13 L8 14.4 L6 13 L3.6 13.4 L2.6 11.1 L1 9.4 L1.8 8 L1 6.6 L2.6 4.9 L3.6 2.6 L6 3 Z"
+      fill="none"
+      stroke={active ? "#00d992" : "rgba(215,216,217,0.28)"}
+      strokeWidth="1.1"
+      strokeLinejoin="round"
+    />
+    <circle cx="8" cy="8" r="2.1" fill="none" stroke={active ? "#00d992" : "rgba(215,216,217,0.28)"} strokeWidth="1.1" />
+  </svg>
+)
+
 function Rail({
   section,
   onSection,
@@ -339,10 +358,31 @@ function Rail({
         <span className="ml-auto font-jetbrains text-[10px] text-flash/20">↗</span>
       </button>
 
+      {/* Settings sits at the BOTTOM, apart from the numbered sections: those
+          are the app, this is where you go to change how it behaves. */}
+      <button
+        type="button"
+        onClick={() => onSection("settings")}
+        className="group mt-auto flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left transition-colors"
+        style={{
+          background: section === "settings" ? "rgba(0,217,146,0.08)" : undefined,
+          boxShadow: section === "settings" ? "inset 2px 0 0 0 #00d992" : undefined,
+        }}
+      >
+        <Gear active={section === "settings"} />
+        <span
+          className={`font-chakrapetch text-[13px] font-bold tracking-wide ${
+            section === "settings" ? "text-flash" : "text-flash/45 group-hover:text-flash/70"
+          }`}
+        >
+          Settings
+        </span>
+      </button>
+
       <button
         type="button"
         onClick={onSettings}
-        className="group mt-auto flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left"
+        className="group flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left"
       >
         <span className={`h-[7px] w-[7px] rotate-45 ${settingsOpen ? "bg-jade" : "bg-flash/25"}`} />
         <span

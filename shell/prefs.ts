@@ -63,6 +63,39 @@ export type BuildProfile = {
   patch: string | null
 }
 
+/**
+ * Everything the Settings page owns.
+ *
+ * Deliberately a flat record of booleans with defaults applied on READ rather
+ * than on write: a settings file written by an older version is missing keys a
+ * newer one knows about, and treating "absent" as "off" would silently turn
+ * features off on upgrade.
+ */
+export type AppSettings = {
+  /** Start with Windows. */
+  launchAtLogin: boolean
+  /**
+   * Re-ask the data when the actual build departs from the plan. Global rather
+   * than per champion: it describes how you want to be ADVISED, which does not
+   * change from Lillia to Darius.
+   */
+  smartBuild: boolean
+  /** The gold lead in the game's top-right strip. */
+  goldReadout: boolean
+  /** Dragon and Baron warnings. */
+  objectiveNotices: boolean
+  /** "X is purchasable", boots advice, the opening build. */
+  buildNotices: boolean
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  launchAtLogin: false,
+  smartBuild: false,
+  goldReadout: true,
+  objectiveNotices: true,
+  buildNotices: true,
+}
+
 type Stored = {
   chosen: Record<string, PageSignature>
   session?: Session | null
@@ -75,6 +108,7 @@ type Stored = {
    *  permanently. It still stops a profile the player deleted from coming
    *  back, which is the reason a marker exists at all. */
   runesBackfilled?: string[]
+  settings?: Partial<AppSettings>
 }
 
 /**
@@ -102,9 +136,10 @@ async function load(): Promise<Stored> {
       session: parsed?.session ?? null,
       builds: parsed?.builds ?? {},
       runesBackfilled: migrateMarker(parsed, parsed?.builds ?? {}),
+      settings: parsed?.settings ?? {},
     }
   } catch {
-    cache = { chosen: {}, session: null, builds: {}, runesBackfilled: [] }
+    cache = { chosen: {}, session: null, builds: {}, runesBackfilled: [], settings: {} }
   }
   return cache
 }
@@ -158,6 +193,19 @@ export async function markRunesBackfilled(champion: string): Promise<void> {
   store.runesBackfilled = store.runesBackfilled ?? []
   if (!store.runesBackfilled.includes(key)) store.runesBackfilled.push(key)
   await persist(store)
+}
+
+/** Defaults filled in on read, so a file from an older version does not read
+ *  as "every new feature off". */
+export async function readSettings(): Promise<AppSettings> {
+  return { ...DEFAULT_SETTINGS, ...((await load()).settings ?? {}) }
+}
+
+export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const store = await load()
+  store.settings = { ...(store.settings ?? {}), ...patch }
+  await persist(store)
+  return { ...DEFAULT_SETTINGS, ...store.settings }
 }
 
 export async function readSession(): Promise<Session | null> {

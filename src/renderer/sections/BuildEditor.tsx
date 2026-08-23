@@ -6,11 +6,15 @@ import { searchItems, type CatalogItem } from "../../data/itemCatalog"
 /**
  * One champion's default page and default build.
  *
- * This is the screen that makes a profile a DECISION rather than a leftover: an
- * import gives you a starting point, and this is where it becomes yours. The
- * item order it produces is exactly what the in-game notices walk through, so
- * the order is the point rather than a detail — slot 1 is what you are told
- * about first.
+ * This is the screen that makes a profile a DECISION rather than a leftover
+ * from an import. The item order it produces is exactly what the in-game
+ * notices walk through, so the order is the point rather than a detail — slot 1
+ * is what you are told about first.
+ *
+ * ⚠️ Laid out in FIXED columns, not fluid ones. A rune tree stretched across a
+ * 1000px window puts four icons a hand-width apart and stops reading as a tree;
+ * it has a natural size and is given exactly that. The window getting wider
+ * adds margin, not spacing between things that belong together.
  *
  * Nothing is written until Save. An editor that persisted on every click would
  * make "let me see what this looks like" destructive.
@@ -111,14 +115,19 @@ export default function BuildEditor({
     touched()
   }
 
-  const move = (slot: number, by: -1 | 1) => {
-    const to = slot + by
-    if (to < 0 || to > 5) return
+  /**
+   * Reorder by MOVING, not swapping.
+   *
+   * Dragging the first item onto the fourth slot means "build it fourth", which
+   * shifts everything between up one. A swap would drop the fourth item into
+   * first place, which nobody asked for.
+   */
+  const moveItem = (from: number, to: number) => {
+    if (from === to) return
     setItems((prev) => {
       const next = [...prev]
-      const a = next[slot] ?? null
-      next[slot] = next[to] ?? null
-      next[to] = a
+      const [held] = next.splice(from, 1)
+      next.splice(to, 0, held ?? null)
       return next
     })
     touched()
@@ -138,6 +147,8 @@ export default function BuildEditor({
       </div>
     )
   }
+
+  const filled = items.filter(Boolean).length
 
   return (
     <div className="flex h-full flex-col">
@@ -178,173 +189,163 @@ export default function BuildEditor({
         </div>
       </div>
 
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-        {/* A setting rather than a hidden behaviour: it changes what the app
-            tells you mid-game, and it costs a query each time the inventory
-            moves, so it is the player's call. */}
-        <button
-          type="button"
-          onClick={() => void window.desktop.smartBuild(championId, !profile.smart)}
-          className="mb-5 flex w-full items-center gap-3 rounded-[3px] px-3 py-2.5 text-left transition"
-          style={{
-            background: profile.smart ? "rgba(0,217,146,0.06)" : "rgba(215,216,217,0.025)",
-            boxShadow: profile.smart
-              ? "inset 0 0 0 1px rgba(0,217,146,0.28)"
-              : "inset 0 0 0 1px rgba(215,216,217,0.05)",
-          }}
-        >
-          <span
-            className="grid h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition"
-            style={{ background: profile.smart ? "rgba(0,217,146,0.32)" : "rgba(215,216,217,0.10)" }}
-          >
-            <span
-              className="h-4 w-4 rounded-full transition-transform"
-              style={{
-                background: profile.smart ? "#00d992" : "rgba(215,216,217,0.35)",
-                transform: profile.smart ? "translateX(16px)" : "translateX(0)",
-              }}
-            />
-          </span>
-
-          <span className="min-w-0">
-            <span className="block font-chakrapetch text-[13px] font-bold uppercase tracking-[0.1em]">
-              smart build
-            </span>
-            <span className="block max-w-[64ch] font-chakrapetch text-[11.5px] leading-snug text-flash/35">
-              If you buy something that is not in this plan, stop following it and ask what
-              players who reached your actual inventory built next. Off, the order below is
-              followed to the letter.
-            </span>
-          </span>
-        </button>
-
-        <Label>build order</Label>
-        <p className="mb-2 max-w-[70ch] font-chakrapetch text-[11.5px] leading-snug text-flash/30">
-          The order the in-game notices follow. You are told about slot 1 first, and only
-          once you can actually afford it — components already in your inventory count
-          towards the price.
-        </p>
-
-        <div className="flex flex-wrap gap-2">
-          {items.map((id, i) => (
-            <ItemSlot
-              key={i}
-              index={i}
-              id={id}
-              patch={patch}
-              onPick={() => setPicking(i)}
-              onClear={() => setItem(i, null)}
-              onMove={(by) => move(i, by)}
-            />
-          ))}
-        </div>
-
-        <div className="mt-7">
-          <Label>runes</Label>
-        </div>
-
-        {!draft ? (
-          <div className="flex items-center gap-3 rounded-[3px] bg-flash/[0.03] px-4 py-3">
-            <p className="font-chakrapetch text-[12px] text-flash/35">
-              No page saved for {profile.championName} yet.
+      <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+        {/* Fixed columns. Extra window width becomes margin on the right rather
+            than air inside a rune tree. */}
+        <div className="flex flex-wrap items-start gap-x-9 gap-y-8">
+          {/* ── build order ─────────────────────────────────────────────── */}
+          <section className="w-[404px] shrink-0">
+            <Label>build order</Label>
+            <p className="mb-3 font-chakrapetch text-[11.5px] leading-snug text-flash/30">
+              The order the notices follow. You are told about slot 1 first, and only once
+              you can afford it — components you already own count towards the price.
+              <span className="text-flash/20"> Drag a slot to reorder.</span>
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                const first = trees[0]
-                const second = trees[1]
-                if (!first || !second) return
-                setDraft({
-                  primaryStyle: first.id,
-                  subStyle: second.id,
-                  primary: defaultPrimary(first),
-                  secondary: defaultSecondary(second),
-                  shards: [5008, 5008, 5001],
-                })
-                touched()
-              }}
-              className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-jade/70"
-            >
-              build one
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <TreeRow
-                trees={trees}
-                active={draft.primaryStyle}
-                disabled={draft.subStyle}
-                onPick={(t) => edit((d) => ({ ...d, primaryStyle: t.id, primary: defaultPrimary(t) }))}
-              />
-              {primaryTree && (
-                <div className="mt-3 space-y-2.5">
-                  {primaryTree.slots.slice(0, 4).map((row, ri) => (
-                    <PerkRow
-                      key={ri}
-                      row={row}
-                      big={ri === 0}
-                      selected={draft.primary[ri] ?? 0}
-                      onPick={(perk) =>
-                        edit((d) => ({
-                          ...d,
-                          primary: d.primary.map((v, i) => (i === ri ? perk.id : v)),
-                        }))
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <div>
-              <TreeRow
-                trees={trees}
-                active={draft.subStyle}
-                disabled={draft.primaryStyle}
-                onPick={(t) => edit((d) => ({ ...d, subStyle: t.id, secondary: defaultSecondary(t) }))}
-              />
-              {secondaryTree && (
-                <div className="mt-3 space-y-2.5">
-                  {secondaryTree.slots.slice(1, 4).map((row, i) => {
-                    const ri = i + 1
-                    const chosen = row.find((p) => draft.secondary.includes(p.id))
-                    return (
+            <ItemGrid
+              items={items}
+              patch={patch}
+              onPick={setPicking}
+              onClear={(i) => setItem(i, null)}
+              onMove={moveItem}
+            />
+
+            <p className="mt-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">
+              {filled === 0 ? (
+                <span className="text-citrine/60">no items · no notices will fire</span>
+              ) : (
+                `${filled} of 6 set`
+              )}
+            </p>
+          </section>
+
+          {/* ── runes ───────────────────────────────────────────────────── */}
+          <section className="w-[372px] shrink-0">
+            <Label>runes</Label>
+
+            {!draft ? (
+              <div className="mt-1 rounded-[3px] bg-flash/[0.03] px-4 py-3">
+                <p className="font-chakrapetch text-[12px] leading-snug text-flash/35">
+                  No page saved for {profile.championName} yet.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = trees[0]
+                    const second = trees[1]
+                    if (!first || !second) return
+                    setDraft({
+                      primaryStyle: first.id,
+                      subStyle: second.id,
+                      primary: defaultPrimary(first),
+                      secondary: defaultSecondary(second),
+                      shards: [5008, 5008, 5001],
+                    })
+                    touched()
+                  }}
+                  className="win-btn mt-2 h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-jade/70"
+                >
+                  build one
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 flex gap-5">
+                <div className="w-[178px] shrink-0">
+                  <TreeRow
+                    trees={trees}
+                    active={draft.primaryStyle}
+                    disabled={draft.subStyle}
+                    onPick={(t) => edit((d) => ({ ...d, primaryStyle: t.id, primary: defaultPrimary(t) }))}
+                  />
+                  {primaryTree && (
+                    <div className="mt-3 space-y-2.5">
+                      {primaryTree.slots.slice(0, 4).map((row, ri) => (
+                        <PerkRow
+                          key={ri}
+                          row={row}
+                          big={ri === 0}
+                          selected={draft.primary[ri] ?? 0}
+                          onPick={(perk) =>
+                            edit((d) => ({
+                              ...d,
+                              primary: d.primary.map((v, i) => (i === ri ? perk.id : v)),
+                            }))
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-[168px] shrink-0">
+                  <TreeRow
+                    trees={trees}
+                    active={draft.subStyle}
+                    disabled={draft.primaryStyle}
+                    onPick={(t) => edit((d) => ({ ...d, subStyle: t.id, secondary: defaultSecondary(t) }))}
+                  />
+                  {secondaryTree && (
+                    <div className="mt-3 space-y-2.5">
+                      {secondaryTree.slots.slice(1, 4).map((row, i) => {
+                        const ri = i + 1
+                        const chosen = row.find((p) => draft.secondary.includes(p.id))
+                        return (
+                          <PerkRow
+                            key={ri}
+                            row={row}
+                            big={false}
+                            selected={chosen?.id ?? 0}
+                            onPick={(perk) => edit((d) => pickSecondary(d, secondaryTree, ri, perk.id))}
+                          />
+                        )
+                      })}
+                      <p className="pt-0.5 font-jetbrains text-[8.5px] uppercase tracking-[0.14em] text-flash/20">
+                        two, different rows
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="mt-4 space-y-2">
+                    {shards.map((row, ri) => (
                       <PerkRow
                         key={ri}
                         row={row}
                         big={false}
-                        selected={chosen?.id ?? 0}
-                        onPick={(perk) => edit((d) => pickSecondary(d, secondaryTree, ri, perk.id))}
+                        small
+                        selected={draft.shards[ri] ?? 0}
+                        onPick={(perk) =>
+                          edit((d) => ({
+                            ...d,
+                            shards: d.shards.map((v, i) => (i === ri ? perk.id : v)),
+                          }))
+                        }
                       />
-                    )
-                  })}
-                  <p className="pt-0.5 font-jetbrains text-[8.5px] uppercase tracking-[0.14em] text-flash/20">
-                    two, from different rows
-                  </p>
+                    ))}
+                  </div>
                 </div>
-              )}
-
-              <div className="mt-4 space-y-2.5">
-                {shards.map((row, ri) => (
-                  <PerkRow
-                    key={ri}
-                    row={row}
-                    big={false}
-                    small
-                    selected={draft.shards[ri] ?? 0}
-                    onPick={(perk) =>
-                      edit((d) => ({
-                        ...d,
-                        shards: d.shards.map((v, i) => (i === ri ? perk.id : v)),
-                      }))
-                    }
-                  />
-                ))}
               </div>
-            </div>
-          </div>
-        )}
+            )}
+          </section>
+
+          {/* ── what this profile is ────────────────────────────────────── */}
+          <aside className="w-[188px] shrink-0">
+            <Label>profile</Label>
+            <dl className="space-y-2">
+              <Fact k="source" v={profile.source === "site" ? "imported" : "champion select"} />
+              <Fact k="patch" v={profile.patch ?? "—"} />
+              <Fact k="saved" v={ago(profile.savedAt)} />
+              <Fact
+                k="smart build"
+                v={s.settings?.smartBuild ? "on · all champions" : "off"}
+                accent={s.settings?.smartBuild}
+              />
+            </dl>
+            <p className="mt-3 font-chakrapetch text-[11px] leading-snug text-flash/25">
+              Smart build is a setting for how you want to be advised, so it lives in
+              Settings and applies everywhere — not one switch per champion.
+            </p>
+          </aside>
+        </div>
       </div>
 
       {picking !== null && (
@@ -375,9 +376,102 @@ function pickSecondary(d: Draft, tree: RuneTree, row: number, perk: number): Dra
   return { ...d, secondary: [...kept, perk].slice(-2) }
 }
 
+const ago = (ms: number): string => {
+  const mins = Math.max(0, Math.round((Date.now() - ms) / 60000))
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
+
 const Label = ({ children }: { children: string }) => (
   <p className="mb-1.5 font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">{children}</p>
 )
+
+const Fact = ({ k, v, accent }: { k: string; v: string; accent?: boolean }) => (
+  <div>
+    <dt className="font-jetbrains text-[8.5px] uppercase tracking-[0.16em] text-flash/20">{k}</dt>
+    <dd className={`font-chakrapetch text-[12.5px] font-bold ${accent ? "text-jade" : "text-flash/60"}`}>{v}</dd>
+  </div>
+)
+
+/**
+ * The six slots, reorderable by dragging.
+ *
+ * The drop target is worked out on drag-over rather than on drop so the gap
+ * opens up under the cursor while you are still holding — dragging blind and
+ * finding out where it landed afterwards is the part that makes reordering
+ * feel like a guess.
+ */
+function ItemGrid({
+  items,
+  patch,
+  onPick,
+  onClear,
+  onMove,
+}: {
+  items: (number | null)[]
+  patch: string
+  onPick: (i: number) => void
+  onClear: (i: number) => void
+  onMove: (from: number, to: number) => void
+}) {
+  const [held, setHeld] = useState<number | null>(null)
+  const [over, setOver] = useState<number | null>(null)
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {items.map((id, i) => {
+        const dragging = held === i
+        const target = over === i && held !== null && held !== i
+        return (
+          <div
+            key={i}
+            draggable={id !== null}
+            onDragStart={(e) => {
+              setHeld(i)
+              e.dataTransfer.effectAllowed = "move"
+              // Firefox refuses to start a drag without payload; the index is
+              // carried in state, this is only to satisfy the API.
+              e.dataTransfer.setData("text/plain", String(i))
+            }}
+            onDragEnd={() => {
+              setHeld(null)
+              setOver(null)
+            }}
+            onDragOver={(e) => {
+              if (held === null) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = "move"
+              setOver(i)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (held !== null) onMove(held, i)
+              setHeld(null)
+              setOver(null)
+            }}
+            className="rounded-[3px] transition"
+            style={{
+              opacity: dragging ? 0.35 : 1,
+              boxShadow: target ? "inset 0 0 0 1px rgba(0,217,146,0.55)" : undefined,
+            }}
+          >
+            <ItemSlot
+              index={i}
+              id={id}
+              patch={patch}
+              draggable={id !== null}
+              onPick={() => onPick(i)}
+              onClear={() => onClear(i)}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function TreeRow({
   trees,
@@ -391,7 +485,7 @@ function TreeRow({
   onPick: (t: RuneTree) => void
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1">
       {trees.map((t) => {
         const on = t.id === active
         const off = t.id === disabled
@@ -402,11 +496,11 @@ function TreeRow({
             disabled={off}
             title={off ? `${t.name} is the other tree` : t.name}
             onClick={() => onPick(t)}
-            className={`grid h-8 w-8 place-items-center rounded-full transition ${
+            className={`grid h-7 w-7 place-items-center rounded-full transition ${
               on ? "bg-jade/15 ring-1 ring-jade/50" : off ? "opacity-15" : "opacity-45 hover:opacity-90"
             }`}
           >
-            <img src={t.icon} alt="" className="h-5 w-5" />
+            <img src={t.icon} alt="" className="h-[18px] w-[18px]" />
           </button>
         )
       })}
@@ -430,7 +524,7 @@ function PerkRow({
   const box = big ? "h-10 w-10" : small ? "h-6 w-6" : "h-8 w-8"
   const img = big ? "h-9 w-9" : small ? "h-5 w-5" : "h-7 w-7"
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       {row.map((p) => {
         const on = p.id === selected
         return (
@@ -439,7 +533,7 @@ function PerkRow({
             type="button"
             title={p.name}
             onClick={() => onPick(p)}
-            className={`grid place-items-center rounded-full transition ${box} ${
+            className={`grid shrink-0 place-items-center rounded-full transition ${box} ${
               on ? "ring-1 ring-jade/60 brightness-110" : "opacity-35 hover:opacity-80"
             }`}
             style={on ? { background: "rgba(0,217,146,0.12)" } : undefined}
@@ -456,28 +550,29 @@ function ItemSlot({
   index,
   id,
   patch,
+  draggable,
   onPick,
   onClear,
-  onMove,
 }: {
   index: number
   id: number | null
   patch: string
+  draggable: boolean
   onPick: () => void
   onClear: () => void
-  onMove: (by: -1 | 1) => void
 }) {
   return (
-    <div className="w-[74px]">
+    <div>
       <button
         type="button"
         onClick={onPick}
-        className="relative grid h-[62px] w-[74px] place-items-center rounded-[3px] transition"
+        className="relative grid h-[64px] w-full place-items-center rounded-[3px] transition"
         style={{
           background: id ? "rgba(0,217,146,0.06)" : "rgba(215,216,217,0.03)",
           boxShadow: id
             ? "inset 0 0 0 1px rgba(0,217,146,0.28)"
             : "inset 0 0 0 1px rgba(215,216,217,0.06)",
+          cursor: draggable ? "grab" : undefined,
         }}
       >
         <span className="absolute left-1.5 top-1 font-jetbrains text-[8.5px] tracking-[0.14em] text-flash/25">
@@ -490,33 +585,18 @@ function ItemSlot({
         )}
       </button>
 
-      <div className="mt-1 flex items-center justify-center gap-0.5">
-        <MiniBtn label="‹" onClick={() => onMove(-1)} disabled={index === 0} />
-        <MiniBtn label="×" onClick={onClear} disabled={!id} />
-        <MiniBtn label="›" onClick={() => onMove(1)} disabled={index === 5} />
-      </div>
+      {id !== null && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="win-btn mt-1 h-5 w-full rounded-[2px] font-jetbrains text-[8.5px] uppercase tracking-[0.16em] text-flash/25"
+        >
+          clear
+        </button>
+      )}
     </div>
   )
 }
-
-const MiniBtn = ({
-  label,
-  onClick,
-  disabled,
-}: {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className="win-btn h-5 w-6 rounded-[2px] font-jetbrains text-[10px] leading-none text-flash/30 disabled:opacity-15"
-  >
-    {label}
-  </button>
-)
 
 /**
  * The item picker.

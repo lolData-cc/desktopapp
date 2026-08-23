@@ -12,6 +12,22 @@
  */
 import type { Ability, HudNudge } from "../data/hud"
 
+/**
+ * What the Settings page owns.
+ *
+ * ⚠️ Mirrors shell/prefs.ts rather than importing it: shell/ is Node-only and
+ * the renderer is meant to survive it being replaced. The two must move
+ * together — a key added there and missed here is a switch that writes a value
+ * nothing reads.
+ */
+export type AppSettings = {
+  launchAtLogin: boolean
+  smartBuild: boolean
+  goldReadout: boolean
+  objectiveNotices: boolean
+  buildNotices: boolean
+}
+
 export const CDN = "https://cdn2.loldata.cc"
 /** For assets Riot never published to DDragon, like the rank crests. */
 export const CDRAGON = "https://raw.communitydragon.org/latest"
@@ -109,7 +125,6 @@ export type AppState = {
     items: number[]
     runes?: string | null
     enabled: boolean
-    smart?: boolean
     source: "champ-select" | "site"
     savedAt: number
     patch: string | null
@@ -127,6 +142,7 @@ export type AppState = {
   matchupLoading: boolean
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
+  settings: AppSettings
 }
 
 export type ChatMessage = { role: "user" | "assistant"; content: string }
@@ -147,6 +163,8 @@ declare global {
       importRunes(): Promise<void>
       chooseRunes(index: number): void
       refreshProfile(): Promise<void>
+      setSetting(patch: Partial<AppSettings>): Promise<AppSettings>
+      revealSettings(): Promise<void>
       signIn(): void
       signOut(): Promise<void>
       askAi(messages: ChatMessage[]): Promise<ChatResult>
@@ -159,7 +177,6 @@ declare global {
       saveBuild(): Promise<void>
       updateBuild(championId: string, items: number[], runes: string | null): Promise<void>
       toggleBuild(championId: string, enabled: boolean): Promise<void>
-      smartBuild(championId: string, smart: boolean): Promise<void>
       deleteBuild(championId: string): Promise<void>
       calibrate(patch: Partial<HudNudge>): void
       calibrateTopRight(patch: Partial<HudNudge>): void

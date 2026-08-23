@@ -20,7 +20,8 @@ import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
 import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session,
          listBuilds, buildFor, saveBuild, setBuildEnabled, deleteBuild, type BuildProfile,
-         chosenAll, runesBackfilledFor, markRunesBackfilled } from "./prefs"
+         chosenAll, runesBackfilledFor, markRunesBackfilled,
+         readSettings, writeSettings, DEFAULT_SETTINGS, type AppSettings } from "./prefs"
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
 import { linkFromArgv, linkKind, parseAuthLink, parseBuildLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
@@ -160,6 +161,7 @@ export type AppState = {
   /** Whether the wide Alt+O bar is being asked for. Sent as a flag so the
    *  top-right readout can use the same gold without being toggled by it. */
   goldBar?: boolean
+  settings: AppSettings
 }
 
 let state: AppState = {
@@ -183,6 +185,7 @@ let state: AppState = {
   canUpdate: false,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
+  settings: { ...DEFAULT_SETTINGS },
 }
 
 let win: BrowserWindow | null = null
@@ -196,7 +199,13 @@ function push(patch: Partial<AppState>): void {
   // The FLAG travels, not a censored copy of the state: the top-right readout
   // wants the same numbers and is not toggled. Withholding data to control
   // presentation is what made the shop notices unreachable earlier.
-  sendOverlay("state", { ...state, goldBar: goldVisible })
+  sendOverlay("state", {
+    ...state,
+    goldBar: goldVisible,
+    // Withheld here rather than in the overlay, so "off" also means the window
+    // is not kept alive for something nobody asked to see.
+    gold: state.settings.goldReadout || goldVisible ? state.gold : null,
+  })
 
   // The overlay is only ever on screen during a match. Tying it to the phase
   // rather than to a toggle means there is no state where it is left hanging
@@ -454,7 +463,8 @@ let goldVisible = false
 function overlayWanted(): boolean {
   // Gold alone is enough now: the top-right readout is permanent during a game,
   // and only the wide Tab bar answers to the hotkey.
-  return state.notice !== null || state.gold !== null || state.levelHint !== null
+  const wantsGold = state.gold !== null && (state.settings.goldReadout || goldVisible)
+  return state.notice !== null || wantsGold || state.levelHint !== null
 }
 
 function syncOverlay(): void {
@@ -478,6 +488,14 @@ function dropNotice(): void {
   syncOverlay()
 }
 
+/** One gate for every notice, so a switch that is off means SILENCE rather
+ *  than "off in most of the places that raise one". */
+function noticesAllowed(kind: "dragon" | "elder" | "item" | "boots" | "build"): boolean {
+  return kind === "dragon" || kind === "elder"
+    ? state.settings.objectiveNotices
+    : state.settings.buildNotices
+}
+
 function raiseNotice(
   kind: "dragon" | "elder" | "item" | "boots" | "build",
   inSeconds: number,
@@ -494,6 +512,7 @@ function raiseNotice(
     recalibrated?: boolean; note?: string
   }
 ): void {
+  if (!noticesAllowed(kind)) return
   if (noticeTimer) clearTimeout(noticeTimer)
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots, build } })
 
@@ -737,7 +756,7 @@ async function readShop(
   // A plan the player has stopped following is answering a question nobody is
   // asking. When they have bought something that is not in it, the plan is set
   // aside and the data is asked about the inventory they ACTUALLY have.
-  if (saved?.smart) {
+  if (saved && state.settings.smartBuild) {
     const smart = await smartPick(saved, purse.items).catch(() => null)
     if (smart) {
       // Said ONCE per change of answer: the plan you saved is no longer what
@@ -1014,6 +1033,37 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
 
 ipcMain.handle("profile:refresh", async () => { await readProfile() })
 
+/**
+ * Settings.
+ *
+ * Launch-at-login is the only one the OS has to be told about; the rest are
+ * read where they are used. Applied BEFORE the state is pushed so the interface
+ * never shows a switch in a position the system does not actually hold.
+ */
+ipcMain.handle("settings:set", async (_e, patch: Partial<AppSettings>) => {
+  const settings = await writeSettings(patch)
+
+  if ("launchAtLogin" in patch) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] })
+    } catch (e) {
+      console.log("[settings] login item failed: %s", (e as Error)?.message)
+    }
+  }
+
+  push({ settings })
+  // A notice already on screen should not outlive the switch that turned its
+  // kind off.
+  if (!settings.objectiveNotices || !settings.buildNotices) syncOverlay()
+  return settings
+})
+
+/** Where the preferences file lives, for a "show me" button that does not make
+ *  the user hunt through AppData. */
+ipcMain.handle("settings:reveal", () => {
+  shell.showItemInFolder(join(app.getPath("userData"), "preferences.json"))
+})
+
 // ── updates ────────────────────────────────────────────────────────────────
 
 ipcMain.handle("update:check", async () => { await checkForUpdate() })
@@ -1231,13 +1281,6 @@ ipcMain.handle("builds:save", async () => {
  * but a build that reaches the notifier with a hole in it produces a notice
  * about nothing, and the cost of checking is a line.
  */
-ipcMain.handle("builds:smart", async (_e, championId: string, smart: boolean) => {
-  const existing = await buildFor(championId).catch(() => null)
-  if (!existing) return
-  await saveBuild({ ...existing, smart })
-  await pushBuilds()
-})
-
 ipcMain.handle("builds:update", async (_e, championId: string, items: number[], runes: string | null) => {
   const existing = await buildFor(championId).catch(() => null)
   if (!existing) return
@@ -1489,6 +1532,15 @@ if (!gotLock) {
     // A session from a previous run, so signing in survives a restart.
     const saved = await readSession()
     if (saved) await setSession(saved)
+
+    const settings = await readSettings().catch(() => ({ ...DEFAULT_SETTINGS }))
+    push({ settings })
+    // The OS is the authority on this one, so it is told again at every start:
+    // a preferences file restored onto another machine would otherwise claim a
+    // login item that does not exist there.
+    try {
+      app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] })
+    } catch { /* not fatal — the switch simply will not stick */ }
 
     await backfillRuneProfiles()
     await pushBuilds()

@@ -18917,6 +18917,13 @@ async function championRunes(championKey, championName, role, signal) {
 import { app as app2 } from "electron";
 import { readFile as readFile2, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join as join3 } from "node:path";
+var DEFAULT_SETTINGS = {
+  launchAtLogin: false,
+  smartBuild: false,
+  goldReadout: true,
+  objectiveNotices: true,
+  buildNotices: true
+};
 var file = () => join3(app2.getPath("userData"), "preferences.json");
 async function load2() {
   let cache2;
@@ -18927,10 +18934,11 @@ async function load2() {
       chosen: parsed?.chosen ?? {},
       session: parsed?.session ?? null,
       builds: parsed?.builds ?? {},
-      runesBackfilled: migrateMarker(parsed, parsed?.builds ?? {})
+      runesBackfilled: migrateMarker(parsed, parsed?.builds ?? {}),
+      settings: parsed?.settings ?? {}
     };
   } catch {
-    cache2 = { chosen: {}, session: null, builds: {}, runesBackfilled: [] };
+    cache2 = { chosen: {}, session: null, builds: {}, runesBackfilled: [], settings: {} };
   }
   return cache2;
 }
@@ -18964,6 +18972,15 @@ async function markRunesBackfilled(champion) {
   if (!store.runesBackfilled.includes(key))
     store.runesBackfilled.push(key);
   await persist(store);
+}
+async function readSettings() {
+  return { ...DEFAULT_SETTINGS, ...(await load2()).settings ?? {} };
+}
+async function writeSettings(patch2) {
+  const store = await load2();
+  store.settings = { ...store.settings ?? {}, ...patch2 };
+  await persist(store);
+  return { ...DEFAULT_SETTINGS, ...store.settings };
 }
 async function readSession() {
   return (await load2()).session ?? null;
@@ -19929,14 +19946,19 @@ var state = {
   update: { state: "idle", version: app3.getVersion() },
   canUpdate: false,
   pinned: false,
-  hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null }
+  hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
+  settings: { ...DEFAULT_SETTINGS }
 };
 var win = null;
 function push(patch2) {
   const before = state.phase;
   state = { ...state, ...patch2 };
   win?.webContents.send("state", state);
-  sendOverlay("state", { ...state, goldBar: goldVisible });
+  sendOverlay("state", {
+    ...state,
+    goldBar: goldVisible,
+    gold: state.settings.goldReadout || goldVisible ? state.gold : null
+  });
   if (state.phase !== before) {
     if (state.phase === "InProgress" || state.phase === "Reconnect")
       startGameClock();
@@ -20085,7 +20107,8 @@ var hideTimer = null;
 var GOLD_HOTKEY = "Alt+O";
 var goldVisible = false;
 function overlayWanted() {
-  return state.notice !== null || state.gold !== null || state.levelHint !== null;
+  const wantsGold = state.gold !== null && (state.settings.goldReadout || goldVisible);
+  return state.notice !== null || wantsGold || state.levelHint !== null;
 }
 function syncOverlay() {
   if (overlayWanted()) {
@@ -20108,7 +20131,12 @@ function dropNotice() {
   push({ notice: null });
   syncOverlay();
 }
+function noticesAllowed(kind) {
+  return kind === "dragon" || kind === "elder" ? state.settings.objectiveNotices : state.settings.buildNotices;
+}
 function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots2, build) {
+  if (!noticesAllowed(kind))
+    return;
   if (noticeTimer)
     clearTimeout(noticeTimer);
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots: boots2, build } });
@@ -20242,7 +20270,7 @@ async function readShop(riotId, championId, enemies) {
   const nextIndex = build.findIndex((s) => !owned.has(s.item));
   if (nextIndex < 0)
     return shopLog("build finished");
-  if (saved?.smart) {
+  if (saved && state.settings.smartBuild) {
     const smart = await smartPick(saved, purse.items).catch(() => null);
     if (smart) {
       if (recalibrated?.item !== smart.item) {
@@ -20433,6 +20461,23 @@ async function applyPage(champion, patch2, page) {
 ipcMain.handle("profile:refresh", async () => {
   await readProfile();
 });
+ipcMain.handle("settings:set", async (_e, patch2) => {
+  const settings = await writeSettings(patch2);
+  if ("launchAtLogin" in patch2) {
+    try {
+      app3.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
+    } catch (e) {
+      console.log("[settings] login item failed: %s", e?.message);
+    }
+  }
+  push({ settings });
+  if (!settings.objectiveNotices || !settings.buildNotices)
+    syncOverlay();
+  return settings;
+});
+ipcMain.handle("settings:reveal", () => {
+  shell.showItemInFolder(join4(app3.getPath("userData"), "preferences.json"));
+});
 ipcMain.handle("update:check", async () => {
   await checkForUpdate();
 });
@@ -20565,13 +20610,6 @@ ipcMain.handle("builds:save", async () => {
     patch: m.patch
   };
   await saveBuild(profile);
-  await pushBuilds();
-});
-ipcMain.handle("builds:smart", async (_e, championId, smart) => {
-  const existing = await buildFor(championId).catch(() => null);
-  if (!existing)
-    return;
-  await saveBuild({ ...existing, smart });
   await pushBuilds();
 });
 ipcMain.handle("builds:update", async (_e, championId, items, runes) => {
@@ -20735,6 +20773,11 @@ if (!gotLock) {
     const saved = await readSession();
     if (saved)
       await setSession(saved);
+    const settings = await readSettings().catch(() => ({ ...DEFAULT_SETTINGS }));
+    push({ settings });
+    try {
+      app3.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
+    } catch {}
     await backfillRuneProfiles();
     await pushBuilds();
     const initial = initUpdater((update) => push({ update }));
