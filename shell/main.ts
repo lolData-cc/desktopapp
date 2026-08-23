@@ -20,7 +20,7 @@ import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
 import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session,
          listBuilds, buildFor, saveBuild, setBuildEnabled, deleteBuild, type BuildProfile,
-         chosenAll, runesBackfilled, markRunesBackfilled } from "./prefs"
+         chosenAll, runesBackfilledFor, markRunesBackfilled } from "./prefs"
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
 import { linkFromArgv, linkKind, parseAuthLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
@@ -844,35 +844,37 @@ async function profileFromRunes(championName: string, patch: string, runes: stri
  * one a profile, so a player who imported runes last week opens Builds and
  * finds them there instead of an empty section.
  *
- * Runs ONCE, guarded by a flag rather than by "is the section empty": without
- * it, deleting a rune-only profile would silently bring it back on the next
- * start, which is a delete button that does not delete.
- *
- * A champion that fails to resolve leaves the pass UNFINISHED, so it runs
- * again next start. Marking it done regardless would write that champion off
- * permanently over one slow CDN fetch — which is exactly what happened the
- * first time this ran.
+ * Marked PER CHAMPION, so each one is offered exactly once: without a marker
+ * a profile the player deleted would come back on the next start, and with a
+ * single shared one a champion that failed to resolve — or whose write was
+ * lost — was written off permanently. Both of those happened here.
  */
 async function backfillRuneProfiles(): Promise<void> {
-  if (await runesBackfilled().catch(() => true)) return
-
   const choices = await chosenAll().catch((): Record<string, string> => ({}))
   const names = Object.keys(choices)
-  if (!names.length) {
-    await markRunesBackfilled()
-    return
-  }
+  console.log("[builds] backfill: %d remembered import(s): %s", names.length, names.join(", ") || "none")
+  if (!names.length) return
 
   let made = 0
-  let complete = true
   for (const name of names) {
-    const champ = await championByName(name).catch(() => null)
-    if (!champ) {
-      complete = false
+    if (await runesBackfilledFor(name).catch(() => true)) {
+      console.log("[builds] backfill: %s already offered, skipping", name)
       continue
     }
+
+    const champ = await championByName(name).catch(() => null)
+    // Left unmarked, so a slow CDN fetch costs a retry rather than the champion.
+    if (!champ) {
+      console.log("[builds] backfill: %s did not resolve, will retry next start", name)
+      continue
+    }
+
     // Anything already saved is the player's own, and outranks this.
-    if (await buildFor(champ.slug).catch(() => null)) continue
+    if (await buildFor(champ.slug).catch(() => null)) {
+      console.log("[builds] backfill: %s already has a profile", name)
+      await markRunesBackfilled(name)
+      continue
+    }
 
     await saveBuild({
       championId: champ.slug,
@@ -886,17 +888,19 @@ async function backfillRuneProfiles(): Promise<void> {
       savedAt: Date.now(),
       patch: null,
     })
+    await markRunesBackfilled(name)
     made++
   }
 
-  if (complete) await markRunesBackfilled()
   if (made) console.log("[builds] recovered %d rune import(s) into profiles", made)
-  if (!complete) console.log("[builds] some champions did not resolve; retrying next start")
   await pushBuilds()
 }
 
 async function pushBuilds(): Promise<void> {
-  push({ builds: await listBuilds().catch(() => []) })
+  const builds = await listBuilds().catch(() => [])
+  console.log("[builds] %d profile(s): %s", builds.length,
+    builds.map((b) => b.championName).join(", ") || "none")
+  push({ builds })
 }
 
 /** Save what champion select worked out, so it survives the game it came from. */

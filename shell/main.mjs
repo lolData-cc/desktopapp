@@ -18917,11 +18917,9 @@ async function championRunes(championKey, championName, role, signal) {
 import { app as app2 } from "electron";
 import { readFile as readFile2, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join as join3 } from "node:path";
-var cache2 = null;
 var file = () => join3(app2.getPath("userData"), "preferences.json");
 async function load2() {
-  if (cache2)
-    return cache2;
+  let cache2;
   try {
     const raw = await readFile2(file(), "utf8");
     const parsed = JSON.parse(raw);
@@ -18929,10 +18927,10 @@ async function load2() {
       chosen: parsed?.chosen ?? {},
       session: parsed?.session ?? null,
       builds: parsed?.builds ?? {},
-      runesBackfilled: parsed?.runesBackfilled ?? false
+      runesBackfilled: migrateMarker(parsed, parsed?.builds ?? {})
     };
   } catch {
-    cache2 = { chosen: {}, session: null, builds: {}, runesBackfilled: false };
+    cache2 = { chosen: {}, session: null, builds: {}, runesBackfilled: [] };
   }
   return cache2;
 }
@@ -18947,12 +18945,24 @@ async function rememberChoice(champion, signature) {
 async function chosenAll() {
   return { ...(await load2()).chosen };
 }
-async function runesBackfilled() {
-  return (await load2()).runesBackfilled === true;
+function migrateMarker(parsed, builds) {
+  const marker = parsed?.runesBackfilled;
+  if (Array.isArray(marker))
+    return marker;
+  if (marker !== true)
+    return [];
+  const have = new Set(Object.values(builds).map((b) => b.championName.toLowerCase()));
+  return Object.keys(parsed?.chosen ?? {}).filter((name) => have.has(name));
 }
-async function markRunesBackfilled() {
+async function runesBackfilledFor(champion) {
+  return (await load2()).runesBackfilled?.includes(champion.toLowerCase()) === true;
+}
+async function markRunesBackfilled(champion) {
   const store = await load2();
-  store.runesBackfilled = true;
+  const key = champion.toLowerCase();
+  store.runesBackfilled = store.runesBackfilled ?? [];
+  if (!store.runesBackfilled.includes(key))
+    store.runesBackfilled.push(key);
   await persist(store);
 }
 async function readSession() {
@@ -20177,24 +20187,27 @@ async function profileFromRunes(championName, patch2, runes) {
   await pushBuilds();
 }
 async function backfillRuneProfiles() {
-  if (await runesBackfilled().catch(() => true))
-    return;
   const choices = await chosenAll().catch(() => ({}));
   const names = Object.keys(choices);
-  if (!names.length) {
-    await markRunesBackfilled();
+  console.log("[builds] backfill: %d remembered import(s): %s", names.length, names.join(", ") || "none");
+  if (!names.length)
     return;
-  }
   let made = 0;
-  let complete = true;
   for (const name of names) {
-    const champ = await championByName(name).catch(() => null);
-    if (!champ) {
-      complete = false;
+    if (await runesBackfilledFor(name).catch(() => true)) {
+      console.log("[builds] backfill: %s already offered, skipping", name);
       continue;
     }
-    if (await buildFor(champ.slug).catch(() => null))
+    const champ = await championByName(name).catch(() => null);
+    if (!champ) {
+      console.log("[builds] backfill: %s did not resolve, will retry next start", name);
       continue;
+    }
+    if (await buildFor(champ.slug).catch(() => null)) {
+      console.log("[builds] backfill: %s already has a profile", name);
+      await markRunesBackfilled(name);
+      continue;
+    }
     await saveBuild({
       championId: champ.slug,
       championName: champ.name,
@@ -20207,18 +20220,17 @@ async function backfillRuneProfiles() {
       savedAt: Date.now(),
       patch: null
     });
+    await markRunesBackfilled(name);
     made++;
   }
-  if (complete)
-    await markRunesBackfilled();
   if (made)
     console.log("[builds] recovered %d rune import(s) into profiles", made);
-  if (!complete)
-    console.log("[builds] some champions did not resolve; retrying next start");
   await pushBuilds();
 }
 async function pushBuilds() {
-  push({ builds: await listBuilds().catch(() => []) });
+  const builds = await listBuilds().catch(() => []);
+  console.log("[builds] %d profile(s): %s", builds.length, builds.map((b) => b.championName).join(", ") || "none");
+  push({ builds });
 }
 ipcMain.handle("builds:save", async () => {
   const m = state.matchup;

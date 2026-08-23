@@ -63,18 +63,33 @@ type Stored = {
   chosen: Record<string, PageSignature>
   session?: Session | null
   builds?: Record<string, BuildProfile>
-  /** Set once the pre-existing rune choices have been turned into profiles.
-   *  Without it the backfill would run every start and resurrect a rune-only
-   *  profile the player had deliberately deleted. */
-  runesBackfilled?: boolean
+  /** Champions whose pre-existing rune choice has already been turned into a
+   *  profile — by NAME, as `chosen` keys them.
+   *
+   *  Per champion rather than one boolean: a single flag cannot say WHICH were
+   *  done, so one failure or one lost write took a champion out of reach
+   *  permanently. It still stops a profile the player deleted from coming
+   *  back, which is the reason a marker exists at all. */
+  runesBackfilled?: string[]
 }
 
-let cache: Stored | null = null
-
+/**
+ * ⚠️ Deliberately NOT cached.
+ *
+ * This used to keep the parsed file in memory and write that snapshot back on
+ * every change. Whole-file last-writer-wins: a second process that had loaded
+ * earlier would silently erase anything written since — which is exactly how a
+ * saved build disappeared, with the store left claiming its backfill was done
+ * so it never came back.
+ *
+ * Every write is therefore a read-modify-write of the file as it is NOW. It is
+ * a few KB, read on user actions rather than in a loop, and correctness here is
+ * worth far more than the read.
+ */
 const file = () => join(app.getPath("userData"), "preferences.json")
 
 async function load(): Promise<Stored> {
-  if (cache) return cache
+  let cache: Stored
   try {
     const raw = await readFile(file(), "utf8")
     const parsed = JSON.parse(raw) as Stored
@@ -82,10 +97,10 @@ async function load(): Promise<Stored> {
       chosen: parsed?.chosen ?? {},
       session: parsed?.session ?? null,
       builds: parsed?.builds ?? {},
-      runesBackfilled: parsed?.runesBackfilled ?? false,
+      runesBackfilled: migrateMarker(parsed, parsed?.builds ?? {}),
     }
   } catch {
-    cache = { chosen: {}, session: null, builds: {}, runesBackfilled: false }
+    cache = { chosen: {}, session: null, builds: {}, runesBackfilled: [] }
   }
   return cache
 }
@@ -112,13 +127,32 @@ export async function chosenAll(): Promise<Record<string, PageSignature>> {
   return { ...(await load()).chosen }
 }
 
-export async function runesBackfilled(): Promise<boolean> {
-  return (await load()).runesBackfilled === true
+/**
+ * The old boolean, read as the set it was standing in for.
+ *
+ * `true` meant "the pass ran", so the champions it actually produced are the
+ * ones with a build. Anything it claimed to have done but left nothing behind
+ * was not really done, and is offered again — which is the honest reading, and
+ * restores a profile a lost write erased.
+ */
+function migrateMarker(parsed: Stored, builds: Record<string, BuildProfile>): string[] {
+  const marker = parsed?.runesBackfilled
+  if (Array.isArray(marker)) return marker
+  if (marker !== true) return []
+
+  const have = new Set(Object.values(builds).map((b) => b.championName.toLowerCase()))
+  return Object.keys(parsed?.chosen ?? {}).filter((name) => have.has(name))
 }
 
-export async function markRunesBackfilled(): Promise<void> {
+export async function runesBackfilledFor(champion: string): Promise<boolean> {
+  return (await load()).runesBackfilled?.includes(champion.toLowerCase()) === true
+}
+
+export async function markRunesBackfilled(champion: string): Promise<void> {
   const store = await load()
-  store.runesBackfilled = true
+  const key = champion.toLowerCase()
+  store.runesBackfilled = store.runesBackfilled ?? []
+  if (!store.runesBackfilled.includes(key)) store.runesBackfilled.push(key)
   await persist(store)
 }
 
