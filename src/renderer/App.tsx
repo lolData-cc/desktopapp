@@ -46,20 +46,30 @@ export default function App() {
   // Which profile is open for editing. Held here rather than inside Builds so
   // that leaving the section closes the editor instead of hiding it.
   const [editing, setEditing] = useState<string | null>(null)
-  // Dismissed for THIS game only: keyed on the match so the next one opens
-  // again by itself, which is the whole point of a recap.
-  const [recapSeen, setRecapSeen] = useState<number | null>(null)
+  /**
+   * Waved away for this game.
+   *
+   * ⚠️ Cleared when the PHASE leaves post-game, not keyed on the match id. The
+   * client writes history late, so a dismissal keyed on `matches[0]` would be
+   * keyed on the PREVIOUS game — and the recap would pop straight back up the
+   * moment the real one arrived, having just been dismissed.
+   */
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     void window.desktop.getState().then(setS)
     return window.desktop.onState(setS)
   }, [])
 
-  // The game just ended and this one has not been waved away yet.
-  const showRecap =
-    isPostGame(s?.phase ?? null) &&
-    !!s?.matches?.length &&
-    recapSeen !== s.matches[0]!.gameId
+  const post = isPostGame(s?.phase ?? null)
+
+  useEffect(() => {
+    if (!post) setDismissed(false)
+  }, [post])
+
+  // Something to show: the champion from the game we just watched, or failing
+  // that whatever history has.
+  const showRecap = post && !dismissed && (!!s?.lastPlayed || !!s?.matches?.length)
 
   return (
     <div className="relative flex h-full flex-col bg-liquirice text-flash">
@@ -89,7 +99,7 @@ export default function App() {
           {section === "overview" ? (
             s?.client === "attached" ? (
               showRecap ? (
-                <Recap s={s} onClose={() => setRecapSeen(s.matches?.[0]?.gameId ?? -1)} />
+                <Recap s={s} onClose={() => setDismissed(true)} />
               ) : (
                 <Attached s={s} />
               )

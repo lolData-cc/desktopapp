@@ -19963,6 +19963,7 @@ var state = {
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
+  lastPlayed: null,
   scoreboard: null
 };
 var win = null;
@@ -20016,6 +20017,8 @@ var lcu = new LcuConnection({
         ...phase === "ChampSelect" ? {} : { select: null },
         ...phase === "InProgress" || phase === "Reconnect" ? {} : { scoreboard: null }
       });
+      if (POST_GAME_PHASES.has(phase))
+        awaitMatch();
       return;
     }
     if (e.uri === "/lol-champ-select/v1/session")
@@ -20045,6 +20048,21 @@ async function readRunes(champion, role) {
     },
     runeImport: { state: "idle" }
   });
+}
+var POST_GAME_PHASES = new Set(["WaitingForStats", "PreEndOfGame", "EndOfGame"]);
+var awaiting = null;
+function awaitMatch(tries = 8) {
+  if (awaiting)
+    clearTimeout(awaiting);
+  const want = state.lastPlayed?.championKey ?? 0;
+  const attempt = async (left) => {
+    await readProfile();
+    const got = state.matches?.[0]?.championId ?? -1;
+    if (!want || got === want || left <= 0)
+      return;
+    awaiting = setTimeout(() => void attempt(left - 1), 4000);
+  };
+  attempt(tries);
 }
 async function readProfile() {
   const summoner = state.summoner;
@@ -20368,6 +20386,8 @@ async function readGame() {
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain);
   readScoreboard(players ?? [], me, myTeam, stats.gameTime);
 }
+var keyCache = new Map;
+var keyOf = (name) => keyCache.get(name) ?? 0;
 async function readScoreboard(players, me, myTeam, gameTime) {
   if (!players.length)
     return push({ scoreboard: null });
@@ -20375,6 +20395,8 @@ async function readScoreboard(players, me, myTeam, gameTime) {
   const rows = [];
   for (const p of players) {
     const champ = p.championName ? await championByName(p.championName).catch(() => null) : null;
+    if (champ && p.championName)
+      keyCache.set(p.championName, champ.key);
     const items = (p.items ?? []).map((i) => i.itemID);
     rows.push({
       team: p.team,
@@ -20401,7 +20423,10 @@ async function readScoreboard(players, me, myTeam, gameTime) {
   }
   const ours = myTeam ? rows.filter((r) => r.team === myTeam) : rows;
   const theirs = myTeam ? rows.filter((r) => r.team !== myTeam) : [];
+  const mine = rows.find((r) => r.row.isMe)?.row;
+  const lastPlayed = mine?.championId && mine.championId !== state.lastPlayed?.championId ? { championId: mine.championId, championKey: keyOf(mine.champion) } : state.lastPlayed;
   push({
+    lastPlayed,
     scoreboard: {
       gameTime,
       ours: ours.map((r) => r.row),

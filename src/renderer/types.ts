@@ -165,6 +165,9 @@ export type AppState = {
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
   settings: AppSettings
+  /** The champion we last played, from the live game rather than from match
+   *  history — which the client writes at its own pace. */
+  lastPlayed: { championId: string; championKey: number } | null
   scoreboard: {
     gameTime: number
     ours: LivePlayer[]

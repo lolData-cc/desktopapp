@@ -27,9 +27,25 @@ type Props = {
   className?: string
 }
 
-/** Riot's own animation names. Idle1 is the one every champion has; the rest
- *  exist on some and not others, so the fallback chain matters. */
-const IDLE = ["Idle1", "idle1", "Idle", "idle", "Idle2"]
+/**
+ * The idle clip.
+ *
+ * ⚠️ Searched, not looked up. A list of exact names missed champions whose
+ * clips are named differently — and the fallback was animations[0], which on
+ * Nocturne is "Attack1", so the recap opened on a champion swinging at
+ * nothing. Anything matching /idle/ is an idle; the exact "Idle1" is merely
+ * preferred among them.
+ */
+function idleClip(clips: { name: string }[]): { name: string } | undefined {
+  const idles = clips.filter((c) => /idle/i.test(c.name))
+  return (
+    idles.find((c) => /^idle_?1$/i.test(c.name)) ??
+    idles.find((c) => /^idle/i.test(c.name)) ??
+    idles[0] ??
+    // No idle at all: better a still pose than a champion mid-attack.
+    undefined
+  )
+}
 
 export default function ChampionStage({ championId, championKey, className }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -101,20 +117,25 @@ export default function ChampionStage({ championId, championKey, className }: Pr
         rig.add(model)
         scene.add(rig)
 
-        camera.position.set(0, height * 0.62, height * 2.15)
-        camera.lookAt(0, height * 0.48, 0)
+        // Further back and looking higher: the champion should sit IN the
+        // panel with air around it, not fill the frame.
+        camera.position.set(0, height * 0.78, height * 3.1)
+        camera.lookAt(0, height * 0.42, 0)
         camera.near = height / 60
         camera.far = height * 60
         camera.updateProjectionMatrix()
 
-        scene.add(pedestal(Math.max(size.x, size.z) * 0.62))
+        // In the RIG, not the scene: the pedestal turns with the champion
+        // standing on it. A model revolving above a fixed disc looks like it is
+        // sliding rather than being carried.
+        rig.add(pedestal(Math.max(size.x, size.z) * 0.7))
 
-        const clip =
-          IDLE.map((n) => gltf.animations.find((a) => a.name === n)).find(Boolean) ??
-          gltf.animations[0]
+        const clip = idleClip(gltf.animations) as THREE.AnimationClip | undefined
         if (clip) {
           mixer = new THREE.AnimationMixer(model)
           mixer.clipAction(clip).play()
+        } else {
+          console.log("[stage] no idle among:", gltf.animations.map((a) => a.name).join(", "))
         }
 
         const resize = () => {

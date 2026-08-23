@@ -23,19 +23,36 @@ export function isPostGame(phase: string | null): boolean {
 }
 
 export default function Recap({ s, onClose }: { s: AppState; onClose: () => void }) {
-  const match = s.matches?.[0] ?? null
-  const [slug, setSlug] = useState<string | null>(null)
+  /**
+   * ⚠️ The champion comes from the LIVE GAME, not from history.
+   *
+   * The client writes the finished match at its own pace, so at the moment the
+   * recap opens `matches[0]` is still the previous game — which is how this
+   * showed Yasuo to someone who had just played Kai'Sa. The board we were
+   * watching a second ago knows the right answer with no waiting.
+   */
+  const played = s.lastPlayed
+  const newest = s.matches?.[0] ?? null
 
+  // The numbers are only shown once history has caught up to the game we
+  // actually played. Anything else is last game's score under this game's
+  // champion, which is worse than an empty column.
+  const match = played && newest?.championId === played.championKey ? newest : null
+
+  const [fallbackSlug, setFallbackSlug] = useState<string | null>(null)
   useEffect(() => {
-    if (!match) return
+    if (played || !newest) return
     let alive = true
-    void championById(match.championId)
-      .then((c) => { if (alive) setSlug(c?.slug ?? null) })
-      .catch(() => { if (alive) setSlug(null) })
+    void championById(newest.championId)
+      .then((c) => { if (alive) setFallbackSlug(c?.slug ?? null) })
+      .catch(() => { if (alive) setFallbackSlug(null) })
     return () => { alive = false }
-  }, [match?.championId])
+  }, [played, newest?.championId])
 
-  if (!match) {
+  const slug = played?.championId ?? fallbackSlug
+  const key = played?.championKey ?? newest?.championId ?? 0
+
+  if (!slug) {
     return (
       <div className="grid h-full place-items-center">
         <p className="font-chakrapetch text-[13px] text-flash/35">Waiting on the result…</p>
@@ -43,21 +60,25 @@ export default function Recap({ s, onClose }: { s: AppState; onClose: () => void
     )
   }
 
-  const mins = Math.max(1, match.durationSeconds / 60)
-  const kda = (match.kills + match.assists) / Math.max(1, match.deaths)
-  const won = match.win && !match.remake
+  const mins = match ? Math.max(1, match.durationSeconds / 60) : 1
+  const kda = match ? (match.kills + match.assists) / Math.max(1, match.deaths) : 0
+  const won = !!match?.win && !match?.remake
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-baseline gap-3">
         <h2
           className="font-chakrapetch text-[22px] font-bold leading-none"
-          style={{ color: match.remake ? "#d7d8d9" : won ? "#00d992" : "#ff6286" }}
+          style={{
+            color: !match ? "#d7d8d9" : match.remake ? "#d7d8d9" : won ? "#00d992" : "#ff6286",
+          }}
         >
-          {match.remake ? "Remake" : won ? "Victory" : "Defeat"}
+          {!match ? "Game over" : match.remake ? "Remake" : won ? "Victory" : "Defeat"}
         </h2>
         <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.18em] text-flash/30">
-          {Math.floor(mins)} min · {queueName(match.queueId, match.gameMode)}
+          {match
+            ? `${Math.floor(mins)} min · ${queueName(match.queueId, match.gameMode)}`
+            : "waiting on the client for the result"}
         </p>
         <button
           type="button"
@@ -71,23 +92,26 @@ export default function Recap({ s, onClose }: { s: AppState; onClose: () => void
       <div className="mt-4 flex min-h-0 flex-1 gap-7">
         {/* the champion */}
         <div className="relative w-[430px] shrink-0">
-          {slug && (
-            <ChampionStage
-              championId={slug}
-              championKey={match.championId}
-              className="h-full w-full"
-            />
-          )}
+          <ChampionStage championId={slug} championKey={key} className="h-full w-full" />
           <p className="absolute inset-x-0 bottom-0 text-center font-chakrapetch text-[15px] font-bold uppercase tracking-[0.16em] text-flash/70">
-            {slug ?? "—"}
-            <span className="ml-2 font-jetbrains text-[10px] tracking-[0.18em] text-flash/25">
-              lvl {match.champLevel}
-            </span>
+            {slug}
+            {match && (
+              <span className="ml-2 font-jetbrains text-[10px] tracking-[0.18em] text-flash/25">
+                lvl {match.champLevel}
+              </span>
+            )}
           </p>
         </div>
 
         {/* the numbers */}
         <div className="min-w-0 flex-1 overflow-y-auto pr-1">
+          {!match ? (
+            <p className="max-w-[40ch] font-chakrapetch text-[12.5px] leading-snug text-flash/30">
+              The client has not written this game to your history yet. The score will
+              fill in on its own — it usually takes a few seconds after the end screen.
+            </p>
+          ) : (
+          <>
           <div className="flex items-baseline gap-2">
             <span className="font-chakrapetch text-[34px] font-bold leading-none tabular-nums text-flash">
               {match.kills}
@@ -129,6 +153,9 @@ export default function Recap({ s, onClose }: { s: AppState; onClose: () => void
                 ))}
               </div>
             </div>
+          )}
+
+          </>
           )}
 
           <p className="mt-6 max-w-[52ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">

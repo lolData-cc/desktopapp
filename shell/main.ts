@@ -163,6 +163,17 @@ export type AppState = {
    *  top-right readout can use the same gold without being toggled by it. */
   goldBar?: boolean
   settings: AppSettings
+  /**
+   * The champion we last played, taken from the live game rather than from
+   * match history.
+   *
+   * ⚠️ History is written by the client at its own pace and is only read when
+   * the app attaches, so at the moment a game ends `matches[0]` is still the
+   * PREVIOUS game. The recap opened on the wrong champion because of exactly
+   * that. The board we were just watching knows the right answer with no
+   * waiting and no guessing.
+   */
+  lastPlayed: { championId: string; championKey: number } | null
   /** Everyone in the running game, ours first. Null outside a game. */
   scoreboard: {
     gameTime: number
@@ -193,6 +204,7 @@ let state: AppState = {
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
+  lastPlayed: null,
   scoreboard: null,
 }
 
@@ -269,6 +281,10 @@ const lcu = new LcuConnection({
         // A scoreboard from the last game is worse than none: it looks live.
         ...(phase === "InProgress" || phase === "Reconnect" ? {} : { scoreboard: null }),
       })
+      // The client writes the finished game to history on its own schedule, so
+      // one read at the end is a coin toss. Polled until the match we actually
+      // played shows up, then stopped.
+      if (POST_GAME_PHASES.has(phase)) awaitMatch()
       return
     }
     if (e.uri === "/lol-champ-select/v1/session") void readSelect(e.data)
@@ -312,6 +328,31 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
  * account has no rank and no history, which is a state to display rather than
  * an error to raise.
  */
+const POST_GAME_PHASES = new Set(["WaitingForStats", "PreEndOfGame", "EndOfGame"])
+
+/**
+ * Read history until the game just played appears in it.
+ *
+ * Bounded: eight tries over about half a minute. If the client has not written
+ * it by then it is not going to, and the recap shows the champion without the
+ * numbers rather than spinning forever.
+ */
+let awaiting: ReturnType<typeof setTimeout> | null = null
+
+function awaitMatch(tries = 8): void {
+  if (awaiting) clearTimeout(awaiting)
+  const want = state.lastPlayed?.championKey ?? 0
+
+  const attempt = async (left: number) => {
+    await readProfile()
+    const got = state.matches?.[0]?.championId ?? -1
+    if (!want || got === want || left <= 0) return
+    awaiting = setTimeout(() => void attempt(left - 1), 4000)
+  }
+
+  void attempt(tries)
+}
+
 async function readProfile(): Promise<void> {
   const summoner = state.summoner
   if (!summoner?.puuid) return
@@ -911,6 +952,11 @@ async function readGame(): Promise<void> {
  * work is pricing inventories, and the price table is loaded once per patch.
  * Anything heavier than that belongs behind a change check.
  */
+/** Champion key by NAME, from the same table everything else uses. Cached by
+ *  that module, so this is a map lookup after the first call. */
+let keyCache = new Map<string, number>()
+const keyOf = (name: string): number => keyCache.get(name) ?? 0
+
 async function readScoreboard(
   players: PlayerSlot[],
   me: string | null,
@@ -924,6 +970,7 @@ async function readScoreboard(
 
   for (const p of players) {
     const champ = p.championName ? await championByName(p.championName).catch(() => null) : null
+    if (champ && p.championName) keyCache.set(p.championName, champ.key)
     const items = (p.items ?? []).map((i) => i.itemID)
     rows.push({
       team: p.team,
@@ -956,7 +1003,15 @@ async function readScoreboard(
   const ours = myTeam ? rows.filter((r) => r.team === myTeam) : rows
   const theirs = myTeam ? rows.filter((r) => r.team !== myTeam) : []
 
+  // Remembered for the recap, which runs after this board is gone.
+  const mine = rows.find((r) => r.row.isMe)?.row
+  const lastPlayed =
+    mine?.championId && mine.championId !== state.lastPlayed?.championId
+      ? { championId: mine.championId, championKey: keyOf(mine.champion) }
+      : state.lastPlayed
+
   push({
+    lastPlayed,
     scoreboard: {
       gameTime,
       ours: ours.map((r) => r.row),
