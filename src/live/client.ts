@@ -35,9 +35,29 @@ export type GameEvent = {
 
 export type PlayerSlot = {
   riotId?: string
+  /** The name without the tag, which is what a scoreboard shows. */
+  riotIdGameName?: string
   summonerName?: string
   team: string
   championName?: string
+  level?: number
+  /** TOP / JUNGLE / MIDDLE / BOTTOM / UTILITY. Empty string in modes that have
+   *  no lanes, and in a custom game with the roles unset — so never assume it. */
+  position?: string
+  isBot?: boolean
+  isDead?: boolean
+  /** Seconds left, when dead. */
+  respawnTimer?: number
+  scores?: {
+    kills: number
+    deaths: number
+    assists: number
+    creepScore: number
+    wardScore: number
+  }
+  runes?: {
+    keystone?: { id?: number; displayName?: string }
+  }
   /** Present for EVERY player, ours and theirs — the same inventory the
    *  scoreboard shows when Tab is held. */
   items?: { itemID: number; count?: number }[]

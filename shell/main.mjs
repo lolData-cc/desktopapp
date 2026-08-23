@@ -19947,7 +19947,8 @@ var state = {
   canUpdate: false,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
-  settings: { ...DEFAULT_SETTINGS }
+  settings: { ...DEFAULT_SETTINGS },
+  scoreboard: null
 };
 var win = null;
 function push(patch2) {
@@ -19995,7 +19996,11 @@ var lcu = new LcuConnection({
   onEvent: (e) => {
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
       const phase = e.data;
-      push({ phase, ...phase === "ChampSelect" ? {} : { select: null } });
+      push({
+        phase,
+        ...phase === "ChampSelect" ? {} : { select: null },
+        ...phase === "InProgress" || phase === "Reconnect" ? {} : { scoreboard: null }
+      });
       return;
     }
     if (e.uri === "/lol-champ-select/v1/session")
@@ -20346,6 +20351,48 @@ async function readGame() {
     syncOverlay();
   }
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain);
+  readScoreboard(players ?? [], me, myTeam, stats.gameTime);
+}
+async function readScoreboard(players, me, myTeam, gameTime) {
+  if (!players.length)
+    return push({ scoreboard: null });
+  const minutes = Math.max(1, gameTime / 60);
+  const rows = [];
+  for (const p of players) {
+    const champ = p.championName ? await championByName(p.championName).catch(() => null) : null;
+    const items = (p.items ?? []).map((i) => i.itemID);
+    rows.push({
+      team: p.team,
+      row: {
+        name: p.riotIdGameName ?? p.summonerName ?? p.riotId ?? "—",
+        champion: p.championName ?? "—",
+        championId: champ?.slug ?? null,
+        level: p.level ?? 0,
+        position: p.position && p.position.length ? p.position : null,
+        dead: p.isDead === true,
+        respawnIn: Math.max(0, Math.round(p.respawnTimer ?? 0)),
+        kills: p.scores?.kills ?? 0,
+        deaths: p.scores?.deaths ?? 0,
+        assists: p.scores?.assists ?? 0,
+        cs: p.scores?.creepScore ?? 0,
+        csPerMin: (p.scores?.creepScore ?? 0) / minutes,
+        wards: p.scores?.wardScore ?? 0,
+        worth: await inventoryValue(p.items ?? []).catch(() => 0),
+        items,
+        keystone: p.runes?.keystone?.id ?? null,
+        isMe: p.riotId === me || p.summonerName === me
+      }
+    });
+  }
+  const ours = myTeam ? rows.filter((r) => r.team === myTeam) : rows;
+  const theirs = myTeam ? rows.filter((r) => r.team !== myTeam) : [];
+  push({
+    scoreboard: {
+      gameTime,
+      ours: ours.map((r) => r.row),
+      theirs: theirs.map((r) => r.row)
+    }
+  });
 }
 function readObjective(gameTime, events, players, me, mapTerrain) {
   const next = nextObjective(events, gameTime, players, mapTerrain);

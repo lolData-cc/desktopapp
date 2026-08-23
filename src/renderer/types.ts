@@ -20,6 +20,28 @@ import type { Ability, HudNudge } from "../data/hud"
  * together — a key added there and missed here is a switch that writes a value
  * nothing reads.
  */
+/** One scoreboard row, assembled by the shell. Mirrors LivePlayer there. */
+export type LivePlayer = {
+  name: string
+  champion: string
+  championId: string | null
+  level: number
+  position: string | null
+  dead: boolean
+  respawnIn: number
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  csPerMin: number
+  wards: number
+  /** What they are CARRYING, in gold — not what they have earned. */
+  worth: number
+  items: number[]
+  keystone: number | null
+  isMe: boolean
+}
+
 export type AppSettings = {
   launchAtLogin: boolean
   smartBuild: boolean
@@ -143,6 +165,11 @@ export type AppState = {
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
   settings: AppSettings
+  scoreboard: {
+    gameTime: number
+    ours: LivePlayer[]
+    theirs: LivePlayer[]
+  } | null
 }
 
 export type ChatMessage = { role: "user" | "assistant"; content: string }

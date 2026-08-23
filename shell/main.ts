@@ -31,7 +31,7 @@ import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
 import { dragonTally, nextObjective, type DragonElement, type DragonTally } from "../src/data/objectives"
 import { teamGold, type TeamGold } from "../src/data/teamGold"
-import { warmItemCosts } from "../src/data/itemCost"
+import { warmItemCosts, inventoryValue } from "../src/data/itemCost"
 import { costToComplete, warmItemTree } from "../src/data/affordability"
 import { classifyAll, ccCarriers, CC_HEAVY_AT, type ChampInfo } from "../src/data/champClass"
 import { bootsIds, allItems } from "../src/data/itemCatalog"
@@ -162,6 +162,12 @@ export type AppState = {
    *  top-right readout can use the same gold without being toggled by it. */
   goldBar?: boolean
   settings: AppSettings
+  /** Everyone in the running game, ours first. Null outside a game. */
+  scoreboard: {
+    gameTime: number
+    ours: LivePlayer[]
+    theirs: LivePlayer[]
+  } | null
 }
 
 let state: AppState = {
@@ -186,6 +192,7 @@ let state: AppState = {
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
+  scoreboard: null,
 }
 
 let win: BrowserWindow | null = null
@@ -255,7 +262,12 @@ const lcu = new LcuConnection({
   onEvent: (e) => {
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
       const phase = e.data as Phase
-      push({ phase, ...(phase === "ChampSelect" ? {} : { select: null }) })
+      push({
+        phase,
+        ...(phase === "ChampSelect" ? {} : { select: null }),
+        // A scoreboard from the last game is worse than none: it looks live.
+        ...(phase === "InProgress" || phase === "Reconnect" ? {} : { scoreboard: null }),
+      })
       return
     }
     if (e.uri === "/lol-champ-select/v1/session") void readSelect(e.data)
@@ -825,6 +837,35 @@ async function readShop(
 }
 
 /**
+ * One player, as a scoreboard row.
+ *
+ * Assembled in the shell rather than in the interface because the gold figure
+ * needs the item price table, and doing that lookup ten times per poll inside
+ * React would be ten times the work for the same answer.
+ */
+export type LivePlayer = {
+  name: string
+  champion: string
+  /** DDragon id, which is what the portrait URL needs. */
+  championId: string | null
+  level: number
+  position: string | null
+  dead: boolean
+  respawnIn: number
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  csPerMin: number
+  wards: number
+  /** What they are CARRYING, in gold — not what they have earned. */
+  worth: number
+  items: number[]
+  keystone: number | null
+  isMe: boolean
+}
+
+/**
  * One poll of the running game.
  *
  * ⚠️ The three things this drives are INDEPENDENT and must stay that way. They
@@ -858,6 +899,69 @@ async function readGame(): Promise<void> {
   }
 
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain)
+
+  void readScoreboard(players ?? [], me, myTeam, stats.gameTime)
+}
+
+/**
+ * The ten rows, split by side.
+ *
+ * ⚠️ Rebuilt every poll, which is two seconds — cheap because the only real
+ * work is pricing inventories, and the price table is loaded once per patch.
+ * Anything heavier than that belongs behind a change check.
+ */
+async function readScoreboard(
+  players: PlayerSlot[],
+  me: string | null,
+  myTeam: string | null,
+  gameTime: number
+): Promise<void> {
+  if (!players.length) return push({ scoreboard: null })
+
+  const minutes = Math.max(1, gameTime / 60)
+  const rows: { row: LivePlayer; team: string }[] = []
+
+  for (const p of players) {
+    const champ = p.championName ? await championByName(p.championName).catch(() => null) : null
+    const items = (p.items ?? []).map((i) => i.itemID)
+    rows.push({
+      team: p.team,
+      row: {
+        // riotIdGameName is the name without the tag, which is what a
+        // scoreboard shows; the others are fallbacks for older payloads.
+        name: p.riotIdGameName ?? p.summonerName ?? p.riotId ?? "—",
+        champion: p.championName ?? "—",
+        championId: champ?.slug ?? null,
+        level: p.level ?? 0,
+        position: p.position && p.position.length ? p.position : null,
+        dead: p.isDead === true,
+        respawnIn: Math.max(0, Math.round(p.respawnTimer ?? 0)),
+        kills: p.scores?.kills ?? 0,
+        deaths: p.scores?.deaths ?? 0,
+        assists: p.scores?.assists ?? 0,
+        cs: p.scores?.creepScore ?? 0,
+        csPerMin: (p.scores?.creepScore ?? 0) / minutes,
+        wards: p.scores?.wardScore ?? 0,
+        worth: await inventoryValue(p.items ?? []).catch(() => 0),
+        items,
+        keystone: p.runes?.keystone?.id ?? null,
+        isMe: p.riotId === me || p.summonerName === me,
+      },
+    })
+  }
+
+  // Ours first, and only when we know which side that is — labelling a team
+  // "yours" on a guess is worse than not labelling it.
+  const ours = myTeam ? rows.filter((r) => r.team === myTeam) : rows
+  const theirs = myTeam ? rows.filter((r) => r.team !== myTeam) : []
+
+  push({
+    scoreboard: {
+      gameTime,
+      ours: ours.map((r) => r.row),
+      theirs: theirs.map((r) => r.row),
+    },
+  })
 }
 
 function readObjective(
