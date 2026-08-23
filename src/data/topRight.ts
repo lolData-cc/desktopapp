@@ -57,7 +57,7 @@ export const DEFAULT_TOP_RIGHT: TopRightModel = {
   widthInHeights: 2.5,
   // A long fade: the game's own ground has already thinned to almost nothing by
   // here, so ours has to arrive gradually or the join reads as a panel edge.
-  fadeInHeights: 7.5,
+  fadeInHeights: 10.0,
 }
 
 /** Strip height in pixels for a given slider position. Linear between the ends,

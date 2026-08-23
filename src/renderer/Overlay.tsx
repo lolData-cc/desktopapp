@@ -163,25 +163,47 @@ function TopRightGold({ g, hud }: { g: TeamGold; hud: HudPlacement }) {
       aria-hidden
       className="pointer-events-none absolute"
       style={{ left: box.fadeLeft, top: box.top, width: box.fadeWidth, height: box.height }}
+      /* no overflow clip: the ground is drawn taller than the strip so its
+         bottom edge can fade out instead of being cut off */
     >
       {/* The strip's ground, carried on to the left and fading to nothing.
           Deliberately FAINT: by this far left the game's own ground has already
           thinned to almost nothing, so anything that reads as a panel is a
           panel. The stops ease in rather than ramping — a linear fade has a
           visible knee where it leaves zero, and that knee is the edge we are
-          trying not to draw. The left end must reach FULL transparency inside
-          this box or a vertical seam shows over the map. */}
+          trying not to draw.
+
+          ⚠️ It fades on BOTH axes. The horizontal gradient alone still left a
+          hard horizontal cut along the bottom of the box — the tint stopped
+          mid-air and drew exactly the edge the soft left end was there to
+          avoid. The mask takes the bottom out over the lower half, and the box
+          is drawn taller than the strip so that fade has somewhere to happen. */}
       <span
-        className="absolute inset-0"
+        className="absolute left-0 right-0 top-0"
         style={{
+          height: box.height * 1.75,
           background:
             "linear-gradient(90deg," +
             " rgba(6,26,32,0) 0%," +
-            " rgba(6,26,32,0.02) 24%," +
-            " rgba(6,26,32,0.07) 45%," +
-            " rgba(6,26,32,0.15) 64%," +
-            " rgba(6,26,32,0.25) 82%," +
-            " rgba(6,26,32,0.32) 100%)",
+            " rgba(6,26,32,0.015) 26%," +
+            " rgba(6,26,32,0.06) 48%," +
+            " rgba(6,26,32,0.14) 67%," +
+            " rgba(6,26,32,0.24) 84%," +
+            " rgba(6,26,32,0.31) 100%)",
+          WebkitMaskImage:
+            "linear-gradient(180deg," +
+            " rgba(0,0,0,1) 0%," +
+            " rgba(0,0,0,1) 42%," +
+            " rgba(0,0,0,0.72) 60%," +
+            " rgba(0,0,0,0.34) 78%," +
+            " rgba(0,0,0,0) 100%)",
+          maskImage:
+            "linear-gradient(180deg," +
+            " rgba(0,0,0,1) 0%," +
+            " rgba(0,0,0,1) 42%," +
+            " rgba(0,0,0,0.72) 60%," +
+            " rgba(0,0,0,0.34) 78%," +
+            " rgba(0,0,0,0) 100%)",
         }}
       />
 
