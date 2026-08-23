@@ -18,7 +18,8 @@ import { createSplash, dismissSplash } from "./splash"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
-import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session } from "./prefs"
+import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session,
+         listBuilds, buildFor, saveBuild, setBuildEnabled, deleteBuild, type BuildProfile } from "./prefs"
 import { askAi, type ChatMessage } from "../src/data/ai"
 import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
 import { linkFromArgv, linkKind, parseAuthLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
@@ -57,7 +58,7 @@ export type AppState = {
    *  Null the rest of the time — the overlay is a notification now, not a
    *  panel that lives on screen for the whole match. */
   notice: {
-    kind: "dragon" | "elder" | "item"
+    kind: "dragon" | "elder" | "item" | "boots" | "build"
     /** Seconds remaining AT THE MOMENT it was raised; the renderer ticks down. */
     inSeconds: number
     raisedAt: number
@@ -67,6 +68,8 @@ export type AppState = {
     tally: DragonTally
     /** Set only on an item notice: what just became affordable. */
     item?: { id: number; name: string; cost: number; index: number; total: number }
+    boots?: { item: number; name: string; reason: string; keys: number[] }
+    build?: { items: number[]; shapeLabel: string; cohortGames: number }
   } | null
   /** What to build against the team you are actually facing, worked out in
    *  champion select — where the comp is known and there is still time to act
@@ -80,9 +83,13 @@ export type AppState = {
     /** Enemy champions bringing hard CC, and whether that reaches the
      *  threshold at which tenacity is usually worth it. */
     ccNames: string[]
+    /** Champion keys, so the interface can show their faces. */
+    ccKeys: number[]
     ccHeavy: boolean
     patch: string
   } | null
+  /** Saved builds, one per champion. The enabled ones drive the shop notices. */
+  builds: BuildProfile[]
   /** True while the query is running — it takes seconds, and champion select
    *  does not wait. */
   matchupLoading: boolean
@@ -145,6 +152,7 @@ let state: AppState = {
   notice: null,
   matchup: null,
   matchupLoading: false,
+  builds: [],
   gold: null,
   levelHint: null,
   runes: null,
@@ -311,6 +319,7 @@ async function readMatchup(champion: Champion | null, role: string | null, enemy
           applied: advice.applied,
           shapeLabel: describeShapes(advice.applied),
           ccNames: cc.map((c) => c.name),
+          ccKeys: cc.map((c) => c.key),
           // The backend's own threshold, not a new one invented here.
           ccHeavy: cc.length >= CC_HEAVY_AT,
           patch: advice.patch,
@@ -365,6 +374,8 @@ async function readSelect(data: unknown): Promise<void> {
    is in the way for the other thirty-eight. */
 const NOTIFY_LEAD = 90        // seconds before the spawn — the "1:30" mark
 const NOTICE_MS = 9_000       // how long it stays up
+/** The opening build is a LIST, not an alert — six icons need reading time. */
+const OPENING_MS = 14_000
 const POLL_MS = 2_000
 
 /** How long the debug button holds a demo notice up. Shorter than a real one
@@ -438,15 +449,17 @@ function dropNotice(): void {
 }
 
 function raiseNotice(
-  kind: "dragon" | "elder" | "item",
+  kind: "dragon" | "elder" | "item" | "boots" | "build",
   inSeconds: number,
   element: DragonElement | null,
   tally: DragonTally,
   ms: number = NOTICE_MS,
-  item?: { id: number; name: string; cost: number; index: number; total: number }
+  item?: { id: number; name: string; cost: number; index: number; total: number },
+  boots?: { item: number; name: string; reason: string; keys: number[] },
+  build?: { items: number[]; shapeLabel: string; cohortGames: number }
 ): void {
   if (noticeTimer) clearTimeout(noticeTimer)
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item } })
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots, build } })
 
   // A notice arriving during another's exit cancels the pending hide, so the
   // window does not disappear out from under the new one.
@@ -465,9 +478,96 @@ function raiseNotice(
  * next one rather than needing anything to be dismissed.
  */
 let announcedItems = new Set<number>()
+let announcedBoots = false
+let announcedOpening = false
+
+/** Tier-2 boots, and the two the enemy comp actually decides between. */
+const BOOTS = new Set([3006, 3009, 3020, 3047, 3111, 3117, 3158, 3172, 3013])
+const MERCURYS = 3111
+const STEELCAPS = 3047
+
+/**
+ * Which boots this comp argues for, once boots have been bought.
+ *
+ * Tenacity when the enemy brings hard CC — the threshold and the champion list
+ * are the backend's own, from champTags.ts, so the app and the AI say the same
+ * thing about the same team. Armour when the damage is overwhelmingly physical.
+ *
+ * Null when neither is true, and that is the common case. A recommendation
+ * every game would be a recommendation about nothing.
+ */
+function bootsAdvice(): { item: number; reason: string; keys: number[] } | null {
+  const m = state.matchup
+  if (!m) return null
+
+  if (m.ccHeavy) {
+    return {
+      item: MERCURYS,
+      reason: `${m.ccNames.length} enemies bring hard CC`,
+      keys: m.ccKeys,
+    }
+  }
+
+  // Four or more AD is the point at which armour beats everything else; below
+  // that the choice is a preference, not a read.
+  const ad = m.applied.find((sh) => sh.cls === "AD")
+  if (ad && ad.count >= 4) {
+    return { item: STEELCAPS, reason: `${ad.count} enemies deal physical damage`, keys: [] }
+  }
+
+  return null
+}
+
+async function readBoots(inventory: { itemID: number }[]): Promise<void> {
+  if (announcedBoots) return
+  const wearing = inventory.find((i) => BOOTS.has(i.itemID))
+  if (!wearing) return
+
+  announcedBoots = true          // asked once, whatever the answer
+
+  const advice = bootsAdvice()
+  // Already wearing what would be recommended, or nothing to recommend.
+  if (!advice || advice.item === wearing.itemID) return
+
+  const cost = await costToComplete(advice.item, inventory, 0).catch(() => null)
+  raiseNotice("boots", 0, null, { ours: [], theirs: [] }, NOTICE_MS, undefined, {
+    item: advice.item,
+    name: cost?.name ?? "Boots",
+    reason: advice.reason,
+    keys: advice.keys,
+  })
+}
+
+/**
+ * The build for this game, once at the start.
+ *
+ * Champion select worked it out; this is where it gets said, because the loading
+ * screen is when a plan is still a plan. Held for longer than a dragon warning —
+ * it is a list to read, not a moment to react to.
+ */
+function readOpening(): void {
+  if (announcedOpening) return
+  const m = state.matchup
+  if (!m?.slots.length) return
+
+  announcedOpening = true
+  raiseNotice("build", 0, null, { ours: [], theirs: [] }, OPENING_MS, undefined, undefined, {
+    items: m.slots.map((s) => s.item),
+    shapeLabel: m.shapeLabel,
+    cohortGames: m.cohortGames,
+  })
+}
 
 async function readShop(riotId: string | null): Promise<void> {
-  const build = state.matchup?.slots
+  // A saved profile wins over the live calculation: it is a decision the player
+  // made, and a query result should not quietly overrule one. Disabled profiles
+  // fall through to nothing rather than to the live build — turning a build off
+  // means silence, not a different build.
+  const champ = state.select?.champion
+  const saved = champ ? await buildFor(champ.slug).catch(() => null) : null
+  if (saved && !saved.enabled) return
+
+  const build = saved?.items.map((item) => ({ item })) ?? state.matchup?.slots
   if (!riotId || !build?.length) return
 
   const purse = await liveOwnPurse(riotId).catch(() => null)
@@ -479,6 +579,8 @@ async function readShop(riotId: string | null): Promise<void> {
 
   const next = build[nextIndex]!
   if (announcedItems.has(next.item)) return
+
+  void readBoots(purse.items)
 
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null)
   if (!cost?.affordable) return
@@ -545,6 +647,9 @@ function startGameClock(): void {
   warmItemCosts()
   warmItemTree()
   announcedItems = new Set()
+  announcedBoots = false
+  announcedOpening = false
+  readOpening()
   announced = null
   void readObjective()
   tick = setInterval(() => void readObjective(), POLL_MS)
@@ -692,6 +797,42 @@ const GOLD_DEMOS: (TeamGold | null)[] = [
   null,                                                              // off
 ]
 let goldDemo = -1
+
+async function pushBuilds(): Promise<void> {
+  push({ builds: await listBuilds().catch(() => []) })
+}
+
+/** Save what champion select worked out, so it survives the game it came from. */
+ipcMain.handle("builds:save", async () => {
+  const m = state.matchup
+  const champ = state.select?.champion
+  if (!m || !champ || !m.slots.length) return
+
+  const profile: BuildProfile = {
+    championId: champ.slug,
+    championName: champ.name,
+    championKey: champ.key,
+    role: state.select?.role ?? null,
+    items: m.slots.map((s) => s.item),
+    runes: state.runes ? signatureOf(state.runes.variants[state.runes.chosen]!.page) : null,
+    enabled: true,
+    source: "champ-select",
+    savedAt: Date.now(),
+    patch: m.patch,
+  }
+  await saveBuild(profile)
+  await pushBuilds()
+})
+
+ipcMain.handle("builds:toggle", async (_e, championId: string, enabled: boolean) => {
+  await setBuildEnabled(championId, enabled)
+  await pushBuilds()
+})
+
+ipcMain.handle("builds:delete", async (_e, championId: string) => {
+  await deleteBuild(championId)
+  await pushBuilds()
+})
 
 ipcMain.on("gold:demo", () => {
   goldDemo = (goldDemo + 1) % GOLD_DEMOS.length
@@ -889,6 +1030,8 @@ if (!gotLock) {
     // A session from a previous run, so signing in survives a restart.
     const saved = await readSession()
     if (saved) await setSession(saved)
+
+    await pushBuilds()
 
     // One check at startup, then only when asked. Nothing downloads by itself.
     const initial = initUpdater((update) => push({ update }))

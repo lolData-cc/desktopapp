@@ -100,6 +100,29 @@ export type AppState = {
     | { state: "ready"; version: string; next: string }
     | { state: "failed"; version: string; message: string }
   canUpdate: boolean
+  builds: {
+    championId: string
+    championName: string
+    championKey: number
+    role: string | null
+    items: number[]
+    runes?: string | null
+    enabled: boolean
+    source: "champ-select" | "site"
+    savedAt: number
+    patch: string | null
+  }[]
+  matchup: {
+    slots: { item: number; games: number; winrate: number; lift: number; pickrate: number }[]
+    cohortGames: number
+    applied: { cls: string; count: number }[]
+    shapeLabel: string
+    ccNames: string[]
+    ccKeys: number[]
+    ccHeavy: boolean
+    patch: string
+  } | null
+  matchupLoading: boolean
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; source: string | null }
 }
@@ -130,6 +153,9 @@ declare global {
       installUpdate(): void
       relaunch(): void
       demoGold(): void
+      saveBuild(): Promise<void>
+      toggleBuild(championId: string, enabled: boolean): Promise<void>
+      deleteBuild(championId: string): Promise<void>
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
       report?(info: unknown): void

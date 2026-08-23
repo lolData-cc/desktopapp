@@ -18915,9 +18915,9 @@ async function load2() {
   try {
     const raw = await readFile2(file(), "utf8");
     const parsed = JSON.parse(raw);
-    cache2 = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null };
+    cache2 = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null, builds: parsed?.builds ?? {} };
   } catch {
-    cache2 = { chosen: {}, session: null };
+    cache2 = { chosen: {}, session: null, builds: {} };
   }
   return cache2;
 }
@@ -18938,6 +18938,40 @@ async function readSession() {
 async function writeSession(session) {
   const store = await load2();
   store.session = session;
+  try {
+    await mkdir(dirname(file()), { recursive: true });
+    await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
+  } catch {}
+}
+async function listBuilds() {
+  const store = await load2();
+  return Object.values(store.builds ?? {}).sort((a, b) => b.savedAt - a.savedAt);
+}
+async function buildFor(championId) {
+  const store = await load2();
+  return store.builds?.[championId.toLowerCase()] ?? null;
+}
+async function saveBuild(profile) {
+  const store = await load2();
+  store.builds = store.builds ?? {};
+  store.builds[profile.championId.toLowerCase()] = profile;
+  await persist(store);
+}
+async function setBuildEnabled(championId, enabled) {
+  const store = await load2();
+  const b = store.builds?.[championId.toLowerCase()];
+  if (!b)
+    return;
+  b.enabled = enabled;
+  await persist(store);
+}
+async function deleteBuild(championId) {
+  const store = await load2();
+  if (store.builds)
+    delete store.builds[championId.toLowerCase()];
+  await persist(store);
+}
+async function persist(store) {
   try {
     await mkdir(dirname(file()), { recursive: true });
     await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
@@ -19687,6 +19721,7 @@ var state = {
   notice: null,
   matchup: null,
   matchupLoading: false,
+  builds: [],
   gold: null,
   levelHint: null,
   runes: null,
@@ -19807,6 +19842,7 @@ async function readMatchup(champion, role, enemyIds) {
       applied: advice.applied,
       shapeLabel: describeShapes(advice.applied),
       ccNames: cc.map((c) => c.name),
+      ccKeys: cc.map((c) => c.key),
       ccHeavy: cc.length >= CC_HEAVY_AT,
       patch: advice.patch
     } : null
@@ -19838,6 +19874,7 @@ async function readSelect(data) {
 }
 var NOTIFY_LEAD = 90;
 var NOTICE_MS = 9000;
+var OPENING_MS = 14000;
 var POLL_MS = 2000;
 var DEMO_MS = 5000;
 var EXIT_MS = 660;
@@ -19871,17 +19908,74 @@ function dropNotice() {
   push({ notice: null });
   syncOverlay();
 }
-function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item) {
+function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots, build) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item } });
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots, build } });
   syncOverlay();
   if (!state.pinned)
     noticeTimer = setTimeout(dropNotice, ms);
 }
 var announcedItems = new Set;
+var announcedBoots = false;
+var announcedOpening = false;
+var BOOTS = new Set([3006, 3009, 3020, 3047, 3111, 3117, 3158, 3172, 3013]);
+var MERCURYS = 3111;
+var STEELCAPS = 3047;
+function bootsAdvice() {
+  const m = state.matchup;
+  if (!m)
+    return null;
+  if (m.ccHeavy) {
+    return {
+      item: MERCURYS,
+      reason: `${m.ccNames.length} enemies bring hard CC`,
+      keys: m.ccKeys
+    };
+  }
+  const ad = m.applied.find((sh) => sh.cls === "AD");
+  if (ad && ad.count >= 4) {
+    return { item: STEELCAPS, reason: `${ad.count} enemies deal physical damage`, keys: [] };
+  }
+  return null;
+}
+async function readBoots(inventory2) {
+  if (announcedBoots)
+    return;
+  const wearing = inventory2.find((i) => BOOTS.has(i.itemID));
+  if (!wearing)
+    return;
+  announcedBoots = true;
+  const advice = bootsAdvice();
+  if (!advice || advice.item === wearing.itemID)
+    return;
+  const cost = await costToComplete(advice.item, inventory2, 0).catch(() => null);
+  raiseNotice("boots", 0, null, { ours: [], theirs: [] }, NOTICE_MS, undefined, {
+    item: advice.item,
+    name: cost?.name ?? "Boots",
+    reason: advice.reason,
+    keys: advice.keys
+  });
+}
+function readOpening() {
+  if (announcedOpening)
+    return;
+  const m = state.matchup;
+  if (!m?.slots.length)
+    return;
+  announcedOpening = true;
+  raiseNotice("build", 0, null, { ours: [], theirs: [] }, OPENING_MS, undefined, undefined, {
+    items: m.slots.map((s) => s.item),
+    shapeLabel: m.shapeLabel,
+    cohortGames: m.cohortGames
+  });
+}
 async function readShop(riotId) {
-  const build = state.matchup?.slots;
+  const champ = state.select?.champion;
+  const saved = champ ? await buildFor(champ.slug).catch(() => null) : null;
+  if (saved && !saved.enabled)
+    return;
+  const build = saved?.items.map((item) => ({ item })) ?? state.matchup?.slots;
   if (!riotId || !build?.length)
     return;
   const purse = await liveOwnPurse(riotId).catch(() => null);
@@ -19894,6 +19988,7 @@ async function readShop(riotId) {
   const next = build[nextIndex];
   if (announcedItems.has(next.item))
     return;
+  readBoots(purse.items);
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null);
   if (!cost?.affordable)
     return;
@@ -19942,6 +20037,9 @@ function startGameClock() {
   warmItemCosts();
   warmItemTree();
   announcedItems = new Set;
+  announcedBoots = false;
+  announcedOpening = false;
+  readOpening();
   announced = null;
   readObjective();
   tick = setInterval(() => void readObjective(), POLL_MS);
@@ -20038,6 +20136,37 @@ var GOLD_DEMOS = [
   null
 ];
 var goldDemo = -1;
+async function pushBuilds() {
+  push({ builds: await listBuilds().catch(() => []) });
+}
+ipcMain.handle("builds:save", async () => {
+  const m = state.matchup;
+  const champ = state.select?.champion;
+  if (!m || !champ || !m.slots.length)
+    return;
+  const profile = {
+    championId: champ.slug,
+    championName: champ.name,
+    championKey: champ.key,
+    role: state.select?.role ?? null,
+    items: m.slots.map((s) => s.item),
+    runes: state.runes ? signatureOf(state.runes.variants[state.runes.chosen].page) : null,
+    enabled: true,
+    source: "champ-select",
+    savedAt: Date.now(),
+    patch: m.patch
+  };
+  await saveBuild(profile);
+  await pushBuilds();
+});
+ipcMain.handle("builds:toggle", async (_e, championId, enabled) => {
+  await setBuildEnabled(championId, enabled);
+  await pushBuilds();
+});
+ipcMain.handle("builds:delete", async (_e, championId) => {
+  await deleteBuild(championId);
+  await pushBuilds();
+});
 ipcMain.on("gold:demo", () => {
   goldDemo = (goldDemo + 1) % GOLD_DEMOS.length;
   push({ gold: GOLD_DEMOS[goldDemo] ?? null });
@@ -20164,6 +20293,7 @@ if (!gotLock) {
     const saved = await readSession();
     if (saved)
       await setSession(saved);
+    await pushBuilds();
     const initial = initUpdater((update) => push({ update }));
     push({ update: initial, canUpdate: canUpdate() });
     checkForUpdate();

@@ -5,6 +5,7 @@ import Matches from "./sections/Matches"
 import Champions from "./sections/Champions"
 import AiChat from "./sections/AiChat"
 import Patch from "./sections/Patch"
+import Builds from "./sections/Builds"
 import Settings from "./sections/Settings"
 import UpdateBar from "./UpdateBar"
 import logo from "../assets/logo.png"
@@ -21,10 +22,11 @@ import logo from "../assets/logo.png"
  * the app, because a menu that mixes navigation with departure makes you read
  * every item before clicking.
  */
-type SectionId = "overview" | "matches" | "champions" | "patch" | "ai"
+type SectionId = "overview" | "builds" | "matches" | "champions" | "patch" | "ai"
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "builds", label: "Builds" },
   { id: "matches", label: "Matches" },
   { id: "champions", label: "Champions" },
   { id: "patch", label: "Patch" },
@@ -62,7 +64,9 @@ export default function App() {
         <main key={section} className="ds-enter min-h-0 flex-1 overflow-hidden px-7 py-6">
           {section === "overview" ? (
             s?.client === "attached" ? <Attached s={s} /> : <Waiting />
-          ) : !s ? null : section === "matches" ? (
+          ) : !s ? null : section === "builds" ? (
+            <Builds s={s} />
+          ) : section === "matches" ? (
             <Matches s={s} />
           ) : section === "champions" ? (
             <Champions s={s} />

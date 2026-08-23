@@ -31,7 +31,39 @@ export { signatureOf, type PageSignature } from "../src/lcu/runes"
  */
 export type Session = { token: string; email: string | null; tier: string | null }
 
-type Stored = { chosen: Record<string, PageSignature>; session?: Session | null }
+/**
+ * A saved build for one champion: the runes and the item order, together.
+ *
+ * Kept per champion rather than per champion-and-comp. The comp changes every
+ * game and the advice is recomputed live from it; what a player wants to KEEP
+ * is "this is how I build Lillia", which is a decision, not a query result.
+ *
+ * `enabled` is what decides whether the shop notices fire. Off by default would
+ * mean saving a build and wondering why nothing happens, so a saved build is an
+ * active one until it is turned off.
+ */
+export type BuildProfile = {
+  /** DDragon champion id, e.g. "Lillia" — what everything else keys on. */
+  championId: string
+  championName: string
+  championKey: number
+  role: string | null
+  /** Item ids in build order. */
+  items: number[]
+  /** The rune page signature, when one was saved with it. */
+  runes?: PageSignature | null
+  enabled: boolean
+  /** Where it came from, so the interface can say. */
+  source: "champ-select" | "site"
+  savedAt: number
+  patch: string | null
+}
+
+type Stored = {
+  chosen: Record<string, PageSignature>
+  session?: Session | null
+  builds?: Record<string, BuildProfile>
+}
 
 let cache: Stored | null = null
 
@@ -42,9 +74,9 @@ async function load(): Promise<Stored> {
   try {
     const raw = await readFile(file(), "utf8")
     const parsed = JSON.parse(raw) as Stored
-    cache = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null }
+    cache = { chosen: parsed?.chosen ?? {}, session: parsed?.session ?? null, builds: parsed?.builds ?? {} }
   } catch {
-    cache = { chosen: {}, session: null }
+    cache = { chosen: {}, session: null, builds: {} }
   }
   return cache
 }
@@ -85,5 +117,50 @@ export async function writeSession(session: Session | null): Promise<void> {
   } catch {
     // Not worth interrupting a sign-in that otherwise worked; it simply will
     // not survive a restart.
+  }
+}
+
+/** Every saved build, newest first. */
+export async function listBuilds(): Promise<BuildProfile[]> {
+  const store = await load()
+  return Object.values(store.builds ?? {}).sort((a, b) => b.savedAt - a.savedAt)
+}
+
+export async function buildFor(championId: string): Promise<BuildProfile | null> {
+  const store = await load()
+  return store.builds?.[championId.toLowerCase()] ?? null
+}
+
+/** Saving replaces whatever was there for that champion — one build per
+ *  champion is the whole point, and keeping a history nobody asked for turns a
+ *  decision into a list to manage. */
+export async function saveBuild(profile: BuildProfile): Promise<void> {
+  const store = await load()
+  store.builds = store.builds ?? {}
+  store.builds[profile.championId.toLowerCase()] = profile
+  await persist(store)
+}
+
+export async function setBuildEnabled(championId: string, enabled: boolean): Promise<void> {
+  const store = await load()
+  const b = store.builds?.[championId.toLowerCase()]
+  if (!b) return
+  b.enabled = enabled
+  await persist(store)
+}
+
+export async function deleteBuild(championId: string): Promise<void> {
+  const store = await load()
+  if (store.builds) delete store.builds[championId.toLowerCase()]
+  await persist(store)
+}
+
+async function persist(store: Stored): Promise<void> {
+  try {
+    await mkdir(dirname(file()), { recursive: true })
+    await writeFile(file(), JSON.stringify(store, null, 2), "utf8")
+  } catch {
+    // Not worth interrupting the thing that worked; it just will not survive a
+    // restart.
   }
 }

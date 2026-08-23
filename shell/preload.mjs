@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld("desktop", {
   installUpdate: () => ipcRenderer.send("update:install"),
   relaunch: () => ipcRenderer.send("app:relaunch"),
   demoGold: () => ipcRenderer.send("gold:demo"),
+  saveBuild: () => ipcRenderer.invoke("builds:save"),
+  toggleBuild: (id, on) => ipcRenderer.invoke("builds:toggle", id, on),
+  deleteBuild: (id) => ipcRenderer.invoke("builds:delete", id),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability) => ipcRenderer.send("hud:hint", ability),
   report: (info) => ipcRenderer.send("overlay:report", info)

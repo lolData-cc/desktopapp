@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { abilityBox, type Ability, type HudNudge } from "../data/hud"
+import { championById } from "../data/champions"
 import { goldBarBox } from "../data/scoreboard"
 import { shortGold, type TeamGold } from "../data/teamGold"
 import { dragonIcon, dragonLabel, elementGlyph, elementName, soulLabel } from "./dragonIcon"
@@ -17,7 +18,7 @@ import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../dat
  * underneath is click-through, so none of this may look interactive.
  */
 type Notice = {
-  kind: "dragon" | "elder" | "item"
+  kind: "dragon" | "elder" | "item" | "boots" | "build"
   inSeconds: number
   raisedAt: number
   /** Null until the Rift's element is knowable — see objectives.ts. */
@@ -25,6 +26,8 @@ type Notice = {
   /** Who has taken which drakes so far. */
   tally: DragonTally
   item?: { id: number; name: string; cost: number; index: number; total: number }
+  boots?: { item: number; name: string; reason: string; keys: number[] }
+  build?: { items: number[]; shapeLabel: string; cohortGames: number }
 }
 type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
 type AppState = {
@@ -434,6 +437,27 @@ function Digits({ value, settleKey }: { value: string; settleKey: number }) {
   return <>{churn ?? value}</>
 }
 
+/** A champion's face from its numeric key — the notice carries keys, and the
+ *  icon path wants the slug. Renders nothing rather than a broken image while
+ *  the lookup is in flight or if it fails. */
+function ChampFace({ champKey }: { champKey: number }) {
+  const [slug, setSlug] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    void championById(champKey).then((c) => { if (alive) setSlug(c?.slug ?? null) }).catch(() => undefined)
+    return () => { alive = false }
+  }, [champKey])
+
+  if (!slug) return null
+  return (
+    <img
+      src={`https://cdn2.loldata.cc/16.16.1/img/champion/${slug}.png`}
+      alt=""
+      className="h-6 w-6 rounded-[2px] ring-1 ring-citrine/30"
+    />
+  )
+}
+
 function Card({ n, visible }: { n: Notice; visible: boolean }) {
   const [left, setLeft] = useState(n.inSeconds)
   const base = useRef({ at: n.raisedAt, value: n.inSeconds })
@@ -453,6 +477,9 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
   // An item notice borrows the card and replaces its contents: same arrival,
   // same rail, different thing being said.
   const shopping = n.kind === "item" && !!n.item
+  const boots = n.kind === "boots" && !!n.boots
+  const opening = n.kind === "build" && !!n.build
+  const CDN = "https://cdn2.loldata.cc/16.16.1"
   const elder = n.kind === "elder"
 
   // At three, the next drake is not one of four — it is the last one, and that
@@ -522,8 +549,12 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           <img
             src={
               shopping
-                ? `https://cdn2.loldata.cc/16.16.1/img/item/${n.item!.id}.png`
-                : dragonIcon(n.kind, n.element)
+                ? `${CDN}/img/item/${n.item!.id}.png`
+                : boots
+                  ? `${CDN}/img/item/${n.boots!.item}.png`
+                  : opening
+                    ? `${CDN}/img/item/${n.build!.items[0]}.png`
+                    : dragonIcon(n.kind, n.element)
             }
             alt=""
             // A solid portrait now, not a transparent glyph, so it takes the
@@ -540,7 +571,11 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
               className={`ds-eyebrow font-jetbrains text-[9px] uppercase tracking-[0.28em] ${soul ? "soul-pulse" : ""}`}
               style={{ color: accent }}
             >
-              {shopping
+              {boots
+                ? "boots · this matchup"
+                : opening
+                  ? `build · ${n.build!.cohortGames.toLocaleString()} games`
+                  : shopping
                 ? `next item · ${n.item!.index} of ${n.item!.total}`
                 : soul === "ours"
                   ? "soul point · yours"
@@ -551,7 +586,17 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
                       : "lolData"}
             </p>
             <p className="ds-head whitespace-nowrap font-chakrapetch text-[19px] font-bold leading-tight text-flash">
-              {shopping ? (
+              {boots ? (
+                <>
+                  {n.boots!.name}{" "}
+                  <span style={{ color: accent }}>recommended</span>
+                </>
+              ) : opening ? (
+                <>
+                  Build for{" "}
+                  <span style={{ color: accent }}>this comp</span>
+                </>
+              ) : shopping ? (
                 <>
                   {n.item!.name} is{" "}
                   <span style={{ color: accent }}>purchasable</span>
@@ -568,7 +613,35 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           </div>
         </div>
 
-        {shopping ? (
+        {boots ? (
+          <div className="relative mt-3 flex items-center gap-2.5 pt-2.5">
+            <span aria-hidden className="ds-rule absolute inset-x-0 top-0 h-px bg-jade/[0.18]" />
+            <span className="ds-late max-w-[190px] font-chakrapetch text-[12px] leading-tight text-flash/55">
+              {n.boots!.reason}
+            </span>
+            {/* the faces it is talking about, so the reason can be checked */}
+            <span className="ds-late ml-auto flex items-center gap-1">
+              {n.boots!.keys.slice(0, 5).map((k) => (
+                <ChampFace key={k} champKey={k} />
+              ))}
+            </span>
+          </div>
+        ) : opening ? (
+          <div className="relative mt-3 flex items-center gap-2 pt-2.5">
+            <span aria-hidden className="ds-rule absolute inset-x-0 top-0 h-px bg-jade/[0.18]" />
+            {n.build!.items.map((id, i) => (
+              <span key={`${id}-${i}`} className="ds-late relative">
+                <img src={`${CDN}/img/item/${id}.png`} alt="" className="block h-8 w-8 rounded-[3px] ring-1 ring-jade/20" />
+                <span className="absolute -bottom-[3px] -right-[3px] rounded-[2px] bg-liquirice px-[3px] font-jetbrains text-[8px] font-bold leading-[12px] text-jade">
+                  {i + 1}
+                </span>
+              </span>
+            ))}
+            <span className="ds-late ml-auto max-w-[120px] text-right font-jetbrains text-[8.5px] uppercase leading-tight tracking-[0.14em] text-flash/25">
+              {n.build!.shapeLabel}
+            </span>
+          </div>
+        ) : shopping ? (
           <div className="relative mt-3 flex items-center gap-3 pt-2.5">
             <span aria-hidden className="ds-rule absolute inset-x-0 top-0 h-px bg-jade/[0.18]" />
             <span className="ds-late font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/35">
