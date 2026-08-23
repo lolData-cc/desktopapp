@@ -947,7 +947,7 @@ async function readLoading(): Promise<void> {
           name: e.name || "-",
           championId: champ?.id ?? null,
           championKey: e.championKey,
-          rank: null as string | null,
+          rank: null as PlayerRank | null,
         }
       })
     )
@@ -966,7 +966,7 @@ async function readLoading(): Promise<void> {
   if (!ids.length || !state.region) return
 
   const ranks = await lookupRanks(ids, state.region).catch(
-    () => ({}) as Record<string, string | null>
+    () => ({}) as Record<string, PlayerRank | null>
   )
   const withRank = (list: LoadingPlayer[], entries: typeof roster.allies) =>
     list.map((p, i) => {
@@ -990,13 +990,30 @@ async function readLoading(): Promise<void> {
  * needs the item price table, and doing that lookup ten times per poll inside
  * React would be ten times the work for the same answer.
  */
+/**
+ * A player's ranked standing.
+ *
+ * The tier is kept SEPARATE from the label because they answer different
+ * questions: "DIAMOND II" is what to print, "diamond" is which emblem to
+ * fetch. Deriving one from the other at every render is how a Master player —
+ * who has no division — ends up asking the CDN for "master-.png".
+ */
+export type PlayerRank = {
+  /** "DIAMOND II", ready to print. */
+  label: string
+  /** "diamond", lowercased, for the emblem file. */
+  tier: string
+  wins: number
+  losses: number
+}
+
 /** One card on the loading screen. */
 export type LoadingPlayer = {
   name: string
   championId: string | null
   championKey: number
   /** Filled in after the rank lookup returns; null while it is in flight. */
-  rank: string | null
+  rank: PlayerRank | null
 }
 
 export type LivePlayer = {
@@ -1325,13 +1342,13 @@ ipcMain.handle("profile:refresh", async () => { await readProfile() })
  * should not blank the other nine — the card simply shows no rank, which is
  * also the honest answer for a genuinely unranked player.
  */
-const rankCache = new Map<string, string | null>()
+const rankCache = new Map<string, PlayerRank | null>()
 
 async function lookupRanks(
   riotIds: string[],
   region: string | null
-): Promise<Record<string, string | null>> {
-  const out: Record<string, string | null> = {}
+): Promise<Record<string, PlayerRank | null>> {
+  const out: Record<string, PlayerRank | null> = {}
   if (!region || !Array.isArray(riotIds)) return out
 
   await Promise.all(
@@ -1351,11 +1368,25 @@ async function lookupRanks(
           body: JSON.stringify({ name, tag, region }),
         })
         if (!res.ok) throw new Error(String(res.status))
-        const json = (await res.json()) as { summoner?: { rank?: string } }
-        const rank = json?.summoner?.rank ?? null
-        // "Unranked" is an answer, not a missing value — but it is not worth
-        // a line on a card, so it is stored as nothing.
-        const clean = rank && !/unranked/i.test(rank) ? rank : null
+        const json = (await res.json()) as {
+          summoner?: { rank?: string; wins?: number; losses?: number }
+        }
+        const label = json?.summoner?.rank ?? null
+
+        // "Unranked" is an answer, not a missing value — but it is not worth a
+        // card of its own, so it is stored as nothing.
+        const clean: PlayerRank | null =
+          label && !/unranked/i.test(label)
+            ? {
+                label,
+                // The tier is the first word: "DIAMOND II" and a bare "MASTER"
+                // both give the right emblem name this way.
+                tier: label.split(/\s+/)[0]!.toLowerCase(),
+                wins: Number(json?.summoner?.wins ?? 0),
+                losses: Number(json?.summoner?.losses ?? 0),
+              }
+            : null
+
         rankCache.set(cacheKey, clean)
         out[riotId] = clean
       } catch {
@@ -1846,20 +1877,28 @@ ipcMain.on("overlay:demo", async () => {
  * this also turns on the full card outlines, and the arrows below move them.
  * The loading screen lasts long enough to alt-tab out of, nudge, and go back.
  */
+const rank = (label: string, wins: number, losses: number): PlayerRank => ({
+  label,
+  tier: label.split(/\s+/)[0]!.toLowerCase(),
+  wins,
+  losses,
+})
+
 const DEMO_LOADING = {
   allies: [
-    { name: "you", championId: "Lillia", championKey: 876, rank: "DIAMOND II" },
-    { name: "ally two", championId: "Thresh", championKey: 412, rank: "PLATINUM I" },
-    { name: "ally three", championId: "Jhin", championKey: 202, rank: "DIAMOND IV" },
-    { name: "ally four", championId: "Sylas", championKey: 517, rank: "EMERALD II" },
+    { name: "you", championId: "Lillia", championKey: 876, rank: rank("DIAMOND II", 108, 90) },
+    { name: "ally two", championId: "Thresh", championKey: 412, rank: rank("PLATINUM I", 61, 55) },
+    { name: "ally three", championId: "Jhin", championKey: 202, rank: rank("DIAMOND IV", 74, 71) },
+    { name: "ally four", championId: "Sylas", championKey: 517, rank: rank("EMERALD II", 143, 139) },
+    // One with no rank, because a real lobby usually has one.
     { name: "ally five", championId: "Vayne", championKey: 67, rank: null },
   ],
   enemies: [
-    { name: "enemy one", championId: "Akali", championKey: 84, rank: "MASTER" },
-    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: "DIAMOND I" },
-    { name: "enemy three", championId: "Kalista", championKey: 429, rank: "PLATINUM II" },
-    { name: "enemy four", championId: "Xerath", championKey: 101, rank: "DIAMOND III" },
-    { name: "enemy five", championId: "Senna", championKey: 235, rank: "EMERALD I" },
+    { name: "enemy one", championId: "Akali", championKey: 84, rank: rank("MASTER", 212, 180) },
+    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: rank("DIAMOND I", 96, 88) },
+    { name: "enemy three", championId: "Kalista", championKey: 429, rank: rank("PLATINUM II", 40, 47) },
+    { name: "enemy four", championId: "Xerath", championKey: 101, rank: rank("DIAMOND III", 155, 132) },
+    { name: "enemy five", championId: "Senna", championKey: 235, rank: rank("EMERALD I", 33, 21) },
   ],
 }
 

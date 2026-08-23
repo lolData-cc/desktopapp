@@ -43,18 +43,27 @@ type Notice = {
   }
 }
 type HudPlacement = { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
+type PlayerRank = {
+  /** "DIAMOND II", ready to print. */
+  label: string
+  /** "diamond", for the emblem file — kept apart from the label because a
+   *  Master player has no division and "master-" is not a file. */
+  tier: string
+  wins: number
+  losses: number
+}
+
 type LoadingPlayer = {
   name: string
   championId: string | null
   championKey: number
-  rank: string | null
+  rank: PlayerRank | null
 }
 
 type AppState = {
   gold: TeamGold | null
   loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
   loadingNudge?: { x: number; y: number; scale: number }
-  loadingCalibrating?: boolean
   goldBar?: boolean
   notice: Notice | null
   levelHint: Ability | null
@@ -81,7 +90,6 @@ export default function Overlay() {
   const [goldBar, setGoldBar] = useState(false)
   const [loading, setLoading] = useState<AppState["loading"]>(null)
   const [loadNudge, setLoadNudge] = useState({ x: 0, y: 0, scale: 0 })
-  const [calibrating, setCalibrating] = useState(false)
 
   useEffect(() => {
     const report = () =>
@@ -105,7 +113,6 @@ export default function Overlay() {
       setGoldBar(s.goldBar === true)
       setLoading(s.loading ?? null)
       setLoadNudge(s.loadingNudge ?? { x: 0, y: 0, scale: 0 })
-      setCalibrating(s.loadingCalibrating === true)
     }
     void window.desktop.getState().then(apply as never)
     return window.desktop.onState(apply as never)
@@ -116,7 +123,7 @@ export default function Overlay() {
       {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
       {gold && goldBar && <GoldBar g={gold} />}
       {gold && hud && <TopRightGold g={gold} hud={hud} />}
-      {loading && <LoadingBoard board={loading} nudge={loadNudge} outline={calibrating} />}
+      {loading && <LoadingBoard board={loading} nudge={loadNudge} />}
       {/* keyed on the notice so each one ASSEMBLES; without this React would
           reuse the element and the second notification would simply appear. */}
       {notice && <Card key={notice.raisedAt} n={notice} visible={visible} />}
@@ -159,16 +166,21 @@ export default function Overlay() {
  *
  * Ranks arrive after the names, because they are ten network lookups.
  */
+/** Our own emblems, at the CDN ROOT — not under a versioned path. The same
+ *  images the summoner page uses. */
+const RANKS = "https://cdn2.loldata.cc/ranks"
+
+const winrate = (r: { wins: number; losses: number }): number => {
+  const total = r.wins + r.losses
+  return total > 0 ? (r.wins / total) * 100 : 0
+}
+
 function LoadingBoard({
   board,
   nudge,
-  outline,
 }: {
   board: NonNullable<AppState["loading"]>
   nudge: { x: number; y: number; scale: number }
-  /** Draw the whole card, not just the strip — the only way to judge whether
-   *  the boxes land on the game's own cards. */
-  outline: boolean
 }) {
   const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
 
@@ -189,71 +201,102 @@ function LoadingBoard({
         const accent = box.ally ? "#00d992" : "#ff6286"
 
         return (
-          <div key={i} className="pointer-events-none">
-          {outline && (
-            <span
-              className="pointer-events-none absolute"
-              style={{
-                left: box.left,
-                top: box.top,
-                width: box.width,
-                height: box.height,
-                boxShadow: `inset 0 0 0 1px ${accent}66`,
-                background: `${accent}0d`,
-              }}
-            />
-          )}
           <div
-            className="ds-in pointer-events-none absolute"
+            key={i}
+            className="ds-in pointer-events-none absolute flex flex-col items-center justify-center"
             style={{
               left: box.left,
               top: box.top,
               width: box.width,
-              // Only the strip, not the whole card: the art underneath is the
-              // reason the player is looking at this screen.
-              height: Math.round(box.height * 0.14),
+              height: box.height,
               animationDelay: `${i * 40}ms`,
             }}
           >
-            {/* the ground, feathered so no plate edge shows over the art */}
+            {/* A feathered ground, reaching zero inside its own box. A panel
+                over the splash would hide the art the player is looking at;
+                this only darkens enough to read against. */}
             <span
-              className="absolute inset-0"
+              className="absolute"
               style={{
+                left: "6%",
+                right: "6%",
+                top: "24%",
+                bottom: "24%",
                 background:
-                  "linear-gradient(180deg, rgba(4,10,12,0.86) 0%, rgba(4,10,12,0.66) 62%, rgba(4,10,12,0) 100%)",
+                  "radial-gradient(52% 44% at 50% 50%," +
+                  " rgba(4,10,12,0.80) 0%, rgba(4,10,12,0.55) 42%," +
+                  " rgba(4,10,12,0.22) 62%, rgba(4,10,12,0) 78%)",
               }}
             />
 
-            {/* the bracket: a rule with one turned end, per side */}
-            <span
-              className="absolute inset-x-0 top-0 h-px"
-              style={{ background: accent, opacity: 0.8, boxShadow: `0 0 6px ${accent}66` }}
-            />
-            <span
-              className="absolute top-0 h-[9px] w-[9px] rotate-45"
-              style={{
-                background: accent,
-                [box.ally ? "left" : "right"]: -4,
-                transform: "translateY(-4px) rotate(45deg)",
-              } as React.CSSProperties}
+            {/* ⚠️ OUR emblem, from our own CDN at /ranks — the same image and
+                the same path the summoner page uses. Not the client's mini
+                crest and not a community mirror: one rank should not look like
+                two different things across our own products. */}
+            <img
+              src={p.rank ? `${RANKS}/${p.rank.tier}.png` : `${RANKS}/unranked.png`}
+              alt=""
+              className="relative"
+              style={{ width: box.width * 0.46, height: box.width * 0.46, objectFit: "contain" }}
+              onError={(e) => {
+                // A missing emblem should leave a gap, not a broken-image glyph
+                // over someone's champion.
+                ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
+              }}
             />
 
-            <div className="relative flex h-full flex-col justify-center px-2.5"
-                 style={{ textShadow: "0 1px 4px rgba(0,0,0,0.95)" }}>
+            <div
+              className="relative flex flex-col items-center"
+              style={{ textShadow: "0 1px 5px rgba(0,0,0,0.95)", marginTop: box.height * 0.005 }}
+            >
               <p
-                className="truncate font-chakrapetch font-bold uppercase leading-none tracking-[0.1em]"
-                style={{ fontSize: Math.round(box.height * 0.042), color: accent }}
+                className="whitespace-nowrap font-chakrapetch font-bold uppercase leading-none tracking-[0.08em]"
+                style={{ fontSize: Math.round(box.height * 0.045), color: accent }}
               >
-                {p.rank ?? "unranked"}
+                {p.rank?.label ?? "unranked"}
               </p>
+
+              {p.rank && p.rank.wins + p.rank.losses > 0 && (
+                <>
+                  <p
+                    className="whitespace-nowrap font-jetbrains uppercase leading-none tracking-[0.14em] text-flash/50"
+                    style={{ fontSize: Math.round(box.height * 0.026), marginTop: box.height * 0.018 }}
+                  >
+                    {p.rank.wins + p.rank.losses} games
+                  </p>
+                  <p
+                    className="whitespace-nowrap font-chakrapetch font-bold leading-none tabular-nums"
+                    style={{ fontSize: Math.round(box.height * 0.034), marginTop: box.height * 0.012 }}
+                  >
+                    <span style={{ color: "#00d992" }}>{p.rank.wins}W</span>
+                    <span className="text-flash/25"> · </span>
+                    <span style={{ color: "#ff6286" }}>{p.rank.losses}L</span>
+                  </p>
+                  <p
+                    className="whitespace-nowrap font-chakrapetch font-bold leading-none tabular-nums"
+                    style={{
+                      fontSize: Math.round(box.height * 0.038),
+                      marginTop: box.height * 0.01,
+                      color: winrate(p.rank) >= 55 ? "#00d992" : winrate(p.rank) >= 48 ? "#d7d8d9" : "#ff6286",
+                    }}
+                  >
+                    {winrate(p.rank).toFixed(0)}%
+                  </p>
+                </>
+              )}
+
+              {/* ⚠️ The champion name, and it is not decoration: this whole
+                  feature assumes the client's team order matches the order of
+                  the portraits on screen, which has never been tested. Wrong
+                  order puts this name over the wrong face and is obvious in one
+                  glance — where a rank alone would be silently wrong. */}
               <p
-                className="truncate font-jetbrains uppercase leading-none tracking-[0.16em] text-flash/45"
-                style={{ fontSize: Math.round(box.height * 0.026), marginTop: 3 }}
+                className="whitespace-nowrap font-jetbrains uppercase leading-none tracking-[0.16em] text-flash/25"
+                style={{ fontSize: Math.round(box.height * 0.022), marginTop: box.height * 0.02 }}
               >
                 {p.championId ?? p.name}
               </p>
             </div>
-          </div>
           </div>
         )
       })}

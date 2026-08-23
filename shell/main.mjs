@@ -20673,8 +20673,13 @@ async function lookupRanks(riotIds, region) {
       if (!res.ok)
         throw new Error(String(res.status));
       const json = await res.json();
-      const rank2 = json?.summoner?.rank ?? null;
-      const clean = rank2 && !/unranked/i.test(rank2) ? rank2 : null;
+      const label = json?.summoner?.rank ?? null;
+      const clean = label && !/unranked/i.test(label) ? {
+        label,
+        tier: label.split(/\s+/)[0].toLowerCase(),
+        wins: Number(json?.summoner?.wins ?? 0),
+        losses: Number(json?.summoner?.losses ?? 0)
+      } : null;
       rankCache.set(cacheKey, clean);
       out[riotId] = clean;
     } catch {
@@ -20985,20 +20990,26 @@ ipcMain.on("overlay:demo", async () => {
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
 });
+var rank2 = (label, wins, losses) => ({
+  label,
+  tier: label.split(/\s+/)[0].toLowerCase(),
+  wins,
+  losses
+});
 var DEMO_LOADING = {
   allies: [
-    { name: "you", championId: "Lillia", championKey: 876, rank: "DIAMOND II" },
-    { name: "ally two", championId: "Thresh", championKey: 412, rank: "PLATINUM I" },
-    { name: "ally three", championId: "Jhin", championKey: 202, rank: "DIAMOND IV" },
-    { name: "ally four", championId: "Sylas", championKey: 517, rank: "EMERALD II" },
+    { name: "you", championId: "Lillia", championKey: 876, rank: rank2("DIAMOND II", 108, 90) },
+    { name: "ally two", championId: "Thresh", championKey: 412, rank: rank2("PLATINUM I", 61, 55) },
+    { name: "ally three", championId: "Jhin", championKey: 202, rank: rank2("DIAMOND IV", 74, 71) },
+    { name: "ally four", championId: "Sylas", championKey: 517, rank: rank2("EMERALD II", 143, 139) },
     { name: "ally five", championId: "Vayne", championKey: 67, rank: null }
   ],
   enemies: [
-    { name: "enemy one", championId: "Akali", championKey: 84, rank: "MASTER" },
-    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: "DIAMOND I" },
-    { name: "enemy three", championId: "Kalista", championKey: 429, rank: "PLATINUM II" },
-    { name: "enemy four", championId: "Xerath", championKey: 101, rank: "DIAMOND III" },
-    { name: "enemy five", championId: "Senna", championKey: 235, rank: "EMERALD I" }
+    { name: "enemy one", championId: "Akali", championKey: 84, rank: rank2("MASTER", 212, 180) },
+    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: rank2("DIAMOND I", 96, 88) },
+    { name: "enemy three", championId: "Kalista", championKey: 429, rank: rank2("PLATINUM II", 40, 47) },
+    { name: "enemy four", championId: "Xerath", championKey: 101, rank: rank2("DIAMOND III", 155, 132) },
+    { name: "enemy five", championId: "Senna", championKey: 235, rank: rank2("EMERALD I", 33, 21) }
   ]
 };
 ipcMain.on("loading:demo", () => {

@@ -20,6 +20,29 @@ import type { Ability, HudNudge } from "../data/hud"
  * together — a key added there and missed here is a switch that writes a value
  * nothing reads.
  */
+/**
+ * A player's ranked standing.
+ *
+ * Tier kept separate from the label because they answer different questions:
+ * "DIAMOND II" is what to print, "diamond" is which emblem to fetch. Deriving
+ * one from the other at render time is how a Master player, who has no
+ * division, ends up asking for "master-.png".
+ */
+export type PlayerRank = {
+  label: string
+  tier: string
+  wins: number
+  losses: number
+}
+
+/** One card on the loading screen. */
+export type LoadingPlayer = {
+  name: string
+  championId: string | null
+  championKey: number
+  rank: PlayerRank | null
+}
+
 /** One scoreboard row, assembled by the shell. Mirrors LivePlayer there. */
 export type LivePlayer = {
   name: string
@@ -176,8 +199,8 @@ export type AppState = {
    * only come from the client's own session.
    */
   loading: {
-    allies: { name: string; championId: string | null; championKey: number; rank: string | null }[]
-    enemies: { name: string; championId: string | null; championKey: number; rank: string | null }[]
+    allies: LoadingPlayer[]
+    enemies: LoadingPlayer[]
   } | null
   /** Alignment for the loading cards, and whether the outlines are drawn. */
   loadingNudge: { x: number; y: number; scale: number }
