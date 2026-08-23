@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { abilityBox, type Ability, type HudNudge } from "../data/hud"
 import { dragonIcon, dragonLabel, elementGlyph, elementName, soulLabel } from "./dragonIcon"
 import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
@@ -155,10 +155,14 @@ function TeamTally({
   const plate = ours ? "bg-jade/[0.10]" : "bg-flash/[0.07]"
   const empty = ours ? "bg-jade/[0.05]" : "bg-flash/[0.035]"
   const decisive = accent ? taken.length : -1
-  // The slots land one after another, our side first. Small steps: this is the
-  // tail of the assembly, and it has to be finished by the time the eye reaches
-  // it, not still arriving.
-  const stepIn = (i: number) => ({ animationDelay: `${(ours ? 430 : 505) + i * 32}ms` })
+  // The slots land one after another, our side first — and leave in the exact
+  // reverse: last to arrive is first to go. Two delays per slot, picked by the
+  // direction, because one element cannot carry two animation-delays.
+  const step = (i: number) =>
+    ({
+      "--in-delay": `${(ours ? 430 : 505) + i * 32}ms`,
+      "--out-delay": `${(ours ? 70 : 0) + (SOUL_AT - 1 - i) * 22}ms`,
+    }) as CSSProperties
 
   return (
     <span className="flex items-center gap-1.5">
@@ -176,7 +180,7 @@ function TeamTally({
         {Array.from({ length: SOUL_AT }, (_, i) => {
           const el = taken[i]
           return el ? (
-            <span key={i} className={`ds-slot grid h-[19px] w-[19px] place-items-center rounded-[2px] ${plate}`} style={stepIn(i)}>
+            <span key={i} className={`ds-slot grid h-[19px] w-[19px] place-items-center rounded-[2px] ${plate}`} style={step(i)}>
               <img src={elementGlyph(el)} alt={elementName(el)} title={elementName(el)} className="h-[15px] w-[15px]" />
             </span>
           ) : i === decisive ? (
@@ -185,14 +189,14 @@ function TeamTally({
             <span
               key={i}
               className="ds-slot h-[19px] w-[19px] rounded-[2px]"
-              style={{ ...stepIn(i), background: `${accent}22`, boxShadow: `inset 0 0 0 1px ${accent}` }}
+              style={{ ...step(i), background: `${accent}22`, boxShadow: `inset 0 0 0 1px ${accent}` }}
             >
               {/* the pulse rides an inner element so its opacity animation does
                   not fight the slot's own arrival */}
               <span className="soul-pulse block h-full w-full rounded-[2px]" style={{ background: `${accent}18` }} />
             </span>
           ) : (
-            <span key={i} className={`ds-slot h-[19px] w-[19px] rounded-[2px] ${empty}`} style={stepIn(i)} />
+            <span key={i} className={`ds-slot h-[19px] w-[19px] rounded-[2px] ${empty}`} style={step(i)} />
           )
         })}
       </span>
@@ -309,12 +313,12 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
           pathLength={1}
           strokeDasharray={1}
         />
-        <rect
-          className="ds-mark"
-          x="358" y="-2.5" width="9" height="9"
-          transform="rotate(45 362.5 2)"
-          fill={accent}
-        />
+        {/* The rotation lives on the group and the scale on the rect. Put both
+            on one element and the animated transform replaces the attribute —
+            which is how the diamond became a square once it landed. */}
+        <g transform="rotate(45 362.5 2)">
+          <rect className="ds-mark" x="358" y="-2.5" width="9" height="9" fill={accent} />
+        </g>
       </svg>
 
       <div
@@ -322,24 +326,17 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
         style={{ textShadow: "0 1px 6px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.85)" }}
       >
         <div className="flex items-center gap-3.5">
-          <span className="relative shrink-0">
           <img
             src={dragonIcon(n.kind, n.element)}
             alt=""
             // A solid portrait now, not a transparent glyph, so it takes the
             // squared corner and hairline the rest of the app uses.
-            className="ds-icon block h-11 w-11 rounded-[3px] ring-1 ring-jade/25"
+            className="ds-icon block h-11 w-11 shrink-0 rounded-[3px] ring-1 ring-jade/25"
             style={{
               boxShadow: `0 0 14px ${accent}33, 0 2px 8px rgba(0,0,0,0.9)`,
               filter: unknownElement ? "grayscale(1) brightness(1.12) contrast(0.92)" : undefined,
             }}
           />
-          <span
-            aria-hidden
-            className="ds-flash pointer-events-none absolute inset-0 rounded-[3px]"
-            style={{ background: `linear-gradient(120deg, transparent 30%, ${accent}, transparent 70%)`, mixBlendMode: "screen" }}
-          />
-          </span>
 
           <div className="min-w-0">
             <p

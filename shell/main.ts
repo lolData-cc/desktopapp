@@ -164,13 +164,13 @@ const POLL_MS = 2_000
  *  on purpose — it is for checking the animation, not for reading. */
 const DEMO_MS = 5_000
 
-/** Must outlast .ds-out in index.css (300ms) plus a frame or two.
+/** Must outlast .ds-out in index.css (600ms) plus a frame or two.
  *
  *  The window is what actually disappears, and hiding it the moment the notice
  *  clears cut the exit animation off at frame one — the card was animating out
  *  on a window nobody could see, so it simply vanished. The two are coupled:
  *  if that CSS duration changes, this changes with it. */
-const EXIT_MS = 360
+const EXIT_MS = 660
 
 let tick: ReturnType<typeof setInterval> | null = null
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
