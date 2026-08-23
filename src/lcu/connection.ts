@@ -7,11 +7,13 @@
  * than an application. Nothing outside src/lcu/ should know what an
  * `/lol-champ-select/v1/session` is.
  */
-import WebSocket from "ws"
+import NodeWebSocket from "ws"
 import { findClient, type LcuCredentials } from "./credentials"
 
 /** The client presents a self-signed certificate on 127.0.0.1. */
 const TLS = { rejectUnauthorized: false }
+
+const isBun = () => typeof (globalThis as any).Bun !== "undefined"
 
 export type Phase =
   | "None" | "Lobby" | "Matchmaking" | "ReadyCheck" | "ChampSelect"
@@ -26,7 +28,7 @@ export type LcuEvent = {
 
 export class LcuConnection {
   private creds: LcuCredentials | null = null
-  private ws: WebSocket | null = null
+  private ws: any = null
   private stopped = false
   private pollTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -100,19 +102,27 @@ export class LcuConnection {
 
     // WAMP 1.0 over the same port and credentials: opcode 5 subscribes,
     // 6 unsubscribes, 8 is an event arriving.
-    const ws = new WebSocket(`wss://127.0.0.1:${creds.port}`, {
-      headers: { Authorization: creds.authHeader },
-      ...TLS,
-    })
+    //
+    // The socket has to come from whichever implementation the current runtime
+    // actually honours. Bun's `ws` compatibility shim silently drops the
+    // headers and TLS options — it connects to nothing and times out, with no
+    // error — so under Bun we use its native WebSocket, which does support both
+    // as an extension. Under Node the native one supports neither, so `ws` is
+    // the right choice there. Both expose addEventListener, so there is one
+    // code path below.
+    const url = `wss://127.0.0.1:${creds.port}`
+    const ws: any = isBun()
+      ? new WebSocket(url, { headers: { Authorization: creds.authHeader }, tls: TLS } as any)
+      : new NodeWebSocket(url, { headers: { Authorization: creds.authHeader }, ...TLS })
     this.ws = ws
 
-    ws.on("open", () => {
+    ws.addEventListener("open", () => {
       ws.send(JSON.stringify([5, "OnJsonApiEvent"]))
       this.handlers.onConnect?.({ port: creds.port, source: creds.source })
     })
 
-    ws.on("message", (raw: WebSocket.RawData) => {
-      const text = raw.toString()
+    ws.addEventListener("message", (ev: { data: unknown }) => {
+      const text = String((ev as any).data ?? "")
       if (!text) return // the client sends empty frames as keep-alives
       let frame: unknown
       try { frame = JSON.parse(text) } catch { return }
@@ -133,13 +143,12 @@ export class LcuConnection {
       this.handlers.onDisconnect?.()
       this.schedule(2000)
     }
-    ws.on("close", drop)
-    ws.on("error", (err: Error) => {
+    ws.addEventListener("close", drop)
+    ws.addEventListener("error", (err: any) => {
       // A refused socket usually means the client closed between finding the
       // credential and opening the connection — normal, not worth surfacing.
-      if (!/ECONNREFUSED|ECONNRESET/.test(err.message)) {
-        this.handlers.onError?.(err.message)
-      }
+      const msg = err?.message ?? err?.error?.message ?? "socket error"
+      if (!/ECONNREFUSED|ECONNRESET/.test(msg)) this.handlers.onError?.(msg)
       drop()
     })
   }
