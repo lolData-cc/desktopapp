@@ -252,20 +252,32 @@ function LoadingBoard({
               animationDelay: `${i * 40}ms`,
             }}
           >
-            {/* A feathered ground, reaching zero inside its own box. A panel
-                over the splash would hide the art the player is looking at;
-                this only darkens enough to read against. */}
+            {/* TWO grounds, because one layer cannot do both jobs. The wide
+                one takes the whole card down a stop so the splash stops
+                competing; the tight one sits under the emblem and text, where
+                the contrast actually has to be won. Both reach zero inside the
+                card, so no edge is drawn over the art. */}
+            <span
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(72% 60% at 50% 50%," +
+                  " rgba(4,10,12,0.62) 0%, rgba(4,10,12,0.48) 44%," +
+                  " rgba(4,10,12,0.24) 70%, rgba(4,10,12,0) 92%)",
+              }}
+            />
             <span
               className="absolute"
               style={{
-                left: "6%",
-                right: "6%",
-                top: "24%",
-                bottom: "24%",
+                left: "2%",
+                right: "2%",
+                top: "16%",
+                bottom: "16%",
                 background:
-                  "radial-gradient(52% 44% at 50% 50%," +
-                  " rgba(4,10,12,0.80) 0%, rgba(4,10,12,0.55) 42%," +
-                  " rgba(4,10,12,0.22) 62%, rgba(4,10,12,0) 78%)",
+                  "radial-gradient(56% 48% at 50% 48%," +
+                  " rgba(4,10,12,0.93) 0%, rgba(4,10,12,0.86) 30%," +
+                  " rgba(4,10,12,0.62) 52%, rgba(4,10,12,0.28) 70%," +
+                  " rgba(4,10,12,0) 88%)",
               }}
             />
 
@@ -286,7 +298,10 @@ function LoadingBoard({
                   width: box.width * 0.46,
                   height: box.width * 0.46,
                   objectFit: "contain",
-                  filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.95)) drop-shadow(0 0 14px rgba(0,0,0,0.75))",
+                  filter:
+                    "drop-shadow(0 2px 5px rgba(0,0,0,1))" +
+                    " drop-shadow(0 4px 12px rgba(0,0,0,0.95))" +
+                    " drop-shadow(0 0 22px rgba(0,0,0,0.85))",
                 }}
                 onError={(e) => {
                   ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
@@ -303,7 +318,7 @@ function LoadingBoard({
                   width: box.width * 0.1,
                   height: box.width * 0.1,
                   boxShadow: `inset 0 0 0 1px ${accent}55`,
-                  filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.9))",
+                  filter: "drop-shadow(0 2px 6px rgba(0,0,0,1)) drop-shadow(0 0 14px rgba(0,0,0,0.8))",
                 }}
               />
             )}
@@ -313,8 +328,12 @@ function LoadingBoard({
               style={{
                 // Three shadows, tight to wide: definition, weight, and a
                 // halo that keeps a thin letter legible over bright armour.
+                // Four, tight to wide. Over splash art one shadow either hugs
+                // the glyph and leaves it swimming, or spreads and leaves the
+                // edges soft; stacking them does both.
                 textShadow:
-                  "0 1px 2px rgba(0,0,0,1), 0 2px 6px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.8)",
+                  "0 0 2px rgba(0,0,0,1), 0 1px 3px rgba(0,0,0,1)," +
+                  " 0 3px 9px rgba(0,0,0,0.95), 0 0 22px rgba(0,0,0,0.9)",
                 marginTop: box.height * 0.008,
               }}
             >
