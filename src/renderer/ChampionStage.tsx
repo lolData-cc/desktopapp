@@ -113,6 +113,13 @@ export default function ChampionStage({ championId, championKey, className }: Pr
         model.position.sub(centre)
         model.position.y += height / 2 // stand it ON the pedestal, not through it
 
+        // …then land the feet exactly, by measuring again after the move. The
+        // first box is the only one available to centre with, and it is the
+        // unreliable one; this correction is what stops a champion hovering a
+        // hand's width above the rings.
+        const settled = new THREE.Box3().setFromObject(model)
+        model.position.y -= settled.min.y
+
         const rig = new THREE.Group()
         rig.add(model)
         scene.add(rig)
@@ -125,10 +132,19 @@ export default function ChampionStage({ championId, championKey, className }: Pr
         camera.far = height * 60
         camera.updateProjectionMatrix()
 
+        // ⚠️ Sized from the HEIGHT, not from the footprint.
+        //
+        // size.x / size.z come from Box3.setFromObject, which on a SKINNED mesh
+        // measures the bind pose rather than the pose on screen and overstates
+        // it badly — on Alistar it produced rings twice the width of the
+        // champion, running off both edges of the panel. Height is the one
+        // measure that survives that, and it is already what the camera is
+        // framed from, so the pedestal and the framing cannot disagree.
+        //
         // In the RIG, not the scene: the pedestal turns with the champion
         // standing on it. A model revolving above a fixed disc looks like it is
         // sliding rather than being carried.
-        rig.add(pedestal(Math.max(size.x, size.z) * 0.7))
+        rig.add(pedestal(height * 0.3))
 
         const clip = idleClip(gltf.animations) as THREE.AnimationClip | undefined
         if (clip) {
