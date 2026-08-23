@@ -18579,8 +18579,12 @@ class LcuConnection {
     };
   }
   async region() {
-    const { data } = await this.request("GET", "/lol-platform-config/v1/namespaces/LoginDataPacket/platformId");
-    const platform = String(data ?? "").toLowerCase();
+    const { data } = await this.request("GET", "/riotclient/region-locale");
+    const web = String(data?.webRegion ?? "").toLowerCase();
+    if (web)
+      return web;
+    const chat = await this.request("GET", "/lol-chat/v1/me").catch(() => ({ data: null }));
+    const platform = String(chat?.data?.platformId ?? "").toLowerCase();
     return PLATFORM_REGION[platform] ?? (platform || null);
   }
   async gameRoster(myPuuid) {
@@ -20457,15 +20461,20 @@ async function readLoading() {
   await enrich(allies, roster.allies, enemies, roster.enemies);
 }
 async function enrich(allies, allyEntries, enemies, enemyEntries) {
-  const region = state.region;
+  let region = state.region;
+  if (!region) {
+    region = await lcu.region().catch(() => null);
+    if (region)
+      push({ region });
+  }
   if (!region)
-    return;
+    return void console.log("[loading] no region — skipping lookups");
   const id = (e) => e.name && e.tag ? `${e.name}#${e.tag}` : "";
   const entries = [...allyEntries, ...enemyEntries];
   const cards = [...allies, ...enemies];
   const ids = entries.map(id).filter(Boolean);
   if (!ids.length)
-    return;
+    return void console.log("[loading] no riot ids to look up");
   const post2 = async (path, body) => {
     try {
       const res = await fetch(`https://api2.loldata.cc${path}`, {
@@ -20505,6 +20514,7 @@ async function enrich(allies, allyEntries, enemies, enemyEntries) {
     }),
     badgeMap()
   ]);
+  console.log("[loading] ranks=%s stats=%s badges=%d for %d ids", ranks ? `${ranks.ranks?.length ?? 0} rows` : "FAILED", stats ? "ok" : "FAILED", badges.size, ids.length);
   const rankOf = {};
   for (const r of ranks?.ranks ?? []) {
     const bad = !r.rank || /error|unranked/i.test(r.rank);
@@ -20565,6 +20575,11 @@ async function readGame() {
   const stats = await liveGameStats();
   if (!stats)
     return void readLoading();
+  if (state.loading) {
+    loadingFor = "";
+    push({ loading: null });
+    syncOverlay();
+  }
   const [events, players, me] = await Promise.all([
     liveEvents(),
     livePlayers(),

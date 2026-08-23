@@ -230,7 +230,12 @@ function LoadingBoard({
     return () => window.removeEventListener("resize", onResize)
   }, [])
 
-  const boxes = loadingCards(screen, undefined, nudge)
+  const boxes = loadingCards(
+    screen,
+    { allies: board.allies.length, enemies: board.enemies.length },
+    undefined,
+    nudge
+  )
   const rows = [...board.allies, ...board.enemies]
 
   return (

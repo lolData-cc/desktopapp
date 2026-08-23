@@ -179,16 +179,25 @@ export class LcuConnection {
   /**
    * The account's region, in the form our own API expects.
    *
-   * The client reports a PLATFORM ("EUW1"); the site's routes take a REGION
-   * ("euw"). They are not the same string and there is no rule connecting
-   * them — "la1" is "lan" — so the map is written out rather than derived.
+   * ⚠️ From /riotclient/region-locale, whose `webRegion` field IS that form —
+   * "euw", not "EUW1". Verified against a running client.
+   *
+   * The first attempt used /lol-platform-config/…/platformId, which 404s on
+   * the current client. It failed SILENTLY: region came back null, every rank
+   * lookup returned before making a request, and the loading cards sat on
+   * their initial "UNRANKED" — a wrong answer that looked like a real one.
+   *
+   * /lol-chat/v1/me is the fallback because it reports a platformId ("EUW1")
+   * from a different subsystem, so one endpoint moving does not take the
+   * feature with it.
    */
   async region(): Promise<string | null> {
-    const { data } = await this.request<any>(
-      "GET",
-      "/lol-platform-config/v1/namespaces/LoginDataPacket/platformId"
-    )
-    const platform = String(data ?? "").toLowerCase()
+    const { data } = await this.request<any>("GET", "/riotclient/region-locale")
+    const web = String(data?.webRegion ?? "").toLowerCase()
+    if (web) return web
+
+    const chat = await this.request<any>("GET", "/lol-chat/v1/me").catch(() => ({ data: null }))
+    const platform = String(chat?.data?.platformId ?? "").toLowerCase()
     return PLATFORM_REGION[platform] ?? (platform || null)
   }
 

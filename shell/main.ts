@@ -988,14 +988,21 @@ async function enrich(
   enemies: LoadingPlayer[],
   enemyEntries: RosterEntry[]
 ): Promise<void> {
-  const region = state.region
-  if (!region) return
+  // Read late if the attach missed it: without a region every lookup below
+  // returns before making a request, and the cards silently keep their
+  // starting values — which is how "UNRANKED" ended up on a Diamond account.
+  let region = state.region
+  if (!region) {
+    region = await lcu.region().catch(() => null)
+    if (region) push({ region })
+  }
+  if (!region) return void console.log("[loading] no region — skipping lookups")
 
   const id = (e: RosterEntry) => (e.name && e.tag ? `${e.name}#${e.tag}` : "")
   const entries = [...allyEntries, ...enemyEntries]
   const cards = [...allies, ...enemies]
   const ids = entries.map(id).filter(Boolean)
-  if (!ids.length) return
+  if (!ids.length) return void console.log("[loading] no riot ids to look up")
 
   const post = async <T,>(path: string, body: unknown): Promise<T | null> => {
     try {
@@ -1048,6 +1055,11 @@ async function enrich(
     ),
     badgeMap(),
   ])
+
+  console.log("[loading] ranks=%s stats=%s badges=%d for %d ids",
+    ranks ? `${ranks.ranks?.length ?? 0} rows` : "FAILED",
+    stats ? "ok" : "FAILED",
+    badges.size, ids.length)
 
   const rankOf: Record<string, PlayerRank | null> = {}
   for (const r of ranks?.ranks ?? []) {
@@ -1214,6 +1226,16 @@ async function readGame(): Promise<void> {
   // running and the game itself is not answering yet, and that pair is the only
   // way to tell loading from playing: there is no "Loading" gameflow phase.
   if (!stats) return void readLoading()
+
+  // ⚠️ And the moment it DOES answer, the loading board comes down. The game
+  // has started; those cards are over the Rift now, not over a loading screen,
+  // and "UNRANKED" floating in your jungle at 00:15 is exactly what happens
+  // without this. Clearing the stamp too, so the next game reads fresh.
+  if (state.loading) {
+    loadingFor = ""
+    push({ loading: null })
+    syncOverlay()
+  }
 
   const [events, players, me] = await Promise.all([
     liveEvents(),

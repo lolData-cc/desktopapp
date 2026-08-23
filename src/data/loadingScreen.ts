@@ -51,14 +51,21 @@ export type LoadingNudge = { x: number; y: number; scale: number }
 export const NO_LOADING_NUDGE: LoadingNudge = { x: 0, y: 0, scale: 0 }
 
 /**
- * The ten boxes, in the client's own order: allies 0-4, then enemies 0-4.
+ * The boxes, in the client's own order: allies first, then enemies.
  *
- * Centred on the screen rather than measured from an edge — the row is centred
- * by the game, so anchoring it to the left would make the error grow with
- * resolution instead of staying put.
+ * ⚠️ Each row is centred on ITS OWN COUNT, not on five. The game centres the
+ * row it actually draws, so a practice tool with one player puts that single
+ * card in the middle of the screen — where a fixed five-slot layout would put
+ * it far left and every label would land on empty background. Custom games and
+ * bot lobbies with uneven teams have the same shape.
+ *
+ * Centred rather than measured from an edge, because the game centres it: an
+ * anchor on the left would make the error grow with resolution instead of
+ * staying put.
  */
 export function loadingCards(
   screen: { width: number; height: number },
+  counts: { allies: number; enemies: number } = { allies: 5, enemies: 5 },
   model: LoadingModel = DEFAULT_LOADING,
   nudge: LoadingNudge = NO_LOADING_NUDGE
 ): CardBox[] {
@@ -67,17 +74,26 @@ export function loadingCards(
   const pitch = model.pitch * screen.width * scale
   const h = model.height * screen.height * scale
 
-  const rowWidth = pitch * 4 + w
-  const left0 = (screen.width - rowWidth) / 2 + nudge.x * screen.width
-
-  const rows: { top: number; ally: boolean }[] = [
-    { top: model.topRow * screen.height + nudge.y * screen.height, ally: true },
-    { top: model.bottomRow * screen.height + nudge.y * screen.height, ally: false },
+  const rows: { top: number; ally: boolean; count: number }[] = [
+    {
+      top: model.topRow * screen.height + nudge.y * screen.height,
+      ally: true,
+      count: Math.max(0, counts.allies),
+    },
+    {
+      top: model.bottomRow * screen.height + nudge.y * screen.height,
+      ally: false,
+      count: Math.max(0, counts.enemies),
+    },
   ]
 
   const out: CardBox[] = []
   for (const row of rows) {
-    for (let i = 0; i < 5; i++) {
+    if (!row.count) continue
+    const rowWidth = pitch * (row.count - 1) + w
+    const left0 = (screen.width - rowWidth) / 2 + nudge.x * screen.width
+
+    for (let i = 0; i < row.count; i++) {
       out.push({ left: left0 + i * pitch, top: row.top, width: w, height: h, index: i, ally: row.ally })
     }
   }
