@@ -29,6 +29,7 @@ declare global {
       previewOverlay(on: boolean): void
       calibrate(patch: Partial<HudNudge>): void
       hint(ability: Ability | null): void
+      report?(info: unknown): void
     }
   }
 }

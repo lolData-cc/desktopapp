@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld("desktop", {
   close: () => ipcRenderer.send("win:close"),
   previewOverlay: (on) => ipcRenderer.send("overlay:preview", on),
   calibrate: (patch) => ipcRenderer.send("hud:calibrate", patch),
-  hint: (ability) => ipcRenderer.send("hud:hint", ability)
+  hint: (ability) => ipcRenderer.send("hud:hint", ability),
+  report: (info) => ipcRenderer.send("overlay:report", info)
 });

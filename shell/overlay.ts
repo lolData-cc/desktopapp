@@ -32,8 +32,12 @@ export function createOverlay(preloadPath: string): BrowserWindow {
     height: bounds.height,
     transparent: true,
     frame: false,
-    resizable: false,
-    movable: false,
+    // Created resizable ON PURPOSE. Windows clamps a new window to the WORK
+    // AREA, so asking for a full-screen overlay silently yields one that stops
+    // above the taskbar — and a non-resizable window cannot be corrected
+    // afterwards. It is locked down again below, once the size has taken.
+    resizable: true,
+    movable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -51,6 +55,20 @@ export function createOverlay(preloadPath: string): BrowserWindow {
       backgroundThrottling: false, // it must keep painting while unfocused
     },
   })
+
+  // Take the full display, taskbar included, and verify it — the renderer
+  // anchors to the bottom edge, so a surface 48px short would put everything it
+  // draws 48px too high. Silent clamping was exactly that bug.
+  overlay.setBounds(bounds)
+  const got = overlay.getBounds()
+  if (got.height !== bounds.height || got.width !== bounds.width) {
+    console.warn(
+      "[overlay] wanted %dx%d, got %dx%d — bottom-anchored drawing will be off",
+      bounds.width, bounds.height, got.width, got.height
+    )
+  }
+  overlay.setResizable(false)
+  overlay.setMovable(false)
 
   // "screen-saver" is the level that actually sits above a borderless game;
   // plain alwaysOnTop loses to it.

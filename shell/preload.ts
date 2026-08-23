@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld("desktop", {
   previewOverlay: (on: boolean) => ipcRenderer.send("overlay:preview", on),
   calibrate: (patch: unknown) => ipcRenderer.send("hud:calibrate", patch),
   hint: (ability: string | null) => ipcRenderer.send("hud:hint", ability),
+  // Diagnostic: the overlay says how big the surface it draws into really is,
+  // because the shell only knows what it ASKED for, not what it got.
+  report: (info: unknown) => ipcRenderer.send("overlay:report", info),
 })

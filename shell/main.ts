@@ -7,7 +7,7 @@
  * swappable. If this becomes Tauri later, this file is what gets rewritten;
  * everything under src/renderer keeps working untouched.
  */
-import { app, BrowserWindow, ipcMain, shell } from "electron"
+import { app, BrowserWindow, ipcMain, screen, shell } from "electron"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import { LcuConnection, type Phase } from "../src/lcu/connection"
@@ -15,7 +15,7 @@ import { championById, currentPatch, type Champion } from "../src/data/champions
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnSpells } from "../src/live/client"
 import { spellByName, type Spell } from "../src/data/spells"
-import { NO_NUDGE, type HudNudge } from "../src/data/hud"
+import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
 import { nextObjective } from "../src/data/objectives"
 
@@ -280,13 +280,34 @@ ipcMain.on("win:close", () => win?.close())
 // Development affordance: raise a notice on demand, because waiting for a real
 // dragon every time the layout changes is not a workable loop.
 ipcMain.on("hud:calibrate", (_e, patch: Partial<HudNudge>) => {
-  push({ hud: { ...state.hud, nudge: { ...state.hud.nudge, ...patch } } })
+  const nudge = { ...state.hud.nudge, ...patch }
+  push({ hud: { ...state.hud, nudge } })
+  // Logged so an alignment done by eye on the real screen can be read back and
+  // folded into the model as a new default, instead of living on one machine.
+  console.log("[hud] nudge x=%s y=%s size=%s", nudge.x.toFixed(2), nudge.y.toFixed(2), nudge.size.toFixed(2))
 })
 ipcMain.on("hud:hint", (_e, ability: "Q" | "W" | "E" | "R" | null) => {
   push({ levelHint: ability })
   // The outline lives in the overlay window, so that window has to be on screen
   // for it to be visible at all.
   if (ability) showOverlay()
+})
+
+ipcMain.on("overlay:report", (_e, info: { w: number; h: number; dpr: number }) => {
+  const d = screen.getPrimaryDisplay()
+  console.log(
+    "[hud] overlay viewport %dx%d dpr=%s | display bounds %dx%d at (%d,%d) scale=%s | physical %dx%d",
+    info.w, info.h, info.dpr,
+    d.bounds.width, d.bounds.height, d.bounds.x, d.bounds.y, d.scaleFactor,
+    Math.round(d.bounds.width * d.scaleFactor), Math.round(d.bounds.height * d.scaleFactor)
+  )
+  const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud)
+  console.log(
+    "[hud] scale=%s → Q drawn at css (%d,%d) %dpx → physical (%d,%d) %dpx",
+    state.hud.scale,
+    Math.round(box.left), Math.round(box.top), Math.round(box.size),
+    Math.round(box.left * info.dpr), Math.round(box.top * info.dpr), Math.round(box.size * info.dpr)
+  )
 })
 
 ipcMain.on("overlay:preview", (_e, on: boolean) => {

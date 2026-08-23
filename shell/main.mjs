@@ -2899,7 +2899,7 @@ var require_websocket_server = __commonJS((exports, module) => {
 });
 
 // shell/main.ts
-import { app, BrowserWindow as BrowserWindow2, ipcMain, shell } from "electron";
+import { app, BrowserWindow as BrowserWindow2, ipcMain, screen as screen2, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join as join2 } from "node:path";
 
@@ -3167,8 +3167,8 @@ function createOverlay(preloadPath) {
     height: bounds.height,
     transparent: true,
     frame: false,
-    resizable: false,
-    movable: false,
+    resizable: true,
+    movable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -3184,6 +3184,13 @@ function createOverlay(preloadPath) {
       backgroundThrottling: false
     }
   });
+  overlay.setBounds(bounds);
+  const got = overlay.getBounds();
+  if (got.height !== bounds.height || got.width !== bounds.width) {
+    console.warn("[overlay] wanted %dx%d, got %dx%d — bottom-anchored drawing will be off", bounds.width, bounds.height, got.width, got.height);
+  }
+  overlay.setResizable(false);
+  overlay.setMovable(false);
   overlay.setAlwaysOnTop(true, "screen-saver");
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlay.setIgnoreMouseEvents(true, { forward: true });
@@ -3287,6 +3294,7 @@ async function spellByName(displayName) {
 }
 
 // src/data/hud.ts
+var ABILITIES = ["Q", "W", "E", "R"];
 var DEFAULT_MODEL = {
   sizeAt0: 35 / 1080,
   sizeAt1: 53 / 1080,
@@ -3295,6 +3303,21 @@ var DEFAULT_MODEL = {
   bottomInBoxes: 1.4
 };
 var NO_NUDGE = { x: 0, y: 0, size: 0 };
+function boxSize(scale, height, model = DEFAULT_MODEL) {
+  const s = Math.min(1, Math.max(0, scale));
+  return (model.sizeAt0 + s * (model.sizeAt1 - model.sizeAt0)) * height;
+}
+function abilityBox(ability, screen2, hud) {
+  const model = hud.model ?? DEFAULT_MODEL;
+  const nudge = hud.nudge ?? NO_NUDGE;
+  const size = boxSize(hud.scale, screen2.height, model) * (1 + nudge.size);
+  const index = ABILITIES.indexOf(ability);
+  return {
+    size,
+    left: screen2.width / 2 + (model.qOffsetInBoxes + model.pitchInBoxes * index + nudge.x) * size,
+    top: screen2.height - (model.bottomInBoxes + 1 + nudge.y) * size
+  };
+}
 
 // src/live/hudConfig.ts
 import { readFile as readFile2 } from "node:fs/promises";
@@ -3539,12 +3562,20 @@ ipcMain.handle("state:get", () => state);
 ipcMain.on("win:minimise", () => win?.minimize());
 ipcMain.on("win:close", () => win?.close());
 ipcMain.on("hud:calibrate", (_e, patch3) => {
-  push({ hud: { ...state.hud, nudge: { ...state.hud.nudge, ...patch3 } } });
+  const nudge = { ...state.hud.nudge, ...patch3 };
+  push({ hud: { ...state.hud, nudge } });
+  console.log("[hud] nudge x=%s y=%s size=%s", nudge.x.toFixed(2), nudge.y.toFixed(2), nudge.size.toFixed(2));
 });
 ipcMain.on("hud:hint", (_e, ability) => {
   push({ levelHint: ability });
   if (ability)
     showOverlay();
+});
+ipcMain.on("overlay:report", (_e, info) => {
+  const d = screen2.getPrimaryDisplay();
+  console.log("[hud] overlay viewport %dx%d dpr=%s | display bounds %dx%d at (%d,%d) scale=%s | physical %dx%d", info.w, info.h, info.dpr, d.bounds.width, d.bounds.height, d.bounds.x, d.bounds.y, d.scaleFactor, Math.round(d.bounds.width * d.scaleFactor), Math.round(d.bounds.height * d.scaleFactor));
+  const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud);
+  console.log("[hud] scale=%s → Q drawn at css (%d,%d) %dpx → physical (%d,%d) %dpx", state.hud.scale, Math.round(box.left), Math.round(box.top), Math.round(box.size), Math.round(box.left * info.dpr), Math.round(box.top * info.dpr), Math.round(box.size * info.dpr));
 });
 ipcMain.on("overlay:preview", (_e, on) => {
   if (on)

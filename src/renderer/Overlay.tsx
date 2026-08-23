@@ -42,6 +42,18 @@ export default function Overlay() {
   const [hud, setHud] = useState<HudPlacement | null>(null)
 
   useEffect(() => {
+    const report = () =>
+      window.desktop.report?.({
+        w: window.innerWidth,
+        h: window.innerHeight,
+        dpr: window.devicePixelRatio,
+      })
+    report()
+    window.addEventListener("resize", report)
+    return () => window.removeEventListener("resize", report)
+  }, [])
+
+  useEffect(() => {
     const apply = (s: AppState) => {
       if (s.notice) { setNotice(s.notice); setVisible(true) }
       else setVisible(false)
