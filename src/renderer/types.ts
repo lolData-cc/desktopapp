@@ -41,6 +41,11 @@ export type LoadingPlayer = {
   championId: string | null
   championKey: number
   rank: PlayerRank | null
+  /** Identity hidden by streamer mode — the account cannot be looked up. */
+  hidden: boolean
+  otp: boolean
+  filled: boolean
+  pro: string | null
 }
 
 /** One scoreboard row, assembled by the shell. Mirrors LivePlayer there. */

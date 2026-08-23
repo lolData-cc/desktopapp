@@ -20443,28 +20443,123 @@ async function readLoading() {
       name: e.name || "-",
       championId: champ?.id ?? null,
       championKey: e.championKey,
-      rank: null
+      rank: null,
+      hidden: false,
+      otp: false,
+      filled: false,
+      pro: null
     };
   }));
   const allies = await resolve2(roster.allies);
   const enemies = await resolve2(roster.enemies);
   push({ loading: { allies, enemies } });
   console.log("[loading] allies: %s | enemies: %s", allies.map((a) => `${a.name}=${a.championId}`).join(" "), enemies.map((a) => `${a.name}=${a.championId}`).join(" "));
-  const ids = [...roster.allies, ...roster.enemies].filter((e) => e.name && e.tag).map((e) => `${e.name}#${e.tag}`);
-  if (!ids.length || !state.region)
+  await enrich(allies, roster.allies, enemies, roster.enemies);
+}
+async function enrich(allies, allyEntries, enemies, enemyEntries) {
+  const region = state.region;
+  if (!region)
     return;
-  const ranks = await lookupRanks(ids, state.region).catch(() => ({}));
-  const withRank = (list, entries) => list.map((p, i) => {
-    const e = entries[i];
-    const id = e && e.name && e.tag ? `${e.name}#${e.tag}` : null;
-    return { ...p, rank: id ? ranks[id] ?? null : null };
+  const id = (e) => e.name && e.tag ? `${e.name}#${e.tag}` : "";
+  const entries = [...allyEntries, ...enemyEntries];
+  const cards = [...allies, ...enemies];
+  const ids = entries.map(id).filter(Boolean);
+  if (!ids.length)
+    return;
+  const post2 = async (path, body) => {
+    try {
+      const res = await fetch(`https://api2.loldata.cc${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  const roleBody = {
+    participants: entries.map((e, i) => ({
+      riotId: id(e),
+      championId: e.championKey,
+      teamId: i < allyEntries.length ? 100 : 200
+    }))
+  };
+  const roles = await post2("/api/assignroles", roleBody);
+  const roleOf = {};
+  for (const team of Object.values(roles?.roles ?? {})) {
+    for (const [role, player] of Object.entries(team ?? {})) {
+      if (player?.riotId)
+        roleOf[player.riotId] = role;
+    }
+  }
+  const [ranks, stats, badges] = await Promise.all([
+    post2("/api/multirank", { riotIds: ids, region }),
+    post2("/api/livegame/stats", {
+      participants: entries.filter(id).map((e, i) => ({
+        riotId: id(e),
+        championName: cards[i]?.championId ?? "",
+        role: roleOf[id(e)] ?? ""
+      })),
+      region
+    }),
+    badgeMap()
+  ]);
+  const rankOf = {};
+  for (const r of ranks?.ranks ?? []) {
+    const bad = !r.rank || /error|unranked/i.test(r.rank);
+    rankOf[r.riotId] = bad ? null : {
+      label: r.rank,
+      tier: r.rank.split(/\s+/)[0].toLowerCase(),
+      wins: Number(r.wins ?? 0),
+      losses: Number(r.losses ?? 0)
+    };
+  }
+  const decorate = (list, from) => list.map((card, i) => {
+    const key = id(from[i]);
+    if (!key)
+      return card;
+    const st = stats?.stats?.[key];
+    const seasonGames = Number(st?.seasonGames ?? 0);
+    const champGames = Number(st?.championGames ?? 0);
+    const rank2 = rankOf[key] ?? null;
+    const hidden = !(key in rankOf) || rankOf[key] === null && !!ranks;
+    return {
+      ...card,
+      rank: rank2,
+      hidden,
+      otp: !hidden && seasonGames >= 10 && champGames / seasonGames >= 0.7,
+      filled: !hidden && st?.isFilled === true,
+      pro: badges.get(key.toLowerCase()) ?? null
+    };
   });
   push({
     loading: {
-      allies: withRank(allies, roster.allies),
-      enemies: withRank(enemies, roster.enemies)
+      allies: decorate(allies, allyEntries),
+      enemies: decorate(enemies, enemyEntries)
     }
   });
+}
+var badges = null;
+async function badgeMap() {
+  if (badges)
+    return badges;
+  try {
+    const res = await fetch("https://api2.loldata.cc/api/pros/badge-map");
+    if (!res.ok)
+      throw new Error(String(res.status));
+    const json = await res.json();
+    const map = new Map;
+    for (const [key, v] of Object.entries(json?.proNames ?? {})) {
+      if (v?.name)
+        map.set(key.toLowerCase(), v.name);
+    }
+    badges = map;
+    console.log("[loading] %d pro accounts known", map.size);
+    return map;
+  } catch {
+    return new Map;
+  }
 }
 async function readGame() {
   const stats = await liveGameStats();
@@ -20990,26 +21085,31 @@ ipcMain.on("overlay:demo", async () => {
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
 });
-var rank2 = (label, wins, losses) => ({
-  label,
-  tier: label.split(/\s+/)[0].toLowerCase(),
-  wins,
-  losses
+var demo = (name, championId, championKey, label, wins = 0, losses = 0, extra = {}) => ({
+  name,
+  championId,
+  championKey,
+  rank: label ? { label, tier: label.split(/\s+/)[0].toLowerCase(), wins, losses } : null,
+  hidden: false,
+  otp: false,
+  filled: false,
+  pro: null,
+  ...extra
 });
 var DEMO_LOADING = {
   allies: [
-    { name: "you", championId: "Lillia", championKey: 876, rank: rank2("DIAMOND II", 108, 90) },
-    { name: "ally two", championId: "Thresh", championKey: 412, rank: rank2("PLATINUM I", 61, 55) },
-    { name: "ally three", championId: "Jhin", championKey: 202, rank: rank2("DIAMOND IV", 74, 71) },
-    { name: "ally four", championId: "Sylas", championKey: 517, rank: rank2("EMERALD II", 143, 139) },
-    { name: "ally five", championId: "Vayne", championKey: 67, rank: null }
+    demo("you", "Lillia", 876, "DIAMOND II", 108, 90, { otp: true }),
+    demo("ally two", "Thresh", 412, "PLATINUM I", 61, 55),
+    demo("ally three", "Jhin", 202, "DIAMOND IV", 74, 71, { filled: true }),
+    demo("ally four", "Sylas", 517, "EMERALD II", 143, 139),
+    demo("ally five", "Vayne", 67, null, 0, 0, { hidden: true })
   ],
   enemies: [
-    { name: "enemy one", championId: "Akali", championKey: 84, rank: rank2("MASTER", 212, 180) },
-    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: rank2("DIAMOND I", 96, 88) },
-    { name: "enemy three", championId: "Kalista", championKey: 429, rank: rank2("PLATINUM II", 40, 47) },
-    { name: "enemy four", championId: "Xerath", championKey: 101, rank: rank2("DIAMOND III", 155, 132) },
-    { name: "enemy five", championId: "Senna", championKey: 235, rank: rank2("EMERALD I", 33, 21) }
+    demo("enemy one", "Akali", 84, "MASTER", 212, 180, { pro: "Caps" }),
+    demo("enemy two", "Qiyana", 246, "DIAMOND I", 96, 88),
+    demo("enemy three", "Kalista", 429, "PLATINUM II", 40, 47, { filled: true }),
+    demo("enemy four", "Xerath", 101, "DIAMOND III", 155, 132),
+    demo("enemy five", "Senna", 235, "EMERALD I", 33, 21, { otp: true })
   ]
 };
 ipcMain.on("loading:demo", () => {

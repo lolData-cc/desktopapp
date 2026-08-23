@@ -58,6 +58,11 @@ type LoadingPlayer = {
   championId: string | null
   championKey: number
   rank: PlayerRank | null
+  /** Identity hidden by streamer mode — the account cannot be looked up. */
+  hidden: boolean
+  otp: boolean
+  filled: boolean
+  pro: string | null
 }
 
 type AppState = {
@@ -170,6 +175,41 @@ export default function Overlay() {
  *  images the summoner page uses. */
 const RANKS = "https://cdn2.loldata.cc/ranks"
 
+/**
+ * A status pill, in the site's own shape — a dark plate with a coloured hairline
+ * and text, never a filled block. Over splash art a solid colour reads as part
+ * of the picture; a plate with an outline reads as something laid on it.
+ */
+function Badge({
+  text,
+  colour,
+  size,
+  solid,
+}: {
+  text: string
+  colour: string
+  /** Card height, so the pill scales with the screen like everything else. */
+  size: number
+  solid?: boolean
+}) {
+  return (
+    <span
+      className="whitespace-nowrap rounded-[2px] font-jetbrains font-bold uppercase leading-none tracking-[0.1em]"
+      style={{
+        fontSize: Math.round(size * 0.022),
+        padding: `${size * 0.008}px ${size * 0.014}px`,
+        color: solid ? "#040a0c" : colour,
+        background: solid ? colour : "rgba(4,10,12,0.88)",
+        boxShadow: solid
+          ? "0 2px 6px rgba(0,0,0,0.9)"
+          : `inset 0 0 0 1px ${colour}99, 0 2px 6px rgba(0,0,0,0.9)`,
+      }}
+    >
+      {text}
+    </span>
+  )
+}
+
 const winrate = (r: { wins: number; losses: number }): number => {
   const total = r.wins + r.losses
   return total > 0 ? (r.wins / total) * 100 : 0
@@ -233,22 +273,29 @@ function LoadingBoard({
                 the same path the summoner page uses. Not the client's mini
                 crest and not a community mirror: one rank should not look like
                 two different things across our own products. */}
+            {/* ⚠️ A real drop shadow under the emblem, not a glow. These sit
+                over splash art that is bright in places and black in others,
+                and a coloured glow vanishes against the bright half. A dark
+                shadow works against both. */}
             {p.rank ? (
               <img
                 src={`${RANKS}/${p.rank.tier}.png`}
                 alt=""
                 className="relative"
-                style={{ width: box.width * 0.46, height: box.width * 0.46, objectFit: "contain" }}
+                style={{
+                  width: box.width * 0.46,
+                  height: box.width * 0.46,
+                  objectFit: "contain",
+                  filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.95)) drop-shadow(0 0 14px rgba(0,0,0,0.75))",
+                }}
                 onError={(e) => {
-                  // A missing emblem leaves a gap rather than a broken-image
-                  // glyph over someone's champion.
                   ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
                 }}
               />
             ) : (
-              // No emblem request for an unranked player: cdn2/ranks has no
-              // unranked.png — the site uses a local file for that — so asking
-              // would be a guaranteed 404 on every card of every new account.
+              // No emblem request for a player without one: cdn2/ranks has no
+              // unranked.png — the site uses a local file — so asking would be
+              // a guaranteed 404 on every card of every hidden account.
               <span
                 aria-hidden
                 className="relative rotate-45"
@@ -256,61 +303,84 @@ function LoadingBoard({
                   width: box.width * 0.1,
                   height: box.width * 0.1,
                   boxShadow: `inset 0 0 0 1px ${accent}55`,
+                  filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.9))",
                 }}
               />
             )}
 
             <div
               className="relative flex flex-col items-center"
-              style={{ textShadow: "0 1px 5px rgba(0,0,0,0.95)", marginTop: box.height * 0.005 }}
+              style={{
+                // Three shadows, tight to wide: definition, weight, and a
+                // halo that keeps a thin letter legible over bright armour.
+                textShadow:
+                  "0 1px 2px rgba(0,0,0,1), 0 2px 6px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.8)",
+                marginTop: box.height * 0.008,
+              }}
             >
-              <p
-                className="whitespace-nowrap font-chakrapetch font-bold uppercase leading-none tracking-[0.08em]"
-                style={{ fontSize: Math.round(box.height * 0.045), color: accent }}
-              >
-                {p.rank?.label ?? "unranked"}
-              </p>
+              {/* ⚠️ Streamer mode is not "unranked". The account cannot be
+                  looked up at all, so we know nothing about them — and saying
+                  UNRANKED would be a claim we have no basis for. */}
+              {p.hidden ? (
+                <p
+                  className="whitespace-nowrap font-jetbrains font-bold uppercase leading-none tracking-[0.16em]"
+                  style={{ fontSize: Math.round(box.height * 0.028), color: "#c98bff" }}
+                >
+                  streamer mode
+                </p>
+              ) : (
+                <p
+                  className="whitespace-nowrap font-chakrapetch font-bold uppercase leading-none tracking-[0.08em]"
+                  style={{ fontSize: Math.round(box.height * 0.048), color: accent }}
+                >
+                  {p.rank?.label ?? "unranked"}
+                </p>
+              )}
 
               {p.rank && p.rank.wins + p.rank.losses > 0 && (
                 <>
                   <p
-                    className="whitespace-nowrap font-jetbrains uppercase leading-none tracking-[0.14em] text-flash/50"
-                    style={{ fontSize: Math.round(box.height * 0.026), marginTop: box.height * 0.018 }}
+                    className="whitespace-nowrap font-jetbrains uppercase leading-none tracking-[0.14em] text-flash/55"
+                    style={{ fontSize: Math.round(box.height * 0.027), marginTop: box.height * 0.018 }}
                   >
                     {p.rank.wins + p.rank.losses} games
                   </p>
                   <p
                     className="whitespace-nowrap font-chakrapetch font-bold leading-none tabular-nums"
-                    style={{ fontSize: Math.round(box.height * 0.034), marginTop: box.height * 0.012 }}
+                    style={{ fontSize: Math.round(box.height * 0.036), marginTop: box.height * 0.012 }}
                   >
                     <span style={{ color: "#00d992" }}>{p.rank.wins}W</span>
-                    <span className="text-flash/25"> · </span>
+                    <span className="text-flash/30"> · </span>
                     <span style={{ color: "#ff6286" }}>{p.rank.losses}L</span>
-                  </p>
-                  <p
-                    className="whitespace-nowrap font-chakrapetch font-bold leading-none tabular-nums"
-                    style={{
-                      fontSize: Math.round(box.height * 0.038),
-                      marginTop: box.height * 0.01,
-                      color: winrate(p.rank) >= 55 ? "#00d992" : winrate(p.rank) >= 48 ? "#d7d8d9" : "#ff6286",
-                    }}
-                  >
-                    {winrate(p.rank).toFixed(0)}%
+                    <span className="text-flash/30"> · </span>
+                    <span
+                      style={{
+                        color:
+                          winrate(p.rank) >= 55 ? "#00d992"
+                          : winrate(p.rank) >= 48 ? "#d7d8d9"
+                          : "#ff6286",
+                      }}
+                    >
+                      {winrate(p.rank).toFixed(0)}%
+                    </span>
                   </p>
                 </>
               )}
 
-              {/* ⚠️ The champion name, and it is not decoration: this whole
-                  feature assumes the client's team order matches the order of
-                  the portraits on screen, which has never been tested. Wrong
-                  order puts this name over the wrong face and is obvious in one
-                  glance — where a rank alone would be silently wrong. */}
-              <p
-                className="whitespace-nowrap font-jetbrains uppercase leading-none tracking-[0.16em] text-flash/25"
-                style={{ fontSize: Math.round(box.height * 0.022), marginTop: box.height * 0.02 }}
-              >
-                {p.championId ?? p.name}
-              </p>
+              {/* The badges: only what is TRUE of this player, never a row of
+                  empty slots. A pro is named, because the name is the point. */}
+              {(p.pro || p.otp || p.filled) && (
+                <span
+                  className="flex items-center gap-1"
+                  style={{ marginTop: box.height * 0.022 }}
+                >
+                  {p.pro && (
+                    <Badge text={p.pro} colour="#FFB615" size={box.height} solid />
+                  )}
+                  {p.otp && <Badge text="OTP" colour="#00d992" size={box.height} />}
+                  {p.filled && <Badge text="FILLED" colour="#FFB615" size={box.height} />}
+                </span>
+              )}
             </div>
           </div>
         )

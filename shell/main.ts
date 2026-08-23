@@ -11,7 +11,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from "elec
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
-import { LcuConnection, type Phase } from "../src/lcu/connection"
+import { LcuConnection, type Phase, type RosterEntry } from "../src/lcu/connection"
 import { championById, championByName, currentPatch, type Champion } from "../src/data/champions"
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
@@ -948,6 +948,10 @@ async function readLoading(): Promise<void> {
           championId: champ?.id ?? null,
           championKey: e.championKey,
           rank: null as PlayerRank | null,
+          hidden: false,
+          otp: false,
+          filled: false,
+          pro: null as string | null,
         }
       })
     )
@@ -959,29 +963,168 @@ async function readLoading(): Promise<void> {
     allies.map((a) => `${a.name}=${a.championId}`).join(" "),
     enemies.map((a) => `${a.name}=${a.championId}`).join(" "))
 
-  // Ranks come after: ten lookups, and the cards are useful without them.
-  const ids = [...roster.allies, ...roster.enemies]
-    .filter((e) => e.name && e.tag)
-    .map((e) => `${e.name}#${e.tag}`)
-  if (!ids.length || !state.region) return
+  // Everything else comes after, because the cards are already useful and the
+  // lookups take a second.
+  await enrich(allies, roster.allies, enemies, roster.enemies)
+}
 
-  const ranks = await lookupRanks(ids, state.region).catch(
-    () => ({}) as Record<string, PlayerRank | null>
+/**
+ * Rank, one-trick, off-role and pro status for the ten cards.
+ *
+ * ⚠️ FOUR calls for TEN players, not forty. The site already had endpoints
+ * that take the whole lobby at once — /api/multirank and /api/livegame/stats —
+ * and an earlier draft here made one /api/summoner request per player, which
+ * was ten times the traffic for the same answer against a service that
+ * rate-limits per summoner anyway.
+ *
+ * The rules are the site's own, from liveviewer.tsx, copied rather than
+ * reinvented: a player with no rank is HIDDEN rather than unranked, because
+ * streamer mode is what makes an account unlookupable; a one-trick is 70% of
+ * a season of at least ten games; filled comes from the server.
+ */
+async function enrich(
+  allies: LoadingPlayer[],
+  allyEntries: RosterEntry[],
+  enemies: LoadingPlayer[],
+  enemyEntries: RosterEntry[]
+): Promise<void> {
+  const region = state.region
+  if (!region) return
+
+  const id = (e: RosterEntry) => (e.name && e.tag ? `${e.name}#${e.tag}` : "")
+  const entries = [...allyEntries, ...enemyEntries]
+  const cards = [...allies, ...enemies]
+  const ids = entries.map(id).filter(Boolean)
+  if (!ids.length) return
+
+  const post = async <T,>(path: string, body: unknown): Promise<T | null> => {
+    try {
+      const res = await fetch(`https://api2.loldata.cc${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      return res.ok ? ((await res.json()) as T) : null
+    } catch {
+      return null
+    }
+  }
+
+  // Roles first: "filled" is undecidable without knowing what they are
+  // PLAYING, and the client does not tell us during loading.
+  const roleBody = {
+    participants: entries.map((e, i) => ({
+      riotId: id(e),
+      championId: e.championKey,
+      teamId: i < allyEntries.length ? 100 : 200,
+    })),
+  }
+  const roles = await post<{ roles: Record<string, Record<string, { riotId?: string }>> }>(
+    "/api/assignroles",
+    roleBody
   )
-  const withRank = (list: LoadingPlayer[], entries: typeof roster.allies) =>
-    list.map((p, i) => {
-      const e = entries[i]
-      const id = e && e.name && e.tag ? `${e.name}#${e.tag}` : null
-      return { ...p, rank: id ? ranks[id] ?? null : null }
+  const roleOf: Record<string, string> = {}
+  for (const team of Object.values(roles?.roles ?? {})) {
+    for (const [role, player] of Object.entries(team ?? {})) {
+      if (player?.riotId) roleOf[player.riotId] = role
+    }
+  }
+
+  const [ranks, stats, badges] = await Promise.all([
+    post<{ ranks: { riotId: string; rank: string; wins: number; losses: number }[] }>(
+      "/api/multirank",
+      { riotIds: ids, region }
+    ),
+    post<{ stats: Record<string, { championGames?: number; seasonGames?: number; isFilled?: boolean }> }>(
+      "/api/livegame/stats",
+      {
+        participants: entries.filter(id).map((e, i) => ({
+          riotId: id(e),
+          championName: cards[i]?.championId ?? "",
+          role: roleOf[id(e)] ?? "",
+        })),
+        region,
+      }
+    ),
+    badgeMap(),
+  ])
+
+  const rankOf: Record<string, PlayerRank | null> = {}
+  for (const r of ranks?.ranks ?? []) {
+    // ⚠️ No rank, or the string "error", means the account could not be looked
+    // up — which is what streamer mode does. Not the same as unranked.
+    const bad = !r.rank || /error|unranked/i.test(r.rank)
+    rankOf[r.riotId] = bad
+      ? null
+      : {
+          label: r.rank,
+          tier: r.rank.split(/\s+/)[0]!.toLowerCase(),
+          wins: Number(r.wins ?? 0),
+          losses: Number(r.losses ?? 0),
+        }
+  }
+
+  const decorate = (list: LoadingPlayer[], from: RosterEntry[]): LoadingPlayer[] =>
+    list.map((card, i) => {
+      const key = id(from[i]!)
+      if (!key) return card
+
+      const st = stats?.stats?.[key]
+      const seasonGames = Number(st?.seasonGames ?? 0)
+      const champGames = Number(st?.championGames ?? 0)
+      const rank = rankOf[key] ?? null
+
+      // The site's own reading: a player it cannot look up is hidden, and
+      // hidden players get no claims made about them.
+      const hidden = !(key in rankOf) || (rankOf[key] === null && !!ranks)
+
+      return {
+        ...card,
+        rank,
+        hidden,
+        otp: !hidden && seasonGames >= 10 && champGames / seasonGames >= 0.7,
+        filled: !hidden && st?.isFilled === true,
+        pro: badges.get(key.toLowerCase()) ?? null,
+      }
     })
 
   push({
     loading: {
-      allies: withRank(allies, roster.allies),
-      enemies: withRank(enemies, roster.enemies),
+      allies: decorate(allies, allyEntries),
+      enemies: decorate(enemies, enemyEntries),
     },
   })
 }
+
+/**
+ * Every known pro account, by "name#tag".
+ *
+ * ⚠️ 890KB and twelve thousand entries, so it is fetched ONCE per run of the
+ * app rather than once per game. It changes when someone is added to the site,
+ * which is not something a running client needs to notice.
+ */
+let badges: Map<string, string> | null = null
+
+async function badgeMap(): Promise<Map<string, string>> {
+  if (badges) return badges
+  try {
+    const res = await fetch("https://api2.loldata.cc/api/pros/badge-map")
+    if (!res.ok) throw new Error(String(res.status))
+    const json = (await res.json()) as { proNames?: Record<string, { name?: string }> }
+    const map = new Map<string, string>()
+    for (const [key, v] of Object.entries(json?.proNames ?? {})) {
+      if (v?.name) map.set(key.toLowerCase(), v.name)
+    }
+    badges = map
+    console.log("[loading] %d pro accounts known", map.size)
+    return map
+  } catch {
+    // Badges are decorative: an empty map costs a label, not the feature.
+    return new Map()
+  }
+}
+
+
 
 /**
  * One player, as a scoreboard row.
@@ -1012,8 +1155,23 @@ export type LoadingPlayer = {
   name: string
   championId: string | null
   championKey: number
-  /** Filled in after the rank lookup returns; null while it is in flight. */
+  /** Filled in after the lookups return; null while they are in flight. */
   rank: PlayerRank | null
+  /**
+   * Their identity is hidden.
+   *
+   * League's streamer mode replaces the name with the champion, so the account
+   * cannot be looked up and no rank comes back. The site reads it exactly this
+   * way. Saying "unranked" for such a player would be a claim about them that
+   * we have no basis for.
+   */
+  hidden: boolean
+  /** ≥70% of their season on this champion, from at least ten games. */
+  otp: boolean
+  /** Playing a role that is not one of theirs. */
+  filled: boolean
+  /** Their pro name, when the badge map knows this account. */
+  pro: string | null
 }
 
 export type LivePlayer = {
@@ -1877,28 +2035,43 @@ ipcMain.on("overlay:demo", async () => {
  * this also turns on the full card outlines, and the arrows below move them.
  * The loading screen lasts long enough to alt-tab out of, nudge, and go back.
  */
-const rank = (label: string, wins: number, losses: number): PlayerRank => ({
-  label,
-  tier: label.split(/\s+/)[0]!.toLowerCase(),
-  wins,
-  losses,
+const demo = (
+  name: string,
+  championId: string,
+  championKey: number,
+  label: string | null,
+  wins = 0,
+  losses = 0,
+  extra: Partial<LoadingPlayer> = {}
+): LoadingPlayer => ({
+  name,
+  championId,
+  championKey,
+  rank: label
+    ? { label, tier: label.split(/\s+/)[0]!.toLowerCase(), wins, losses }
+    : null,
+  hidden: false,
+  otp: false,
+  filled: false,
+  pro: null,
+  ...extra,
 })
 
 const DEMO_LOADING = {
   allies: [
-    { name: "you", championId: "Lillia", championKey: 876, rank: rank("DIAMOND II", 108, 90) },
-    { name: "ally two", championId: "Thresh", championKey: 412, rank: rank("PLATINUM I", 61, 55) },
-    { name: "ally three", championId: "Jhin", championKey: 202, rank: rank("DIAMOND IV", 74, 71) },
-    { name: "ally four", championId: "Sylas", championKey: 517, rank: rank("EMERALD II", 143, 139) },
-    // One with no rank, because a real lobby usually has one.
-    { name: "ally five", championId: "Vayne", championKey: 67, rank: null },
+    demo("you", "Lillia", 876, "DIAMOND II", 108, 90, { otp: true }),
+    demo("ally two", "Thresh", 412, "PLATINUM I", 61, 55),
+    demo("ally three", "Jhin", 202, "DIAMOND IV", 74, 71, { filled: true }),
+    demo("ally four", "Sylas", 517, "EMERALD II", 143, 139),
+    // Streamer mode: no rank because the account cannot be looked up at all.
+    demo("ally five", "Vayne", 67, null, 0, 0, { hidden: true }),
   ],
   enemies: [
-    { name: "enemy one", championId: "Akali", championKey: 84, rank: rank("MASTER", 212, 180) },
-    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: rank("DIAMOND I", 96, 88) },
-    { name: "enemy three", championId: "Kalista", championKey: 429, rank: rank("PLATINUM II", 40, 47) },
-    { name: "enemy four", championId: "Xerath", championKey: 101, rank: rank("DIAMOND III", 155, 132) },
-    { name: "enemy five", championId: "Senna", championKey: 235, rank: rank("EMERALD I", 33, 21) },
+    demo("enemy one", "Akali", 84, "MASTER", 212, 180, { pro: "Caps" }),
+    demo("enemy two", "Qiyana", 246, "DIAMOND I", 96, 88),
+    demo("enemy three", "Kalista", 429, "PLATINUM II", 40, 47, { filled: true }),
+    demo("enemy four", "Xerath", 101, "DIAMOND III", 155, 132),
+    demo("enemy five", "Senna", 235, "EMERALD I", 33, 21, { otp: true }),
   ],
 }
 
