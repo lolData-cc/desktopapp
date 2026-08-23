@@ -128,4 +128,42 @@ export async function searchItems(query: string): Promise<CatalogItem[]> {
   return scored.map((s) => s.item)
 }
 
+/**
+ * Every item that IS boots, at any tier.
+ *
+ * Deliberately separate from the catalog above, which only holds items a build
+ * can end on. This answers a different question — "is the player wearing boots
+ * yet" — and the answer includes the 300g starter and the free pair Magical
+ * Footwear hands out, neither of which is a build slot.
+ *
+ * ⚠️ This used to be nine ids written out by hand, and it had gone stale: it
+ * missed Slightly Magical Footwear entirely, so a player given free boots by
+ * the rune was never seen to be wearing any and the advice never fired. Read
+ * from the data, it cannot drift out of date again.
+ */
+let boots: Set<number> | null = null
+
+export async function bootsIds(): Promise<Set<number>> {
+  if (boots) return boots
+
+  let patch = FALLBACK_PATCH
+  const marker = await fetch(`${CDN}/_current_version.txt`).catch(() => null)
+  if (marker?.ok) patch = (await marker.text()).trim() || FALLBACK_PATCH
+
+  const res = await fetch(`${CDN}/${patch}/data/en_US/item.json`)
+  if (!res.ok) throw new Error(`item data ${res.status}`)
+  const json = (await res.json()) as { data: Record<string, Raw> }
+
+  const out = new Set<number>()
+  for (const [id, it] of Object.entries(json.data)) {
+    if (!(it.tags ?? []).includes("Boots")) continue
+    // A handful of cosmetics carry the tag too. They cannot appear in a Rift
+    // inventory, but there is no reason to let them in.
+    if (it.maps && it.maps["11"] === false) continue
+    out.add(Number(id))
+  }
+  boots = out
+  return out
+}
+
 export const warmItemCatalog = (): void => void load().catch(() => undefined)

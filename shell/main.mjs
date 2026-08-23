@@ -19686,6 +19686,33 @@ var CC_HEAVY_AT = 3;
 var isHeavyCC = (championId) => HEAVY_CC.has(championId.toLowerCase());
 var ccCarriers = (champs) => champs.filter((c) => isHeavyCC(c.id));
 
+// src/data/itemCatalog.ts
+var CDN5 = "https://cdn2.loldata.cc";
+var FALLBACK_PATCH5 = "16.16.1";
+var boots = null;
+async function bootsIds() {
+  if (boots)
+    return boots;
+  let patch2 = FALLBACK_PATCH5;
+  const marker = await fetch(`${CDN5}/_current_version.txt`).catch(() => null);
+  if (marker?.ok)
+    patch2 = (await marker.text()).trim() || FALLBACK_PATCH5;
+  const res = await fetch(`${CDN5}/${patch2}/data/en_US/item.json`);
+  if (!res.ok)
+    throw new Error(`item data ${res.status}`);
+  const json = await res.json();
+  const out = new Set;
+  for (const [id, it] of Object.entries(json.data)) {
+    if (!(it.tags ?? []).includes("Boots"))
+      continue;
+    if (it.maps && it.maps["11"] === false)
+      continue;
+    out.add(Number(id));
+  }
+  boots = out;
+  return out;
+}
+
 // src/data/compAdvice.ts
 var API3 = "https://api2.loldata.cc";
 function compShapes(enemyCategories) {
@@ -19958,10 +19985,10 @@ function dropNotice() {
   push({ notice: null });
   syncOverlay();
 }
-function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots, build) {
+function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots2, build) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots, build } });
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots: boots2, build } });
   syncOverlay();
   if (!state.pinned)
     noticeTimer = setTimeout(dropNotice, ms);
@@ -19969,36 +19996,39 @@ function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boot
 var announcedItems = new Set;
 var announcedBoots = false;
 var announcedOpening = false;
-var BOOTS = new Set([3006, 3009, 3020, 3047, 3111, 3117, 3158, 3172, 3013]);
 var MERCURYS = 3111;
 var STEELCAPS = 3047;
-function bootsAdvice() {
-  const m = state.matchup;
-  if (!m)
-    return null;
-  if (m.ccHeavy) {
+function bootsAdvice(enemies) {
+  const cc = ccCarriers(enemies);
+  if (cc.length >= CC_HEAVY_AT) {
     return {
       item: MERCURYS,
-      reason: `${m.ccNames.length} enemies bring hard CC`,
-      keys: m.ccKeys
+      reason: `${cc.length} enemies bring hard CC`,
+      keys: cc.map((c) => c.key)
     };
   }
-  const ad = m.applied.find((sh) => sh.cls === "AD");
-  if (ad && ad.count >= 4) {
-    return { item: STEELCAPS, reason: `${ad.count} enemies deal physical damage`, keys: [] };
+  const ad = enemies.filter((c) => c.categories.includes("AD")).length;
+  if (ad >= 4) {
+    return { item: STEELCAPS, reason: `${ad} enemies deal physical damage`, keys: [] };
   }
   return null;
 }
-async function readBoots(inventory2) {
+async function readBoots(inventory2, enemies) {
   if (announcedBoots)
     return;
-  const wearing = inventory2.find((i) => BOOTS.has(i.itemID));
+  const boots2 = await bootsIds().catch(() => new Set);
+  const wearing = inventory2.find((i) => boots2.has(i.itemID));
   if (!wearing)
     return;
+  if (!enemies.length)
+    return shopLog("boots: worn, but enemy team not readable yet");
   announcedBoots = true;
-  const advice = bootsAdvice();
-  if (!advice || advice.item === wearing.itemID)
-    return;
+  const advice = bootsAdvice(enemies);
+  if (!advice)
+    return shopLog("boots: comp argues for neither tenacity nor armour");
+  if (advice.item === wearing.itemID)
+    return shopLog("boots: already wearing the recommendation");
+  shopLog("boots: recommending %d because %s", advice.item, advice.reason);
   const cost = await costToComplete(advice.item, inventory2, 0).catch(() => null);
   raiseNotice("boots", 0, null, { ours: [], theirs: [] }, NOTICE_MS, undefined, {
     item: advice.item,
@@ -20037,7 +20067,19 @@ function shopLog(format, ...args) {
   lastShopLog = line;
   console.log("[shop] " + format, ...args);
 }
-async function readShop(riotId, championId) {
+async function enemyChampions(players, myTeam) {
+  if (!myTeam)
+    return [];
+  const names = players.filter((p) => p.team !== myTeam).map((p) => p.championName).filter((n) => !!n);
+  const keys = [];
+  for (const name of names) {
+    const champ = await championByName(name).catch(() => null);
+    if (champ)
+      keys.push(champ.key);
+  }
+  return classifyAll(keys).catch(() => []);
+}
+async function readShop(riotId, championId, enemies) {
   const saved = championId ? await buildFor(championId).catch(() => null) : null;
   if (saved && !saved.enabled)
     return;
@@ -20047,6 +20089,7 @@ async function readShop(riotId, championId) {
   const purse = await liveOwnPurse(riotId).catch(() => null);
   if (!purse)
     return shopLog("no purse for %s", riotId);
+  readBoots(purse.items, enemies);
   const owned = new Set(purse.items.map((i) => i.itemID));
   const nextIndex = build.findIndex((s) => !owned.has(s.item));
   if (nextIndex < 0)
@@ -20054,7 +20097,6 @@ async function readShop(riotId, championId) {
   const next = build[nextIndex];
   if (announcedItems.has(next.item))
     return;
-  readBoots(purse.items);
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null);
   if (!cost)
     return shopLog("no price for item %d", next.item);
@@ -20081,7 +20123,8 @@ async function readGame() {
   ]);
   const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null;
   const championId = await playingChampion(players ?? [], me);
-  readShop(me, championId);
+  const enemies = await enemyChampions(players ?? [], myTeam);
+  readShop(me, championId, enemies);
   const gold = await teamGold(players ?? [], myTeam).catch(() => null);
   if (gold) {
     push({ gold });

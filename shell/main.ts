@@ -32,7 +32,8 @@ import { dragonTally, nextObjective, type DragonElement, type DragonTally } from
 import { teamGold, type TeamGold } from "../src/data/teamGold"
 import { warmItemCosts } from "../src/data/itemCost"
 import { costToComplete, warmItemTree } from "../src/data/affordability"
-import { classifyAll, ccCarriers, CC_HEAVY_AT } from "../src/data/champClass"
+import { classifyAll, ccCarriers, CC_HEAVY_AT, type ChampInfo } from "../src/data/champClass"
+import { bootsIds } from "../src/data/itemCatalog"
 import { buildForComp, compShapes, describeShapes, type BuildSlot, type CompShape } from "../src/data/compAdvice"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -485,7 +486,6 @@ let announcedBoots = false
 let announcedOpening = false
 
 /** Tier-2 boots, and the two the enemy comp actually decides between. */
-const BOOTS = new Set([3006, 3009, 3020, 3047, 3111, 3117, 3158, 3172, 3013])
 const MERCURYS = 3111
 const STEELCAPS = 3047
 
@@ -499,38 +499,56 @@ const STEELCAPS = 3047
  * Null when neither is true, and that is the common case. A recommendation
  * every game would be a recommendation about nothing.
  */
-function bootsAdvice(): { item: number; reason: string; keys: number[] } | null {
-  const m = state.matchup
-  if (!m) return null
-
-  if (m.ccHeavy) {
+/**
+ * ⚠️ Reads the comp from the LIVE enemy team, not from state.matchup.
+ *
+ * matchup is worked out during champion select, so it is missing whenever the
+ * app was started after the game began — and the boots question is asked
+ * exactly once, so a missing comp meant the one chance was spent on silence.
+ * The players are on screen; there is no reason to depend on having watched
+ * them being picked.
+ */
+function bootsAdvice(enemies: ChampInfo[]): { item: number; reason: string; keys: number[] } | null {
+  const cc = ccCarriers(enemies)
+  if (cc.length >= CC_HEAVY_AT) {
     return {
       item: MERCURYS,
-      reason: `${m.ccNames.length} enemies bring hard CC`,
-      keys: m.ccKeys,
+      reason: `${cc.length} enemies bring hard CC`,
+      keys: cc.map((c) => c.key),
     }
   }
 
   // Four or more AD is the point at which armour beats everything else; below
   // that the choice is a preference, not a read.
-  const ad = m.applied.find((sh) => sh.cls === "AD")
-  if (ad && ad.count >= 4) {
-    return { item: STEELCAPS, reason: `${ad.count} enemies deal physical damage`, keys: [] }
+  const ad = enemies.filter((c) => c.categories.includes("AD")).length
+  if (ad >= 4) {
+    return { item: STEELCAPS, reason: `${ad} enemies deal physical damage`, keys: [] }
   }
 
   return null
 }
 
-async function readBoots(inventory: { itemID: number }[]): Promise<void> {
+async function readBoots(
+  inventory: { itemID: number }[],
+  enemies: ChampInfo[]
+): Promise<void> {
   if (announcedBoots) return
-  const wearing = inventory.find((i) => BOOTS.has(i.itemID))
+
+  const boots = await bootsIds().catch(() => new Set<number>())
+  const wearing = inventory.find((i) => boots.has(i.itemID))
   if (!wearing) return
+
+  // Nothing to say yet if we cannot see the enemy team — asking once and
+  // answering from nothing would burn the single chance this gets.
+  if (!enemies.length) return shopLog("boots: worn, but enemy team not readable yet")
 
   announcedBoots = true          // asked once, whatever the answer
 
-  const advice = bootsAdvice()
-  // Already wearing what would be recommended, or nothing to recommend.
-  if (!advice || advice.item === wearing.itemID) return
+  const advice = bootsAdvice(enemies)
+  if (!advice) return shopLog("boots: comp argues for neither tenacity nor armour")
+  if (advice.item === wearing.itemID) return shopLog("boots: already wearing the recommendation")
+
+  shopLog("boots: recommending %d because %s", advice.item, advice.reason)
 
   const cost = await costToComplete(advice.item, inventory, 0).catch(() => null)
   raiseNotice("boots", 0, null, { ours: [], theirs: [] }, NOTICE_MS, undefined, {
@@ -592,7 +610,28 @@ function shopLog(format: string, ...args: unknown[]): void {
   console.log("[shop] " + format, ...args)
 }
 
-async function readShop(riotId: string | null, championId: string | null): Promise<void> {
+/**
+ * The enemy five, classified, from the running game.
+ *
+ * Works whether or not we watched champion select, which is the point: an app
+ * started at minute ten can still see who it is playing against.
+ */
+async function enemyChampions(players: PlayerSlot[], myTeam: string | null): Promise<ChampInfo[]> {
+  if (!myTeam) return []
+  const names = players.filter((p) => p.team !== myTeam).map((p) => p.championName).filter((n): n is string => !!n)
+  const keys: number[] = []
+  for (const name of names) {
+    const champ = await championByName(name).catch(() => null)
+    if (champ) keys.push(champ.key)
+  }
+  return classifyAll(keys).catch(() => [])
+}
+
+async function readShop(
+  riotId: string | null,
+  championId: string | null,
+  enemies: ChampInfo[]
+): Promise<void> {
   // A saved profile wins over the live calculation: it is a decision the player
   // made, and a query result should not quietly overrule one. Disabled profiles
   // fall through to nothing rather than to the live build — turning a build off
@@ -606,14 +645,17 @@ async function readShop(riotId: string | null, championId: string | null): Promi
   const purse = await liveOwnPurse(riotId).catch(() => null)
   if (!purse) return shopLog("no purse for %s", riotId)
 
+  // Before every later return. This used to sit after the "already announced"
+  // check, so once an item had been announced the boots question stopped being
+  // asked at all — two unrelated things sharing one exit.
+  void readBoots(purse.items, enemies)
+
   const owned = new Set(purse.items.map((i) => i.itemID))
   const nextIndex = build.findIndex((s) => !owned.has(s.item))
   if (nextIndex < 0) return shopLog("build finished")
 
   const next = build[nextIndex]!
   if (announcedItems.has(next.item)) return
-
-  void readBoots(purse.items)
 
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null)
   if (!cost) return shopLog("no price for item %d", next.item)
@@ -658,7 +700,8 @@ async function readGame(): Promise<void> {
   const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null
 
   const championId = await playingChampion(players ?? [], me)
-  void readShop(me, championId)
+  const enemies = await enemyChampions(players ?? [], myTeam)
+  void readShop(me, championId, enemies)
 
   const gold = await teamGold(players ?? [], myTeam).catch(() => null)
   if (gold) {
