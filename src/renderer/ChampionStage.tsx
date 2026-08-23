@@ -98,31 +98,39 @@ export default function ChampionStage({ championId, championKey, className }: Pr
 
         const model = gltf.scene
 
-        // Framed from the bounding box, never from a constant. These come out
-        // around 1-2 units tall — verified, not assumed — and a champion is
-        // anywhere from Teemo to Cho'Gath, so every distance below is a
-        // multiple of the measured height.
-        const box = new THREE.Box3().setFromObject(model)
+        // ⚠️ POSE FIRST, then measure. Bounds mean nothing until the bones
+        // are where the idle puts them.
+        const clip = idleClip(gltf.animations) as THREE.AnimationClip | undefined
+        if (clip) {
+          mixer = new THREE.AnimationMixer(model)
+          mixer.clipAction(clip).play()
+          mixer.update(0.5)
+        }
+        model.updateMatrixWorld(true)
+
+        const box = posedBounds(model)
         const size = box.getSize(new THREE.Vector3())
-        const centre = box.getCenter(new THREE.Vector3())
-        // Guarded against zero, not against "small": these models are about a
-        // unit tall, so clamping to 1 would silently re-frame every champion
-        // shorter than that.
-        const height = Math.max(1e-4, size.y)
 
-        model.position.sub(centre)
-        model.position.y += height / 2 // stand it ON the pedestal, not through it
-
-        // …then land the feet exactly, by measuring again after the move. The
-        // first box is the only one available to centre with, and it is the
-        // unreliable one; this correction is what stops a champion hovering a
-        // hand's width above the rings.
-        const settled = new THREE.Box3().setFromObject(model)
-        model.position.y -= settled.min.y
-
+        /**
+         * ⚠️ The model is NOT moved. Measured on real files: centre.x is 0 and
+         * min.y is 0 on every grounded champion, so Riot authors these with the
+         * origin at the ground contact point, already centred. The game places
+         * them exactly this way.
+         *
+         * It used to be re-centred on the bounding box, and that is what put
+         * Ambessa off her pedestal: her unposed box is 4.4 x 2.9 with its
+         * centre 0.45 forward, so "centring" shoved her backwards off a
+         * pedestal that was already right. Nocturne floats a unit off the
+         * ground and SHOULD — he is a wraith — which a floor-snap would also
+         * have broken.
+         */
         const rig = new THREE.Group()
         rig.add(model)
         scene.add(rig)
+
+        // Top of the silhouette above the ground, which is what "how tall is
+        // this champion" means for framing.
+        const height = Math.max(1e-4, box.max.y)
 
         // Further back and looking higher: the champion should sit IN the
         // panel with air around it, not fill the frame.
@@ -132,25 +140,14 @@ export default function ChampionStage({ championId, championKey, className }: Pr
         camera.far = height * 60
         camera.updateProjectionMatrix()
 
-        // ⚠️ Sized from the HEIGHT, not from the footprint.
-        //
-        // size.x / size.z come from Box3.setFromObject, which on a SKINNED mesh
-        // measures the bind pose rather than the pose on screen and overstates
-        // it badly — on Alistar it produced rings twice the width of the
-        // champion, running off both edges of the panel. Height is the one
-        // measure that survives that, and it is already what the camera is
-        // framed from, so the pedestal and the framing cannot disagree.
-        //
-        // In the RIG, not the scene: the pedestal turns with the champion
-        // standing on it. A model revolving above a fixed disc looks like it is
-        // sliding rather than being carried.
-        rig.add(pedestal(height * 0.3))
+        // The smaller of the real footprint and a share of the height. The
+        // footprint alone is too wide for a champion who leans (Nocturne's
+        // posed depth is 1.5 while he is 1.56 tall); the height alone ignores
+        // how much floor a champion actually covers.
+        const footprint = Math.max(size.x, size.z) / 2
+        rig.add(pedestal(Math.min(footprint, height * 0.32)))
 
-        const clip = idleClip(gltf.animations) as THREE.AnimationClip | undefined
-        if (clip) {
-          mixer = new THREE.AnimationMixer(model)
-          mixer.clipAction(clip).play()
-        } else {
+        if (!clip) {
           console.log("[stage] no idle among:", gltf.animations.map((a) => a.name).join(", "))
         }
 
@@ -219,6 +216,41 @@ export default function ChampionStage({ championId, championKey, className }: Pr
       )}
     </div>
   )
+}
+
+/**
+ * A bounding box that matches what is ON SCREEN.
+ *
+ * ⚠️ Box3.setFromObject is the wrong tool here and cost three rounds of bugs.
+ * On a SkinnedMesh it unions geometry bounds from the BIND POSE, which for
+ * Ambessa is 4.4 x 2.9 x 1.6 — a T-pose with the arms out — against a real
+ * posed silhouette of 1.1 x 2.0 x 1.0. Every number taken from it was wrong:
+ * the pedestal came out twice too wide, the "centring" shifted champions off
+ * it, and the height used for framing was a third too large.
+ *
+ * SkinnedMesh.computeBoundingBox() applies the current bone transforms, so it
+ * describes the pose the viewer is actually looking at — provided the mixer has
+ * been advanced first.
+ */
+function posedBounds(root: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3()
+
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh & { isSkinnedMesh?: boolean; boundingBox?: THREE.Box3 | null }
+    if (!(mesh as THREE.Mesh).isMesh) return
+
+    let local: THREE.Box3 | null | undefined
+    if (mesh.isSkinnedMesh) {
+      ;(mesh as unknown as THREE.SkinnedMesh).computeBoundingBox()
+      local = mesh.boundingBox
+    } else {
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
+      local = mesh.geometry.boundingBox
+    }
+    if (local) box.union(local.clone().applyMatrix4(mesh.matrixWorld))
+  })
+
+  return box
 }
 
 /**
