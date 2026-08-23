@@ -53,6 +53,8 @@ type LoadingPlayer = {
 type AppState = {
   gold: TeamGold | null
   loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
+  loadingNudge?: { x: number; y: number; scale: number }
+  loadingCalibrating?: boolean
   goldBar?: boolean
   notice: Notice | null
   levelHint: Ability | null
@@ -78,6 +80,8 @@ export default function Overlay() {
   // shop notices silently unreachable earlier.
   const [goldBar, setGoldBar] = useState(false)
   const [loading, setLoading] = useState<AppState["loading"]>(null)
+  const [loadNudge, setLoadNudge] = useState({ x: 0, y: 0, scale: 0 })
+  const [calibrating, setCalibrating] = useState(false)
 
   useEffect(() => {
     const report = () =>
@@ -100,6 +104,8 @@ export default function Overlay() {
       setGold(s.gold ?? null)
       setGoldBar(s.goldBar === true)
       setLoading(s.loading ?? null)
+      setLoadNudge(s.loadingNudge ?? { x: 0, y: 0, scale: 0 })
+      setCalibrating(s.loadingCalibrating === true)
     }
     void window.desktop.getState().then(apply as never)
     return window.desktop.onState(apply as never)
@@ -110,7 +116,7 @@ export default function Overlay() {
       {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
       {gold && goldBar && <GoldBar g={gold} />}
       {gold && hud && <TopRightGold g={gold} hud={hud} />}
-      {loading && <LoadingBoard board={loading} />}
+      {loading && <LoadingBoard board={loading} nudge={loadNudge} outline={calibrating} />}
       {/* keyed on the notice so each one ASSEMBLES; without this React would
           reuse the element and the second notification would simply appear. */}
       {notice && <Card key={notice.raisedAt} n={notice} visible={visible} />}
@@ -153,7 +159,17 @@ export default function Overlay() {
  *
  * Ranks arrive after the names, because they are ten network lookups.
  */
-function LoadingBoard({ board }: { board: NonNullable<AppState["loading"]> }) {
+function LoadingBoard({
+  board,
+  nudge,
+  outline,
+}: {
+  board: NonNullable<AppState["loading"]>
+  nudge: { x: number; y: number; scale: number }
+  /** Draw the whole card, not just the strip — the only way to judge whether
+   *  the boxes land on the game's own cards. */
+  outline: boolean
+}) {
   const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
 
   useEffect(() => {
@@ -162,7 +178,7 @@ function LoadingBoard({ board }: { board: NonNullable<AppState["loading"]> }) {
     return () => window.removeEventListener("resize", onResize)
   }, [])
 
-  const boxes = loadingCards(screen)
+  const boxes = loadingCards(screen, undefined, nudge)
   const rows = [...board.allies, ...board.enemies]
 
   return (
@@ -173,8 +189,21 @@ function LoadingBoard({ board }: { board: NonNullable<AppState["loading"]> }) {
         const accent = box.ally ? "#00d992" : "#ff6286"
 
         return (
+          <div key={i} className="pointer-events-none">
+          {outline && (
+            <span
+              className="pointer-events-none absolute"
+              style={{
+                left: box.left,
+                top: box.top,
+                width: box.width,
+                height: box.height,
+                boxShadow: `inset 0 0 0 1px ${accent}66`,
+                background: `${accent}0d`,
+              }}
+            />
+          )}
           <div
-            key={i}
             className="ds-in pointer-events-none absolute"
             style={{
               left: box.left,
@@ -224,6 +253,7 @@ function LoadingBoard({ board }: { board: NonNullable<AppState["loading"]> }) {
                 {p.championId ?? p.name}
               </p>
             </div>
+          </div>
           </div>
         )
       })}

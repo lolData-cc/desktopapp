@@ -20010,6 +20010,8 @@ var state = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
+  loadingNudge: { x: 0, y: 0, scale: 0 },
+  loadingCalibrating: false,
   lastPlayed: null,
   region: null,
   finalBoard: null,
@@ -20024,7 +20026,9 @@ function push(patch2) {
     ...state,
     goldBar: goldVisible,
     gold: state.settings.goldReadout || goldVisible ? state.gold : null,
-    loading: state.settings.loadingBoard ? state.loading : null
+    loading: state.settings.loadingBoard ? state.loading : null,
+    loadingNudge: state.loadingNudge,
+    loadingCalibrating: state.loadingCalibrating
   });
   if (state.phase !== before) {
     if (state.phase === "InProgress" || state.phase === "Reconnect")
@@ -20980,6 +20984,35 @@ ipcMain.on("overlay:demo", async () => {
     }
   }
   raiseNotice("dragon", NOTIFY_LEAD, "Fire", { ours: ["Water", "Air", "Fire"], theirs: ["Earth"] }, DEMO_MS);
+});
+var DEMO_LOADING = {
+  allies: [
+    { name: "you", championId: "Lillia", championKey: 876, rank: "DIAMOND II" },
+    { name: "ally two", championId: "Thresh", championKey: 412, rank: "PLATINUM I" },
+    { name: "ally three", championId: "Jhin", championKey: 202, rank: "DIAMOND IV" },
+    { name: "ally four", championId: "Sylas", championKey: 517, rank: "EMERALD II" },
+    { name: "ally five", championId: "Vayne", championKey: 67, rank: null }
+  ],
+  enemies: [
+    { name: "enemy one", championId: "Akali", championKey: 84, rank: "MASTER" },
+    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: "DIAMOND I" },
+    { name: "enemy three", championId: "Kalista", championKey: 429, rank: "PLATINUM II" },
+    { name: "enemy four", championId: "Xerath", championKey: 101, rank: "DIAMOND III" },
+    { name: "enemy five", championId: "Senna", championKey: 235, rank: "EMERALD I" }
+  ]
+};
+ipcMain.on("loading:demo", () => {
+  const on = state.loading === null;
+  push({
+    loading: on ? DEMO_LOADING : null,
+    loadingCalibrating: on
+  });
+  syncOverlay();
+});
+ipcMain.on("loading:calibrate", (_e, patch2) => {
+  const loadingNudge = { ...state.loadingNudge, ...patch2 };
+  push({ loadingNudge });
+  console.log("[loading] nudge x=%s y=%s scale=%s", loadingNudge.x.toFixed(4), loadingNudge.y.toFixed(4), loadingNudge.scale.toFixed(3));
 });
 ipcMain.on("overlay:demo-recal", () => {
   raiseNotice("build", 0, null, { ours: [], theirs: [] }, DEMO_MS, undefined, undefined, {

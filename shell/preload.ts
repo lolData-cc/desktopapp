@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("desktop", {
   pinOverlay: (on: boolean) => ipcRenderer.send("overlay:pin", on),
   demoOverlay: () => ipcRenderer.send("overlay:demo"),
   demoRecal: () => ipcRenderer.send("overlay:demo-recal"),
+  demoLoading: () => ipcRenderer.send("loading:demo"),
+  calibrateLoading: (patch: unknown) => ipcRenderer.send("loading:calibrate", patch),
   importRunes: () => ipcRenderer.invoke("runes:import"),
   chooseRunes: (index: number) => ipcRenderer.send("runes:choose", index),
   refreshProfile: () => ipcRenderer.invoke("profile:refresh"),

@@ -23,6 +23,10 @@ export default function Settings({
   // Two steps, because placing this has two phases: get it clear of the kill
   // counter, then close the last few pixels. One step size would make the first
   // phase twenty presses or the second one impossible.
+  const nudgeLoad = (patch: Partial<{ x: number; y: number; scale: number }>) =>
+    window.desktop.calibrateLoading(patch)
+  const L = s.loadingNudge ?? { x: 0, y: 0, scale: 0 }
+
   const fine = 0.004    // ~8px at 1920
   const coarse = 0.02   // ~38px at 1920
 
@@ -55,6 +59,21 @@ export default function Settings({
         className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30"
       >
         show 5s
+      </button>
+
+      {/* The loading screen lasts 40 seconds, once per game — the hardest
+          thing in this app to iterate on. This shows the board with invented
+          players AND the full card outlines, which is the only way to tell
+          whether the boxes land on the game's own cards. */}
+      <button
+        type="button"
+        onClick={() => window.desktop.demoLoading()}
+        title="Show the loading board with made-up players and card outlines"
+        className={`win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
+          s.loadingCalibrating ? "bg-jade/15 text-jade" : "text-flash/30"
+        }`}
+      >
+        loading{s.loadingCalibrating ? " · on" : ""}
       </button>
 
       {/* The recap is only reachable by finishing a match, which makes it the
@@ -171,6 +190,31 @@ export default function Settings({
         <Btn label="+" onClick={() => nudgeTop({ size: t.size + 0.04 })} />
         <Btn label="⟲" onClick={() => nudgeTop({ x: 0, y: 0, size: 0 })} />
       </div>
+      {/* Alignment for the loading cards. Usable DURING a real loading
+          screen: it lasts long enough to alt-tab out, nudge, and go back. */}
+      <span className="w-full basis-full" />
+      <span className="font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">
+        loading cards
+      </span>
+      <div className="flex items-center gap-1">
+        <Btn label="«" onClick={() => nudgeLoad({ x: L.x - coarse })} />
+        <Btn label="←" onClick={() => nudgeLoad({ x: L.x - fine })} />
+        <Btn label="→" onClick={() => nudgeLoad({ x: L.x + fine })} />
+        <Btn label="»" onClick={() => nudgeLoad({ x: L.x + coarse })} />
+        <Btn label="↑" onClick={() => nudgeLoad({ y: L.y - fine })} />
+        <Btn label="↓" onClick={() => nudgeLoad({ y: L.y + fine })} />
+        <span className="ml-2 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/25">size</span>
+        <Btn label="−" onClick={() => nudgeLoad({ scale: L.scale - 0.01 })} />
+        <Btn label="+" onClick={() => nudgeLoad({ scale: L.scale + 0.01 })} />
+        <Btn label="⟲" onClick={() => nudgeLoad({ x: 0, y: 0, scale: 0 })} />
+      </div>
+      <span className="font-jetbrains text-[9px] tabular-nums text-flash/20">
+        {(L.x || L.y || L.scale)
+          ? `${(L.x * 1920).toFixed(0)}px ${(L.y * 1080).toFixed(0)}px ${L.scale.toFixed(2)}`
+          : "as measured"}
+      </span>
+
+      <span className="w-full basis-full" />
       <span className="font-jetbrains text-[9px] tabular-nums text-flash/20">
         {(t.x || t.y || t.size)
           ? `${(t.x * 1920).toFixed(0)}px ${(t.y * 1080).toFixed(0)}px ${t.size.toFixed(2)}`

@@ -168,6 +168,20 @@ export type AppState = {
   pinned: boolean
   hud: { scale: number; nudge: HudNudge; topRight?: HudNudge; source: string | null }
   settings: AppSettings
+  /**
+   * The ten players while the LOADING SCREEN is up.
+   *
+   * A different source from `scoreboard`: the Live Client Data API does not
+   * answer until the player is in the world, so during loading the roster can
+   * only come from the client's own session.
+   */
+  loading: {
+    allies: { name: string; championId: string | null; championKey: number; rank: string | null }[]
+    enemies: { name: string; championId: string | null; championKey: number; rank: string | null }[]
+  } | null
+  /** Alignment for the loading cards, and whether the outlines are drawn. */
+  loadingNudge: { x: number; y: number; scale: number }
+  loadingCalibrating: boolean
   /** The champion we last played, from the live game rather than from match
    *  history — which the client writes at its own pace. */
   lastPlayed: { championId: string; championKey: number } | null
@@ -197,6 +211,8 @@ declare global {
       pinOverlay(on: boolean): void
       demoOverlay(): void
       demoRecal(): void
+      demoLoading(): void
+      calibrateLoading(patch: Partial<{ x: number; y: number; scale: number }>): void
       importRunes(): Promise<void>
       chooseRunes(index: number): void
       refreshProfile(): Promise<void>

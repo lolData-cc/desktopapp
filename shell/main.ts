@@ -171,6 +171,9 @@ export type AppState = {
    * loading the only roster available comes from the client's own session.
    */
   loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
+  /** Alignment for the loading cards, and whether the outlines are drawn. */
+  loadingNudge: { x: number; y: number; scale: number }
+  loadingCalibrating: boolean
   /**
    * The champion we last played, taken from the live game rather than from
    * match history.
@@ -224,6 +227,8 @@ let state: AppState = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
+  loadingNudge: { x: 0, y: 0, scale: 0 },
+  loadingCalibrating: false,
   lastPlayed: null,
   region: null,
   finalBoard: null,
@@ -248,6 +253,8 @@ function push(patch: Partial<AppState>): void {
     // is not kept alive for something nobody asked to see.
     gold: state.settings.goldReadout || goldVisible ? state.gold : null,
     loading: state.settings.loadingBoard ? state.loading : null,
+    loadingNudge: state.loadingNudge,
+    loadingCalibrating: state.loadingCalibrating,
   })
 
   // The overlay is only ever on screen during a match. Tying it to the phase
@@ -1831,6 +1838,49 @@ ipcMain.on("overlay:demo", async () => {
  * departed from it, and "I cannot see the thing I just built" is a bad way to
  * work on it.
  */
+/**
+ * Ten invented players, so the loading board can be looked at without playing.
+ *
+ * ⚠️ Its real job is ALIGNMENT, not appearance. The cards are only useful if
+ * they land on the game's own, and that cannot be judged over a desktop — so
+ * this also turns on the full card outlines, and the arrows below move them.
+ * The loading screen lasts long enough to alt-tab out of, nudge, and go back.
+ */
+const DEMO_LOADING = {
+  allies: [
+    { name: "you", championId: "Lillia", championKey: 876, rank: "DIAMOND II" },
+    { name: "ally two", championId: "Thresh", championKey: 412, rank: "PLATINUM I" },
+    { name: "ally three", championId: "Jhin", championKey: 202, rank: "DIAMOND IV" },
+    { name: "ally four", championId: "Sylas", championKey: 517, rank: "EMERALD II" },
+    { name: "ally five", championId: "Vayne", championKey: 67, rank: null },
+  ],
+  enemies: [
+    { name: "enemy one", championId: "Akali", championKey: 84, rank: "MASTER" },
+    { name: "enemy two", championId: "Qiyana", championKey: 246, rank: "DIAMOND I" },
+    { name: "enemy three", championId: "Kalista", championKey: 429, rank: "PLATINUM II" },
+    { name: "enemy four", championId: "Xerath", championKey: 101, rank: "DIAMOND III" },
+    { name: "enemy five", championId: "Senna", championKey: 235, rank: "EMERALD I" },
+  ],
+}
+
+ipcMain.on("loading:demo", () => {
+  const on = state.loading === null
+  push({
+    loading: on ? DEMO_LOADING : null,
+    loadingCalibrating: on,
+  })
+  syncOverlay()
+})
+
+ipcMain.on("loading:calibrate", (_e, patch: Partial<{ x: number; y: number; scale: number }>) => {
+  const loadingNudge = { ...state.loadingNudge, ...patch }
+  push({ loadingNudge })
+  // Logged so an alignment done by eye against a real loading screen can be
+  // read back and folded into the model as a new default.
+  console.log("[loading] nudge x=%s y=%s scale=%s",
+    loadingNudge.x.toFixed(4), loadingNudge.y.toFixed(4), loadingNudge.scale.toFixed(3))
+})
+
 ipcMain.on("overlay:demo-recal", () => {
   raiseNotice("build", 0, null, { ours: [], theirs: [] }, DEMO_MS, undefined, undefined, {
     items: [4633],
