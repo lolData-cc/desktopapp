@@ -19316,6 +19316,71 @@ function nextObjective(events, gameTime, players = [], mapTerrain) {
   };
 }
 
+// src/data/itemCost.ts
+var CDN2 = "https://cdn2.loldata.cc";
+var FALLBACK_PATCH2 = "16.16.1";
+var costs = null;
+var loading = null;
+async function load3() {
+  if (costs)
+    return costs;
+  if (loading)
+    return loading;
+  loading = (async () => {
+    let patch2 = FALLBACK_PATCH2;
+    const marker = await fetch(`${CDN2}/_current_version.txt`).catch(() => null);
+    if (marker?.ok)
+      patch2 = (await marker.text()).trim() || FALLBACK_PATCH2;
+    const res = await fetch(`${CDN2}/${patch2}/data/en_US/item.json`);
+    if (!res.ok)
+      throw new Error(`item data ${res.status}`);
+    const json = await res.json();
+    const map = new Map;
+    for (const [id, item] of Object.entries(json.data)) {
+      const total = item.gold?.total ?? 0;
+      if (total > 0)
+        map.set(Number(id), total);
+    }
+    costs = map;
+    return map;
+  })();
+  try {
+    return await loading;
+  } finally {
+    loading = null;
+  }
+}
+async function inventoryValue(items) {
+  const table = await load3();
+  let total = 0;
+  for (const it of items) {
+    const price = table.get(it.itemID) ?? 0;
+    total += price * Math.max(1, it.count ?? 1);
+  }
+  return total;
+}
+var warmItemCosts = () => void load3().catch(() => {
+  return;
+});
+
+// src/data/teamGold.ts
+async function teamGold(players, myTeam) {
+  if (!players.length || !myTeam)
+    return null;
+  const out = { ours: 0, theirs: 0, oursCounted: 0, theirsCounted: 0 };
+  for (const p of players) {
+    const value = await inventoryValue(p.items ?? []);
+    if (p.team === myTeam) {
+      out.ours += value;
+      out.oursCounted++;
+    } else {
+      out.theirs += value;
+      out.theirsCounted++;
+    }
+  }
+  return out;
+}
+
 // shell/main.ts
 var __dirname2 = dirname2(fileURLToPath(import.meta.url));
 var DEV_URL2 = process.env.VITE_DEV_SERVER_URL;
@@ -19328,6 +19393,7 @@ var state = {
   patch: null,
   select: null,
   notice: null,
+  gold: null,
   levelHint: null,
   runes: null,
   runeImport: { state: "idle" },
@@ -19448,27 +19514,35 @@ var tick = null;
 var noticeTimer = null;
 var announced = null;
 var hideTimer = null;
+function overlayWanted() {
+  return state.notice !== null || state.gold !== null || state.levelHint !== null;
+}
+function syncOverlay() {
+  if (overlayWanted()) {
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+    showOverlay();
+  } else if (!hideTimer) {
+    hideTimer = setTimeout(() => {
+      hideTimer = null;
+      hideOverlay();
+    }, EXIT_MS);
+  }
+}
 function dropNotice() {
   if (noticeTimer)
     clearTimeout(noticeTimer);
   noticeTimer = null;
   push({ notice: null });
-  if (hideTimer)
-    clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    hideTimer = null;
-    hideOverlay();
-  }, EXIT_MS);
+  syncOverlay();
 }
 function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS) {
   if (noticeTimer)
     clearTimeout(noticeTimer);
   push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally } });
-  if (hideTimer) {
-    clearTimeout(hideTimer);
-    hideTimer = null;
-  }
-  showOverlay();
+  syncOverlay();
   if (!state.pinned)
     noticeTimer = setTimeout(dropNotice, ms);
 }
@@ -19485,6 +19559,12 @@ async function readObjective() {
   if (!next)
     return;
   const tally = dragonTally(events, players ?? [], me);
+  const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null;
+  const gold = await teamGold(players ?? [], myTeam).catch(() => null);
+  if (gold) {
+    push({ gold });
+    syncOverlay();
+  }
   const spawnAt = Math.round(stats.gameTime + next.inSeconds);
   if (state.pinned) {
     raiseNotice(next.kind, next.inSeconds, next.element, tally);
@@ -19498,6 +19578,7 @@ async function readObjective() {
 function startGameClock() {
   if (tick)
     return;
+  warmItemCosts();
   announced = null;
   readObjective();
   tick = setInterval(() => void readObjective(), POLL_MS);
@@ -19506,6 +19587,8 @@ function stopGameClock() {
   if (tick)
     clearInterval(tick);
   tick = null;
+  push({ gold: null });
+  syncOverlay();
   announced = null;
   dropNotice();
 }
@@ -19549,8 +19632,7 @@ ipcMain.on("hud:calibrate", (_e, patch2) => {
 });
 ipcMain.on("hud:hint", (_e, ability) => {
   push({ levelHint: ability });
-  if (ability)
-    showOverlay();
+  syncOverlay();
 });
 ipcMain.on("overlay:report", (_e, info) => {
   const d = screen2.getPrimaryDisplay();

@@ -26,6 +26,8 @@ import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName } from "..
 import { abilityBox, NO_NUDGE, type HudNudge } from "../src/data/hud"
 import { readHudSettings } from "../src/live/hudConfig"
 import { dragonTally, nextObjective, type DragonElement, type DragonTally } from "../src/data/objectives"
+import { teamGold, type TeamGold } from "../src/data/teamGold"
+import { warmItemCosts } from "../src/data/itemCost"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
@@ -61,6 +63,9 @@ export type AppState = {
     /** Who has taken which drakes so far. */
     tally: DragonTally
   } | null
+  /** What each side is carrying, summed from the inventories the scoreboard
+   *  shows. Null outside a game. */
+  gold: TeamGold | null
   /** Which ability the skill order says to level next, or null for none.
    *  Static advice: it is the order we already publish for this champion. */
   levelHint: "Q" | "W" | "E" | "R" | null
@@ -115,6 +120,7 @@ let state: AppState = {
   patch: null,
   select: null,
   notice: null,
+  gold: null,
   levelHint: null,
   runes: null,
   runeImport: { state: "idle" },
@@ -295,15 +301,37 @@ let announced: number | null = null
 
 let hideTimer: ReturnType<typeof setTimeout> | null = null
 
+/**
+ * Whether the overlay window should be on screen at all.
+ *
+ * Driven by CONTENT rather than by one feature. It used to be raised and
+ * dropped by the dragon notice alone, so anything else drawn in that window —
+ * the gold bar, the ability outline — could only appear during a notification,
+ * which is not when they are wanted.
+ */
+function overlayWanted(): boolean {
+  return state.notice !== null || state.gold !== null || state.levelHint !== null
+}
+
+function syncOverlay(): void {
+  if (overlayWanted()) {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
+    showOverlay()
+  } else if (!hideTimer) {
+    // Delayed, so a notice's exit animation has somewhere to play.
+    hideTimer = setTimeout(() => { hideTimer = null; hideOverlay() }, EXIT_MS)
+  }
+}
+
 function dropNotice(): void {
   if (noticeTimer) clearTimeout(noticeTimer)
   noticeTimer = null
   push({ notice: null })
 
-  // Clearing the notice only STARTS the exit. The window has to stay up until
-  // it has played, or there is nothing on screen to animate.
-  if (hideTimer) clearTimeout(hideTimer)
-  hideTimer = setTimeout(() => { hideTimer = null; hideOverlay() }, EXIT_MS)
+  // Clearing the notice only STARTS the exit, and the window may still be
+  // wanted for the gold bar — so this asks what should be on screen rather
+  // than assuming nothing is.
+  syncOverlay()
 }
 
 function raiseNotice(
@@ -318,8 +346,7 @@ function raiseNotice(
 
   // A notice arriving during another's exit cancels the pending hide, so the
   // window does not disappear out from under the new one.
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
-  showOverlay()
+  syncOverlay()
   if (!state.pinned) noticeTimer = setTimeout(dropNotice, ms)
 }
 
@@ -336,6 +363,14 @@ async function readObjective(): Promise<void> {
   if (!next) return
 
   const tally = dragonTally(events, players ?? [], me)
+
+  // Same read, no extra request: /playerlist already carries every inventory.
+  const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null
+  const gold = await teamGold(players ?? [], myTeam).catch(() => null)
+  if (gold) {
+    push({ gold })
+    syncOverlay()
+  }
 
   // Absolute spawn time on the game clock — stable across polls, unlike the
   // remaining seconds, so it identifies THIS spawn and not a moment.
@@ -360,6 +395,9 @@ async function readObjective(): Promise<void> {
 
 function startGameClock(): void {
   if (tick) return
+  // The price table is 1MB and only needed once; fetch it as the game starts
+  // rather than in the middle of the first scoreboard read.
+  warmItemCosts()
   announced = null
   void readObjective()
   tick = setInterval(() => void readObjective(), POLL_MS)
@@ -368,6 +406,8 @@ function startGameClock(): void {
 function stopGameClock(): void {
   if (tick) clearInterval(tick)
   tick = null
+  push({ gold: null })
+  syncOverlay()
   announced = null
   dropNotice()
 }
@@ -430,9 +470,7 @@ ipcMain.on("hud:calibrate", (_e, patch: Partial<HudNudge>) => {
 })
 ipcMain.on("hud:hint", (_e, ability: "Q" | "W" | "E" | "R" | null) => {
   push({ levelHint: ability })
-  // The outline lives in the overlay window, so that window has to be on screen
-  // for it to be visible at all.
-  if (ability) showOverlay()
+  syncOverlay()
 })
 
 ipcMain.on("overlay:report", (_e, info: { w: number; h: number; dpr: number }) => {

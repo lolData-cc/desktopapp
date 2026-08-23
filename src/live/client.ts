@@ -33,7 +33,15 @@ export type GameEvent = {
   Stolen?: string
 }
 
-export type PlayerSlot = { riotId?: string; summonerName?: string; team: string }
+export type PlayerSlot = {
+  riotId?: string
+  summonerName?: string
+  team: string
+  championName?: string
+  /** Present for EVERY player, ours and theirs — the same inventory the
+   *  scoreboard shows when Tab is held. */
+  items?: { itemID: number; count?: number }[]
+}
 
 function get<T>(path: string): Promise<T | null> {
   return new Promise((resolve) => {

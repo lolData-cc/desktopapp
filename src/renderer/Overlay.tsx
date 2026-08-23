@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { abilityBox, type Ability, type HudNudge } from "../data/hud"
+import { goldBarBox } from "../data/scoreboard"
+import { shortGold, type TeamGold } from "../data/teamGold"
 import { dragonIcon, dragonLabel, elementGlyph, elementName, soulLabel } from "./dragonIcon"
 import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../data/objectives"
 
@@ -25,6 +27,7 @@ type Notice = {
 }
 type HudPlacement = { scale: number; nudge: HudNudge; source: string | null }
 type AppState = {
+  gold: TeamGold | null
   notice: Notice | null
   levelHint: Ability | null
   hud: HudPlacement
@@ -42,6 +45,7 @@ export default function Overlay() {
   const [visible, setVisible] = useState(false)
   const [hint, setHint] = useState<Ability | null>(null)
   const [hud, setHud] = useState<HudPlacement | null>(null)
+  const [gold, setGold] = useState<TeamGold | null>(null)
 
   useEffect(() => {
     const report = () =>
@@ -61,6 +65,7 @@ export default function Overlay() {
       else setVisible(false)
       setHint(s.levelHint ?? null)
       setHud(s.hud ?? null)
+      setGold(s.gold ?? null)
     }
     void window.desktop.getState().then(apply as never)
     return window.desktop.onState(apply as never)
@@ -69,9 +74,112 @@ export default function Overlay() {
   return (
     <div className="pointer-events-none h-full w-full bg-transparent">
       {hint && hud && <AbilityOutline ability={hint} hud={hud} />}
+      {gold && <GoldBar g={gold} />}
       {/* keyed on the notice so each one ASSEMBLES; without this React would
           reuse the element and the second notification would simply appear. */}
       {notice && <Card key={notice.raisedAt} n={notice} visible={visible} />}
+    </div>
+  )
+}
+
+/**
+ * Team gold, above the scoreboard.
+ *
+ * Summed from the inventories Tab already shows, priced with static DDragon
+ * data — arithmetic over public information rather than a number the game
+ * hands out. The game deliberately does not total this for you, which is worth
+ * knowing before relying on it.
+ *
+ * The BAR is the reading and the numbers are there to be exact: a lead is a
+ * length, and a length is read without counting digits. It fills from the
+ * centre outward so an even game sits still and a growing lead pushes visibly
+ * to one side.
+ *
+ * Says how many players it counted whenever that is not five a side. A total
+ * built from six players presented as if it were from ten is a wrong number
+ * nobody could check.
+ */
+function GoldBar({ g }: { g: TeamGold }) {
+  const [screen, setScreen] = useState({ width: window.innerWidth, height: window.innerHeight })
+
+  useEffect(() => {
+    const onResize = () => setScreen({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
+
+  const box = goldBarBox(screen)
+  const total = g.ours + g.theirs
+  // An empty scoreboard is 50/50 rather than a divide by zero.
+  const share = total > 0 ? g.ours / total : 0.5
+  const lead = g.ours - g.theirs
+  const partial = g.oursCounted !== 5 || g.theirsCounted !== 5
+
+  const ahead = lead > 0
+  const accent = ahead ? "#00d992" : "#FFB615"
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute"
+      style={{ left: box.left, top: box.top, width: box.width }}
+    >
+      {/* Feathered ground, reaching zero inside its own box so no edge shows
+          over the game — the same treatment the side notification uses. */}
+      <span
+        className="pointer-events-none absolute -inset-x-8 -inset-y-5 blur-[8px]"
+        style={{
+          background:
+            "radial-gradient(60% 66% at 50% 50%," +
+            " rgba(4,10,12,0.86) 0%, rgba(4,10,12,0.55) 34%," +
+            " rgba(4,10,12,0.22) 50%, rgba(4,10,12,0) 64%)",
+        }}
+      />
+
+      <div className="relative flex items-center gap-2.5" style={{ textShadow: "0 1px 5px rgba(0,0,0,0.95)" }}>
+        <span className="w-[52px] shrink-0 text-right font-chakrapetch text-[15px] font-bold tabular-nums text-jade">
+          {shortGold(g.ours)}
+        </span>
+
+        <span className="relative h-[5px] min-w-0 flex-1 overflow-hidden rounded-[2px] bg-flash/[0.07]">
+          <span
+            className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-500 ease-out"
+            style={{ width: `${share * 100}%`, background: "rgba(0,217,146,0.75)" }}
+          />
+          <span
+            className="absolute inset-y-0 right-0 rounded-[2px] transition-[width] duration-500 ease-out"
+            style={{ width: `${(1 - share) * 100}%`, background: "rgba(255,182,21,0.6)" }}
+          />
+          {/* the halfway mark, so a lead is measured against something */}
+          <span className="absolute inset-y-[-2px] left-1/2 w-px bg-liquirice/80" />
+        </span>
+
+        <span className="w-[52px] shrink-0 font-chakrapetch text-[15px] font-bold tabular-nums text-citrine">
+          {shortGold(g.theirs)}
+        </span>
+      </div>
+
+      <p className="relative mt-1 text-center font-jetbrains text-[8.5px] uppercase tracking-[0.22em]">
+        {lead === 0 ? (
+          <span className="text-flash/30">even</span>
+        ) : (
+          <span style={{ color: accent }}>
+            {/* the number keeps its case — the label's uppercase was turning
+                2.5k into 2.5K while the totals above still said k */}
+            <span className="normal-case">
+              {ahead ? "+" : "−"}
+              {shortGold(Math.abs(lead))}
+            </span>{" "}
+            {ahead ? "ahead" : "behind"}
+          </span>
+        )}
+        {partial && (
+          <span className="text-flash/25">
+            {" · "}
+            {g.oursCounted}v{g.theirsCounted} counted
+          </span>
+        )}
+      </p>
     </div>
   )
 }
