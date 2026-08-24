@@ -98,59 +98,57 @@ export function Attached({ s }: { s: AppState }) {
     <div className="relative grid h-full place-items-center">
       <Watermark text={copy.title} />
 
-      {/* The totem: everything about WHO you are, stacked, floating clear of
-          the word behind it. */}
-      <div className="totem relative flex w-[300px] flex-col items-center">
-        <DsPanel className="w-full" eyebrow={copy.sub || "client"}>
-          <div className="flex flex-col items-center px-6 py-7">
-            {s.summoner ? (
-              <img
-                src={`${CDN}/${patch}/img/profileicon/${s.summoner.iconId}.png`}
-                alt=""
-                className="h-[86px] w-[86px] rounded-[4px] ring-1 ring-jade/25"
-                style={{ boxShadow: "0 6px 26px rgba(0,0,0,0.6)" }}
-                onError={(e) => {
-                  // An icon we cannot fetch leaves the frame, not a broken glyph.
-                  ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
-                }}
-              />
-            ) : (
-              <div className="h-[86px] w-[86px] rounded-[4px] bg-jade/[0.05] ring-1 ring-jade/15" />
-            )}
+      {/* The totem: who you are, and nothing else.
+          ⚠️ No DsPanel here on purpose. That frame — rails, ticks, a shoulder,
+          an eyebrow — is right on a card that has to hold its own against the
+          game, and it is noise in front of a word the size of the screen. The
+          watermark is the ornament on this screen; a second one competes with
+          it. A plate and a hairline are enough to lift the card off the word. */}
+      <div
+        className="totem relative flex w-[240px] flex-col items-center rounded-[5px] px-6 py-7"
+        style={{
+          // Opaque enough to read against, translucent enough that the word
+          // behind still passes through it — which is the whole reason the
+          // card is floating over it rather than beside it.
+          background: "rgba(6,13,16,0.72)",
+          boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.14), 0 18px 50px rgba(0,0,0,0.55)",
+          backdropFilter: "blur(3px)",
+        }}
+      >
+        {s.summoner ? (
+          <img
+            src={`${CDN}/${patch}/img/profileicon/${s.summoner.iconId}.png`}
+            alt=""
+            className="h-[76px] w-[76px] rounded-full ring-1 ring-jade/25"
+            onError={(e) => {
+              // An icon we cannot fetch leaves the frame, not a broken glyph.
+              ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
+            }}
+          />
+        ) : (
+          <div className="h-[76px] w-[76px] rounded-full bg-jade/[0.05] ring-1 ring-jade/15" />
+        )}
 
-            <p className="mt-3.5 max-w-full truncate font-chakrapetch text-[21px] font-bold leading-none">
-              {s.summoner?.name ?? "—"}
-            </p>
-            <p className="mt-1.5 font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/30">
-              #{s.summoner?.tag ?? "—"} · lvl {s.summoner?.level ?? 0}
-            </p>
+        <p className="mt-4 max-w-full truncate font-chakrapetch text-[20px] font-bold leading-none">
+          {s.summoner?.name ?? "—"}
+        </p>
 
-            {r?.tier && (
-              <>
-                <span aria-hidden className="my-4 h-px w-full bg-jade/[0.14]" />
-                <div className="flex items-center gap-2.5">
-                  <img
-                    src={`${RANKS}/${r.tier.toLowerCase()}.png`}
-                    alt=""
-                    className="h-9 w-9"
-                    onError={(e) => {
-                      ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
-                    }}
-                  />
-                  <div className="text-left">
-                    <p className="font-chakrapetch text-[13.5px] font-bold leading-none">
-                      {title(r.tier)}
-                      {r.division ? ` ${r.division}` : ""}
-                    </p>
-                    <p className="mt-1 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/30">
-                      {r.leaguePoints} lp · {r.wins}w {r.losses}l
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
+        {r?.tier && (
+          <div className="mt-3.5 flex items-center gap-2">
+            <img
+              src={`${RANKS}/${r.tier.toLowerCase()}.png`}
+              alt=""
+              className="h-7 w-7"
+              onError={(e) => {
+                ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
+              }}
+            />
+            <p className="font-jetbrains text-[10px] uppercase tracking-[0.18em] text-flash/45">
+              {title(r.tier)}
+              {r.division ? ` ${r.division}` : ""}
+            </p>
           </div>
-        </DsPanel>
+        )}
       </div>
 
       {/* Champion select still gets its own room, below the totem — in champ
