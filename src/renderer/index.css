@@ -84,11 +84,47 @@ body {
 }
 .beat { animation: beat 2.4s ease-in-out infinite; }
 
+/**
+ * A control you can see before you point at it.
+ *
+ * ⚠️ This had NO resting surface — only a hover state — so every button in the
+ * app was a piece of text until the pointer happened to cross it. Nothing said
+ * "press me", which is the one job a button has.
+ *
+ * A hairline and a barely-there fill are enough: this is a dark interface, and
+ * an edge is all it takes to separate a control from a caption. The hover then
+ * has somewhere to go rather than being the entire signal.
+ */
 .win-btn {
-  transition: color 160ms ease, background-color 160ms ease;
+  cursor: pointer;
+  background: rgba(215, 216, 217, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(215, 216, 217, 0.13);
+  transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
-.win-btn:hover { background: rgba(0, 217, 146, 0.10); color: var(--jade); }
-.win-btn.danger:hover { background: rgba(255, 98, 134, 0.14); color: #ff6286; }
+.win-btn:hover {
+  background: rgba(0, 217, 146, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(0, 217, 146, 0.45);
+  color: var(--jade);
+}
+.win-btn:disabled { cursor: default; }
+.win-btn.danger:hover {
+  background: rgba(255, 98, 134, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 98, 134, 0.45);
+  color: #ff6286;
+}
+
+/**
+ * ⚠️ The exception: window chrome.
+ *
+ * Minimise and close are the operating system's furniture, not the page's. A
+ * box drawn around them would be the only framed thing in the title bar and
+ * would read as part of the app rather than as part of the window.
+ */
+.win-btn.bare {
+  background: transparent;
+  box-shadow: none;
+}
+.win-btn.bare:hover { box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .rise, .sweep, .beat { animation: none; }

@@ -280,7 +280,7 @@ function TitleBar({ s }: { s: AppState | null }) {
           type="button"
           onClick={() => window.desktop.minimise()}
           aria-label="Minimise"
-          className="win-btn ml-1 grid h-11 w-11 place-items-center text-flash/40"
+          className="win-btn bare ml-1 grid h-11 w-11 place-items-center text-flash/40"
         >
           <span className="block h-px w-[11px] bg-current" />
         </button>
@@ -288,7 +288,7 @@ function TitleBar({ s }: { s: AppState | null }) {
           type="button"
           onClick={() => window.desktop.close()}
           aria-label="Close"
-          className="win-btn danger grid h-11 w-11 place-items-center text-flash/40"
+          className="win-btn bare danger grid h-11 w-11 place-items-center text-flash/40"
         >
           <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden>
             <path d="M1 1 L10 10 M10 1 L1 10" stroke="currentColor" strokeWidth="1.3" fill="none" />
@@ -317,7 +317,7 @@ function Account({ s }: { s: AppState | null }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="win-btn flex h-8 items-center gap-2 rounded-[3px] pl-1 pr-2.5"
+        className="win-btn bare flex h-8 items-center gap-2 rounded-[3px] pl-1 pr-2.5"
       >
         {summoner ? (
           <img

@@ -178,27 +178,43 @@ function Head({
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
-          {(["all", "wins", "losses", "clips"] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => onOnly(k)}
-              disabled={k === "clips" && clips === 0}
-              className="h-7 px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] transition-colors disabled:opacity-25"
-              style={{
-                color: only === k ? "#00d992" : "rgba(215,216,217,0.35)",
-                background: only === k ? "rgba(0,217,146,0.07)" : "transparent",
-              }}
-            >
-              {k === "clips" ? `recorded ${clips ? `· ${clips}` : ""}` : k}
-            </button>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          {/**
+            * ⚠️ One frame around the four, not four loose words.
+            *
+            * These were transparent until selected, so three of them were
+            * captions and the fourth looked like a highlight. Enclosed, the
+            * group reads as a switch with one position chosen — which is what
+            * it is — and every position is visibly reachable.
+            */}
+          <div
+            className="flex items-center overflow-hidden rounded-[3px]"
+            style={{ boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.13)" }}
+          >
+            {(["all", "wins", "losses", "clips"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => onOnly(k)}
+                disabled={k === "clips" && clips === 0}
+                className="h-7 px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] transition-colors disabled:opacity-25"
+                style={{
+                  cursor: k === "clips" && clips === 0 ? "default" : "pointer",
+                  color: only === k ? "#040A0C" : "rgba(215,216,217,0.5)",
+                  background: only === k ? "#00d992" : "rgba(215,216,217,0.03)",
+                  fontWeight: only === k ? 700 : 400,
+                }}
+              >
+                {k === "clips" ? `recorded${clips ? ` · ${clips}` : ""}` : k}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             onClick={onRefresh}
             disabled={busy}
-            className="win-btn ml-1 h-7 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/35"
+            className="win-btn h-7 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/45"
           >
             {busy ? "reading" : "refresh"}
           </button>

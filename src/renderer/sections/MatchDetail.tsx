@@ -159,12 +159,31 @@ function Head({ match, onBack }: { match: Match; onBack: () => void }) {
 
   return (
     <div className="flex shrink-0 items-center gap-5">
+      {/**
+        * ⚠️ The one control that has to be found without looking for it.
+        *
+        * A bare "◂ matches" is a label; this is the only way out of the page
+        * short of Escape, so it gets a real surface, an arrow with room around
+        * it, and a hover that moves. Reading as a caption was the whole
+        * complaint.
+        */}
       <button
         type="button"
         onClick={onBack}
-        className="win-btn h-8 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/45"
+        title="Back to your matches — Escape does it too"
+        className="group flex h-9 shrink-0 items-center gap-2 rounded-[3px] pl-2.5 pr-4 transition-colors"
+        style={{
+          cursor: "pointer",
+          background: "rgba(215,216,217,0.055)",
+          boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.16)",
+        }}
       >
-        ◂ matches
+        <span className="font-jetbrains text-[12px] leading-none text-flash/50 transition-transform group-hover:-translate-x-[2px]">
+          ◂
+        </span>
+        <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/60">
+          matches
+        </span>
       </button>
 
       <h2
