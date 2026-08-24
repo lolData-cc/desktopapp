@@ -133,6 +133,25 @@ const AUDIO: { value: AppSettings["captureAudio"]; label: string; note: string }
 ]
 
 /**
+ * How much disk the recordings may take.
+ *
+ * ⚠️ A SIZE, not a number of games. Nobody runs out of games, they run out of
+ * disk — and a twelve-minute remake and a fifty-minute marathon are not the
+ * same amount of anything except "one". This replaced a fixed last-ten rule,
+ * which had to go the moment "unlimited" appeared beside it: a limit that still
+ * threw away the eleventh game would have made the word a lie.
+ */
+const BUDGETS: { value: number | null; label: string; note: string }[] = [
+  { value: 5, label: "5 GB", note: "About four games." },
+  { value: 25, label: "25 GB", note: "About nineteen games." },
+  {
+    value: null,
+    label: "No limit",
+    note: "Nothing is ever discarded. Your disk fills until you delete something here.",
+  },
+]
+
+/**
  * Recording, and the library behind it.
  *
  * ⚠️ The switch is OFF until the player turns it on, and the app says so in
@@ -159,6 +178,10 @@ function CaptureTab({
 
   const kept = s.recordings.filter((r) => r.kept).length
   const automatic = s.recordings.length - kept
+  const sum = (want: boolean) =>
+    s.recordings.filter((r) => r.kept === want).reduce((n, r) => n + r.bytes, 0)
+  const keptBytes = sum(true)
+  const autoBytes = sum(false)
 
   return (
     <div className="space-y-6">
@@ -221,11 +244,59 @@ function CaptureTab({
         </section>
       )}
 
+      {v.capture && (
+        <section>
+          <p className="mb-2 font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">
+            how much to keep
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {BUDGETS.map((b) => (
+              <button
+                key={b.label}
+                type="button"
+                onClick={() => set({ captureBudgetGb: b.value })}
+                className="rounded-[3px] px-3.5 py-2.5 text-left transition"
+                style={{
+                  background:
+                    v.captureBudgetGb === b.value ? "rgba(0,217,146,0.06)" : "rgba(215,216,217,0.022)",
+                  boxShadow:
+                    v.captureBudgetGb === b.value ? "inset 2px 0 0 0 rgba(0,217,146,0.5)" : undefined,
+                }}
+              >
+                <span
+                  className={`block font-chakrapetch text-[13px] font-bold ${
+                    v.captureBudgetGb === b.value ? "text-flash" : "text-flash/55"
+                  }`}
+                >
+                  {b.label}
+                </span>
+                <span className="mt-0.5 block font-chakrapetch text-[11px] leading-snug text-flash/30">
+                  {b.note}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* ⚠️ Said, not implied. Lowering this deletes files, and finding that
+              out afterwards is the wrong moment. */}
+          <p className="mt-2.5 max-w-[70ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
+            The oldest go first, and lowering this takes effect immediately.
+            Anything you have kept is outside the limit and is never discarded —
+            the newest recording is too, however large it is.
+          </p>
+        </section>
+      )}
+
       <section>
         <div className="mb-2 flex items-baseline gap-3">
           <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">library</p>
+          {/* ⚠️ The two totals apart, because they obey different rules. One is
+              spending the budget; the other is not in it at all. */}
           <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.16em] text-flash/25">
-            {automatic} of 10 automatic{kept > 0 ? ` · ${kept} kept` : ""} · {gb(s.libraryBytes)}
+            {gb(autoBytes)} automatic
+            {v.captureBudgetGb === null ? " · no limit" : ` of ${v.captureBudgetGb} GB`}
+            {kept > 0 ? ` · ${gb(keptBytes)} kept` : ""}
+            {" · "}{automatic + kept} game{automatic + kept === 1 ? "" : "s"}
           </p>
         </div>
 
@@ -233,14 +304,14 @@ function CaptureTab({
           <p className="max-w-[60ch] font-chakrapetch text-[12.5px] leading-snug text-flash/30">
             {v.capture
               ? "Nothing recorded yet. The next game you play lands here, and on the game itself over in Matches."
-              : "Recording is off. Turn it on and your games are kept here — the last ten, with the oldest dropped as new ones arrive."}
+              : "Recording is off. Turn it on and your games are kept here, up to the size you choose, with the oldest dropped as new ones arrive."}
           </p>
         ) : (
           <>
             <p className="mb-2 max-w-[60ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
               Watch them on the game they belong to, in Matches. This is what exists
-              and what it costs — keeping one takes it out of the ten, so the limit
-              can never delete something you asked to save.
+              and what it costs — keeping one takes it out of the budget, so the
+              limit can never delete something you asked to save.
             </p>
             <div className="space-y-1.5">
               {s.recordings.map((r, i) => (

@@ -535,6 +535,7 @@ const BASE = {
     loadingBoard: true,
     capture: true,
     captureAudio: "system",
+    captureBudgetGb: 25,
     objectiveNotices: true,
     buildNotices: true,
   },

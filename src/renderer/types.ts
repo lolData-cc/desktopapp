@@ -100,6 +100,8 @@ export type AppSettings = {
   loadingBoard: boolean
   capture: boolean
   captureAudio: "none" | "system" | "mic" | "both"
+  /** Gigabytes of automatic recordings to keep, or null for no limit. */
+  captureBudgetGb: number | null
   objectiveNotices: boolean
   buildNotices: boolean
 }

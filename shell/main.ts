@@ -18,8 +18,8 @@ import { ensureProtocol } from "./protocol"
 import { createSplash, dismissSplash } from "./splash"
 import { beginRecording, endRecording, mark, setResult, isRecording, captureError,
          readIndex, keepRecording, deleteRecording, revealRecording, librarySize,
-         destroyRecorder, serveClips, tidyLibrary, recordingClock,
-         type Recording } from "./capture"
+         destroyRecorder, serveClips, tidyLibrary, recordingClock, setCaptureBudget,
+         reprune, type Recording } from "./capture"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -1980,6 +1980,15 @@ ipcMain.handle("settings:set", async (_e, patch: Partial<AppSettings>) => {
     }
   }
 
+  // ⚠️ Applied straight away, and not only on the next recording. Lowering the
+  // budget is a request to reclaim disk NOW; leaving it until the next game
+  // would mean choosing 5 GB and watching 20 GB sit there.
+  if ("captureBudgetGb" in patch) {
+    setCaptureBudget(settings.captureBudgetGb)
+    await reprune().catch(() => undefined)
+    void pushRecordings()
+  }
+
   push({ settings })
   // A notice already on screen should not outlive the switch that turned its
   // kind off.
@@ -2520,6 +2529,7 @@ if (!gotLock) {
     // moment it is opened, and a handler registered later would answer the
     // first request with a network error the renderer reads as a dead file.
     serveClips()
+    setCaptureBudget((await readSettings()).captureBudgetGb)
     // A game interrupted by a crash or a power cut leaves a gigabyte behind
     // that nothing will ever open.
     void tidyLibrary()

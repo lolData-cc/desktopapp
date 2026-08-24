@@ -18862,7 +18862,10 @@ var CLIP_SCHEME = "loldata-clip";
 
 // shell/capture.ts
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
-var MAX_AUTOMATIC = 10;
+var budget = 25 * 1024 ** 3;
+function setCaptureBudget(gb) {
+  budget = gb === null ? null : Math.max(1, gb) * 1024 ** 3;
+}
 var dir = () => join3(app.getPath("userData"), "recordings");
 var indexFile = () => join3(dir(), "index.json");
 var win = null;
@@ -18923,6 +18926,8 @@ async function beginRecording(settings, about, changed, anyWindow = false) {
   lastError = null;
   onChange = changed;
   marked = new Set;
+  if (settings.captureBudgetGb !== undefined)
+    setCaptureBudget(settings.captureBudgetGb);
   const source = await leagueWindow(anyWindow);
   if (!source)
     return false;
@@ -19022,15 +19027,29 @@ async function finish() {
 }
 async function prune(all) {
   const kept = all.filter((r) => r.kept);
-  const automatic = all.filter((r) => !r.kept);
-  const doomed = automatic.slice(MAX_AUTOMATIC);
+  const automatic = all.filter((r) => !r.kept).sort((a, b) => b.startedAt - a.startedAt);
+  if (budget === null)
+    return [...kept, ...automatic].sort((a, b) => b.startedAt - a.startedAt);
+  const live = [];
+  const doomed = [];
+  let used = 0;
+  let full = false;
+  for (const r of automatic) {
+    if (!full && (live.length === 0 || used + r.bytes <= budget)) {
+      live.push(r);
+      used += r.bytes;
+      continue;
+    }
+    full = true;
+    doomed.push(r);
+  }
   for (const r of doomed) {
     await rm(r.file, { force: true }).catch(() => {
       return;
     });
-    console.log("[capture] dropped the oldest recording (%s)", r.championName ?? r.id);
+    console.log("[capture] dropped the oldest recording (%s, %s MB) — over the %s GB budget", r.championName ?? r.id, (r.bytes / 1048576).toFixed(0), (budget / 1073741824).toFixed(0));
   }
-  return [...kept, ...automatic.slice(0, MAX_AUTOMATIC)].sort((a, b) => b.startedAt - a.startedAt);
+  return [...kept, ...live].sort((a, b) => b.startedAt - a.startedAt);
 }
 var located = new Map;
 var remember = (all) => {
@@ -19051,6 +19070,11 @@ async function writeIndex(all) {
   await mkdir(dir(), { recursive: true });
   await writeFile(indexFile(), JSON.stringify(all, null, 2), "utf8");
   remember(all);
+}
+async function reprune() {
+  const pruned = await prune(await readIndex());
+  await writeIndex(pruned);
+  return pruned;
 }
 async function keepRecording(id, keep) {
   const all = await readIndex();
@@ -19334,6 +19358,7 @@ var DEFAULT_SETTINGS = {
   loadingBoard: true,
   capture: false,
   captureAudio: "system",
+  captureBudgetGb: 25,
   objectiveNotices: true,
   buildNotices: true
 };
@@ -21334,6 +21359,13 @@ ipcMain2.handle("settings:set", async (_e, patch2) => {
       console.log("[settings] login item failed: %s", e?.message);
     }
   }
+  if ("captureBudgetGb" in patch2) {
+    setCaptureBudget(settings.captureBudgetGb);
+    await reprune().catch(() => {
+      return;
+    });
+    pushRecordings();
+  }
   push({ settings });
   if (!settings.objectiveNotices || !settings.buildNotices)
     syncOverlay();
@@ -21670,6 +21702,7 @@ if (!gotLock) {
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
     console.log("[link] %s:// ok=%s via=%s named=%s%s", PROTOCOL, result.ok, result.via, result.named ?? false, result.command ? ` cmd=${result.command}` : "");
     serveClips();
+    setCaptureBudget((await readSettings()).captureBudgetGb);
     tidyLibrary();
     createWindow();
     createOverlay(join5(__dirname2, "preload.mjs"));

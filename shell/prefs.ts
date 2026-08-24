@@ -103,6 +103,21 @@ export type AppSettings = {
    * only" would be a switch that quietly did something else.
    */
   captureAudio: "none" | "system" | "mic" | "both"
+  /**
+   * How much disk the automatic recordings may use, in gigabytes — or null for
+   * no limit at all.
+   *
+   * ⚠️ This REPLACED a count of ten games, and it had to: "unlimited" beside a
+   * rule that still threw away the eleventh would be a lie printed on the
+   * screen. A size is also the honest unit — nobody runs out of games, they run
+   * out of disk, and a twelve-minute remake and a fifty-minute marathon are not
+   * the same amount of anything except "one".
+   *
+   * Recordings marked KEPT sit outside this budget entirely. It governs what
+   * gets discarded, and a kept recording is by definition the thing that does
+   * not.
+   */
+  captureBudgetGb: number | null
   /** Dragon and Baron warnings. */
   objectiveNotices: boolean
   /** "X is purchasable", boots advice, the opening build. */
@@ -116,6 +131,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   loadingBoard: true,
   capture: false,
   captureAudio: "system",
+  // ~19 games at 1080p — close to what the old ten-game rule cost, with room.
+  captureBudgetGb: 25,
   objectiveNotices: true,
   buildNotices: true,
 }

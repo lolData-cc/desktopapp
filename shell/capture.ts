@@ -54,7 +54,16 @@ export type Recording = {
   height: number
 }
 
-const MAX_AUTOMATIC = 10
+/**
+ * How much disk the automatic recordings may occupy, in bytes — or null for no
+ * limit. Held here and set from the settings, because prune() also runs from
+ * paths that have no settings in hand (keeping one, deleting one).
+ */
+let budget: number | null = 25 * 1024 ** 3
+
+export function setCaptureBudget(gb: number | null): void {
+  budget = gb === null ? null : Math.max(1, gb) * 1024 ** 3
+}
 
 const dir = () => join(app.getPath("userData"), "recordings")
 const indexFile = () => join(dir(), "index.json")
@@ -182,7 +191,11 @@ ipcMain.on("capture:failed", (_e, message: string) => {
  * "declined" without inspecting settings a second time.
  */
 export async function beginRecording(
-  settings: { capture: boolean; captureAudio: "none" | "system" | "mic" | "both" },
+  settings: {
+    capture: boolean
+    captureAudio: "none" | "system" | "mic" | "both"
+    captureBudgetGb?: number | null
+  },
   about: { championId: string | null; championName: string | null; queue: string | null },
   changed: () => void,
   /** Debug only: record our own window when there is no game, so the recorder
@@ -194,6 +207,7 @@ export async function beginRecording(
   lastError = null
   onChange = changed
   marked = new Set()
+  if (settings.captureBudgetGb !== undefined) setCaptureBudget(settings.captureBudgetGb)
 
   const source = await leagueWindow(anyWindow)
   if (!source) return false
@@ -369,15 +383,45 @@ async function finish(): Promise<void> {
  */
 async function prune(all: Recording[]): Promise<Recording[]> {
   const kept = all.filter((r) => r.kept)
-  const automatic = all.filter((r) => !r.kept)
+  const automatic = all.filter((r) => !r.kept).sort((a, b) => b.startedAt - a.startedAt)
 
-  const doomed = automatic.slice(MAX_AUTOMATIC)
-  for (const r of doomed) {
-    await rm(r.file, { force: true }).catch(() => undefined)
-    console.log("[capture] dropped the oldest recording (%s)", r.championName ?? r.id)
+  if (budget === null) return [...kept, ...automatic].sort((a, b) => b.startedAt - a.startedAt)
+
+  /**
+   * ⚠️ Newest first, and once one does not fit, everything older goes with it.
+   *
+   * Letting a smaller older recording slip into the gap left by a large one
+   * would make the library a set of whatever happened to fit rather than the
+   * games you last played — you would lose Tuesday and still have last month.
+   */
+  const live: Recording[] = []
+  const doomed: Recording[] = []
+  let used = 0
+  let full = false
+
+  for (const r of automatic) {
+    /**
+     * ⚠️ The newest survives whatever it costs. A fifty-minute game can be
+     * larger than the whole budget, and deleting it the instant it finished —
+     * the one recording somebody is certainly about to watch — is the worst
+     * thing this function could do.
+     */
+    if (!full && (live.length === 0 || used + r.bytes <= budget)) {
+      live.push(r)
+      used += r.bytes
+      continue
+    }
+    full = true
+    doomed.push(r)
   }
 
-  return [...kept, ...automatic.slice(0, MAX_AUTOMATIC)].sort((a, b) => b.startedAt - a.startedAt)
+  for (const r of doomed) {
+    await rm(r.file, { force: true }).catch(() => undefined)
+    console.log("[capture] dropped the oldest recording (%s, %s MB) — over the %s GB budget",
+      r.championName ?? r.id, (r.bytes / 1048576).toFixed(0), (budget / 1024 ** 3).toFixed(0))
+  }
+
+  return [...kept, ...live].sort((a, b) => b.startedAt - a.startedAt)
 }
 
 /**
@@ -408,6 +452,19 @@ async function writeIndex(all: Recording[]): Promise<void> {
   await mkdir(dir(), { recursive: true })
   await writeFile(indexFile(), JSON.stringify(all, null, 2), "utf8")
   remember(all)
+}
+
+/**
+ * Apply the budget to what is already on disk.
+ *
+ * Called when the budget CHANGES. Lowering it is a request to reclaim space
+ * now, and waiting until the next game would mean choosing 5 GB and watching
+ * 20 GB sit there until you happened to play.
+ */
+export async function reprune(): Promise<Recording[]> {
+  const pruned = await prune(await readIndex())
+  await writeIndex(pruned)
+  return pruned
 }
 
 /** Keep it, so the ring buffer stops counting it. */
