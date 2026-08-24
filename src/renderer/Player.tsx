@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { CDN, mmss, type Highlight, type Recording } from "./types"
+import { KIND, Timeline, pinsFrom } from "./PlayerMarks"
+import PlayerDraw, { type Stroke } from "./PlayerDraw"
 
 /**
  * Watching one back.
@@ -11,8 +13,8 @@ import { CDN, mmss, type Highlight, type Recording } from "./types"
  * skipped without hunting for it.
  *
  * So the timeline is the main control and the marks on it are the content.
- * Everything else gets out of the way — literally: once the video is running
- * the chrome fades out, and a movement of the mouse brings it back.
+ * Everything else gets out of the way — literally: leave the pointer alone and
+ * the whole interface leaves, and it assembles itself again when you move.
  */
 
 /**
@@ -25,46 +27,11 @@ import { CDN, mmss, type Highlight, type Recording } from "./types"
  */
 export const RUNUP = 2000
 
-/** How long the controls stay up once the video is running and the mouse is
- *  still. Long enough to aim at a button, short enough to stop being furniture. */
-const CHROME_MS = 2600
+/** How long the interface stays up with the pointer still. */
+const IDLE_MS = 2800
 
-/**
- * Marks closer together than this are ONE moment.
- *
- * A teamfight is not four things that happened; it is one thing, and drawing it
- * as four marks a few pixels apart makes a smear you can neither read nor hit.
- * The pin keeps the time of the FIRST mark — a fight starts where it starts —
- * and says how many.
- */
-const CLUSTER_MS = 10_000
-
-/** What each kind of moment looks like, everywhere it is drawn. */
-const KIND: Record<Highlight["kind"], { colour: string; label: string; letter: string }> = {
-  kill: { colour: "#00d992", label: "kill", letter: "K" },
-  multi: { colour: "#FFB615", label: "multi", letter: "M" },
-  death: { colour: "#ff6286", label: "death", letter: "D" },
-  assist: { colour: "#8f9295", label: "assist", letter: "A" },
-}
-
-/** One box on the timeline: a moment, or a run of them too close to separate. */
-type Pin = { at: number; kind: Highlight["kind"]; count: number; label: string }
-
-function pinsFrom(marks: Highlight[]): Pin[] {
-  const out: Pin[] = []
-  for (const m of marks) {
-    // ⚠️ Only the same KIND merges. A kill and a death in one fight are the two
-    // halves of the story, and collapsing them into "3 things happened" throws
-    // away which way it went.
-    const open = [...out].reverse().find((p) => p.kind === m.kind)
-    if (open && m.at - open.at < CLUSTER_MS) {
-      open.count++
-      continue
-    }
-    out.push({ at: m.at, kind: m.kind, count: 1, label: m.label })
-  }
-  return out
-}
+/** A single click waits this long to see whether a second one is coming. */
+const DOUBLE_MS = 230
 
 export default function Player({
   rec,
@@ -80,7 +47,8 @@ export default function Player({
 }) {
   const video = useRef<HTMLVideoElement | null>(null)
   const panel = useRef<HTMLDivElement | null>(null)
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const idle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   /**
    * ⚠️ The length comes from the SHELL, not from the file.
@@ -101,6 +69,12 @@ export default function Player({
   const [buffered, setBuffered] = useState(0)
   const [chrome, setChrome] = useState(true)
   const [full, setFull] = useState(false)
+  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
+  const [drawing, setDrawing] = useState(false)
+  const [strokes, setStrokes] = useState<Stroke[]>([])
+  /** Bumped every time the chrome comes back, so the assembly replays. */
+  const [build, setBuild] = useState(0)
 
   const marks = useMemo(() => [...rec.highlights].sort((a, b) => a.at - b.at), [rec.highlights])
   const pins = useMemo(() => pinsFrom(marks), [marks])
@@ -187,24 +161,29 @@ export default function Player({
   )
 
   /**
-   * The controls, and when they are not there.
+   * The interface comes back, and starts counting down again.
    *
-   * ⚠️ Only ever hidden while the video is RUNNING. A paused player with no
-   * controls is a picture you cannot get out of, and every second spent
-   * waggling a mouse to find the close button is a second of thinking the app
-   * has frozen.
+   * ⚠️ It goes away whether or not the video is running. That is a change from
+   * how this behaved, and it is deliberate: a still frame you are studying is
+   * exactly when a control strip across the bottom is in the way. The pointer
+   * moving anywhere brings everything back within one frame, and Escape always
+   * closes the player whatever is on screen.
    */
   const wake = useCallback(() => {
-    setChrome(true)
-    if (hideTimer.current) clearTimeout(hideTimer.current)
-    if (!playing) return
-    hideTimer.current = setTimeout(() => setChrome(false), CHROME_MS)
-  }, [playing])
+    setChrome((was) => {
+      if (!was) setBuild((n) => n + 1)
+      return true
+    })
+    if (idle.current) clearTimeout(idle.current)
+    // While drawing, the interface is the tool. It does not vanish mid-stroke.
+    if (drawing) return
+    idle.current = setTimeout(() => setChrome(false), IDLE_MS)
+  }, [drawing])
 
   useEffect(() => {
     wake()
     return () => {
-      if (hideTimer.current) clearTimeout(hideTimer.current)
+      if (idle.current) clearTimeout(idle.current)
     }
   }, [wake])
 
@@ -221,6 +200,38 @@ export default function Player({
     return () => document.removeEventListener("fullscreenchange", on)
   }, [])
 
+  // Volume lives on the element; this keeps the two in step.
+  useEffect(() => {
+    const v = video.current
+    if (!v) return
+    v.volume = volume
+    v.muted = muted
+  }, [volume, muted])
+
+  /**
+   * ⚠️ A click waits to find out whether it is half of a double.
+   *
+   * Double-click goes fullscreen, and without this the two clicks underneath it
+   * also toggle play twice — the picture stutters on its way to filling the
+   * screen for no reason anyone could explain.
+   */
+  const onVideoClick = () => {
+    if (drawing) return
+    if (clickTimer.current) clearTimeout(clickTimer.current)
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      toggle()
+    }, DOUBLE_MS)
+  }
+
+  const onVideoDouble = () => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    if (!drawing) fullscreen()
+  }
+
   // Escape, space, arrows. A player without them is a player nobody uses twice.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -231,6 +242,8 @@ export default function Player({
       if (e.key === "Escape") return void (document.fullscreenElement ? undefined : onClose())
       if (e.key === " ") return void (e.preventDefault(), toggle())
       if (e.key === "f") return void fullscreen()
+      if (e.key === "m") return void setMuted((m) => !m)
+      if (e.key === "d") return void setDrawing((d) => !d)
       if (e.key === "ArrowLeft") return void (e.preventDefault(), seek(at - (e.shiftKey ? 1 : 5)))
       if (e.key === "ArrowRight") return void (e.preventDefault(), seek(at + (e.shiftKey ? 1 : 5)))
       if (e.key === "ArrowUp") return void (e.preventDefault(), step(-1))
@@ -240,6 +253,16 @@ export default function Player({
     return () => window.removeEventListener("keydown", onKey)
   })
 
+  /** Drawing on a moving picture is drawing on nothing. */
+  const enterDrawing = () => {
+    setDrawing((was) => {
+      if (!was) video.current?.pause()
+      else setStrokes([])
+      return !was
+    })
+    wake()
+  }
+
   /** What you are watching right now, when it is one of the marked moments. */
   const nearest = useMemo(() => {
     let hit: Highlight | null = null
@@ -247,7 +270,9 @@ export default function Player({
     return hit
   }, [marks, at])
 
-  const veil = chrome || !playing
+  // Nothing hides while the recording is still being opened: an empty black
+  // rectangle with no interface is indistinguishable from a crash.
+  const veil = chrome || !ready || !!failed
 
   /**
    * ⚠️ Rendered into the BODY, not where it sits in the tree.
@@ -268,10 +293,6 @@ export default function Player({
     <div
       ref={panel}
       onMouseMove={wake}
-      /* Below the title bar and BESIDE the menu, not over either — the window
-         still has to be draggable and closable while a game plays, and the
-         navigation has to stay reachable. Fullscreen overrides both, in
-         index.css. */
       className="clip-player fixed bottom-0 left-[196px] right-0 top-11 z-50 overflow-hidden bg-black"
     >
       <video
@@ -279,7 +300,8 @@ export default function Player({
         src={window.desktop.clipUrl(rec.id)}
         className="absolute inset-0 h-full w-full object-contain"
         style={{ opacity: ready ? 1 : 0, transition: "opacity 240ms ease" }}
-        onClick={toggle}
+        onClick={onVideoClick}
+        onDoubleClick={onVideoDouble}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onSeeked={() => setSeeking(false)}
@@ -292,6 +314,8 @@ export default function Player({
           setFailed("This recording could not be opened. The file may have been moved or deleted.")
         }
       />
+
+      <PlayerDraw active={drawing} strokes={strokes} onChange={setStrokes} />
 
       {!ready && !failed && (
         <div className="absolute inset-0 grid place-items-center">
@@ -313,7 +337,7 @@ export default function Player({
           the one thing worth reading mid-fight, and it is not a control. */}
       {ready && nearest && (
         <div
-          className="pointer-events-none absolute left-5 top-5 flex items-center gap-2 px-2.5 py-1"
+          className="pointer-events-none absolute left-5 top-5 z-20 flex items-center gap-2 px-2.5 py-1"
           style={{
             background: "rgba(4,10,12,0.72)",
             boxShadow: `inset 2px 0 0 0 ${KIND[nearest.kind].colour}`,
@@ -331,32 +355,17 @@ export default function Player({
         </div>
       )}
 
-      {/* The one big control, until it has been used. */}
-      {ready && !playing && !failed && (
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label="Play"
-          className="absolute inset-0 grid place-items-center"
-        >
-          <span
-            className="grid h-16 w-16 place-items-center rounded-full transition-transform hover:scale-110"
-            style={{ background: "rgba(4,10,12,0.6)", boxShadow: "0 0 0 1px rgba(0,217,146,0.35)" }}
-          >
-            <svg width="20" height="22" viewBox="0 0 20 22" aria-hidden>
-              <path d="M2 1 L19 11 L2 21 Z" fill="#00d992" />
-            </svg>
-          </span>
-        </button>
-      )}
+      {ready && !playing && !failed && !drawing && <BigPlay onClick={toggle} at={at} />}
 
-      {/* ── the chrome, which comes and goes ─────────────────────────────── */}
+      {drawing && <DrawBanner onClear={() => setStrokes([])} onDone={enterDrawing} count={strokes.length} />}
+
+      {/* ── the chrome ───────────────────────────────────────────────────── */}
 
       <header
-        className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-3.5 px-5 py-4 transition-opacity duration-300"
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-3.5 px-5 py-4 transition-opacity duration-300"
         style={{
           opacity: veil ? 1 : 0,
-          background: "linear-gradient(rgba(4,10,12,0.85), rgba(4,10,12,0))",
+          background: "linear-gradient(rgba(4,10,12,0.88), rgba(4,10,12,0))",
         }}
       >
         {rec.championId && (
@@ -387,11 +396,7 @@ export default function Player({
             on={rec.kept}
             onClick={() => void window.desktop.keepRecording(rec.id, !rec.kept)}
           />
-          <Minimal
-            label="file"
-            title="Show the file on disk"
-            onClick={() => void window.desktop.revealRecording(rec.id)}
-          />
+          <Minimal label="file" title="Show the file on disk" onClick={() => void window.desktop.revealRecording(rec.id)} />
           <button
             type="button"
             onClick={onClose}
@@ -405,27 +410,325 @@ export default function Player({
         </div>
       </header>
 
-      <Transport
-        at={at}
-        total={total}
-        buffered={buffered}
-        pins={pins}
-        playing={playing}
-        seeking={seeking}
-        full={full}
-        visible={veil}
-        hasNext={pins.some((p) => p.at > at * 1000 + RUNUP + 400)}
-        onToggle={toggle}
-        onSeek={seek}
-        onNext={() => step(1)}
-        onFullscreen={fullscreen}
-      />
+      <div
+        className="absolute inset-x-0 bottom-0 z-20 px-5 pb-4 pt-16 transition-opacity duration-300"
+        style={{
+          opacity: veil ? 1 : 0,
+          pointerEvents: veil ? "auto" : "none",
+          background: "linear-gradient(rgba(4,10,12,0), rgba(4,10,12,0.9))",
+        }}
+      >
+        {/* ⚠️ The cluster sits ABOVE the bar and centred, floating, rather than
+            in a row beside the clock. It is the thing you reach for; the bar is
+            the thing you read. Putting them on one line made both worse. */}
+        <Cluster
+          key={build}
+          playing={playing}
+          full={full}
+          drawing={drawing}
+          muted={muted}
+          volume={volume}
+          hasNext={pins.some((p) => p.at > at * 1000 + RUNUP + 400)}
+          onToggle={toggle}
+          onNext={() => step(1)}
+          onFullscreen={fullscreen}
+          onDraw={enterDrawing}
+          onMute={() => setMuted((m) => !m)}
+          onVolume={(x) => {
+            setVolume(x)
+            setMuted(x === 0)
+          }}
+        />
+
+        <Timeline at={at} total={total} buffered={buffered} pins={pins} onSeek={seek} runup={RUNUP} />
+
+        <div className="mt-1.5 flex items-center gap-3">
+          <p className="font-jetbrains text-[10px] tabular-nums text-flash/45">
+            {mmss(at)} <span className="text-flash/20">/ {mmss(total)}</span>
+          </p>
+          {seeking && (
+            <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/25">seeking</span>
+          )}
+          <span className="ml-auto font-jetbrains text-[8.5px] uppercase tracking-[0.18em] text-flash/[0.18]">
+            double-click for fullscreen · ↑↓ moments · d draws
+          </span>
+        </div>
+      </div>
     </div>,
     document.body
   )
 }
 
-/* ── the chrome ──────────────────────────────────────────────────────────── */
+/* ── the cluster ─────────────────────────────────────────────────────────── */
+
+const PLATE = "polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px))"
+
+/**
+ * The controls, as floating plates.
+ *
+ * ⚠️ Remounted whenever the interface returns, which is what replays the
+ * assembly. Each plate opens from a slit of light, its top edge draws across,
+ * and the glyph lands last — staggered outwards from the centre, so the thing
+ * you press most arrives first.
+ */
+function Cluster({
+  playing,
+  full,
+  drawing,
+  muted,
+  volume,
+  hasNext,
+  onToggle,
+  onNext,
+  onFullscreen,
+  onDraw,
+  onMute,
+  onVolume,
+}: {
+  playing: boolean
+  full: boolean
+  drawing: boolean
+  muted: boolean
+  volume: number
+  hasNext: boolean
+  onToggle: () => void
+  onNext: () => void
+  onFullscreen: () => void
+  onDraw: () => void
+  onMute: () => void
+  onVolume: (v: number) => void
+}) {
+  return (
+    <div className="mb-5 flex items-end justify-center gap-2.5">
+      <Plate delay={120} label={drawing ? "Stop drawing" : "Draw on the frame"} on={drawing} onClick={onDraw}>
+        <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden>
+          <path d="M2 16 L2.8 12.4 L12.2 3 L15 5.8 L5.6 15.2 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M11 4.2 L13.8 7" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </Plate>
+
+      <Volume delay={60} muted={muted} volume={volume} onMute={onMute} onVolume={onVolume} />
+
+      {/* The one you reach for, and it is bigger for it. */}
+      <Plate delay={0} big label={playing ? "Pause" : "Play"} onClick={onToggle}>
+        {playing ? (
+          <svg width="15" height="18" viewBox="0 0 15 18" aria-hidden>
+            <path d="M1 0h4v18H1z M10 0h4v18h-4z" fill="currentColor" />
+          </svg>
+        ) : (
+          <svg width="16" height="18" viewBox="0 0 16 18" aria-hidden>
+            <path d="M2 0 L16 9 L2 18 Z" fill="currentColor" />
+          </svg>
+        )}
+      </Plate>
+
+      <Plate delay={60} label="Next moment" disabled={!hasNext} onClick={onNext}>
+        <svg width="17" height="15" viewBox="0 0 18 16" aria-hidden>
+          <path d="M1 1 L11 8 L1 15 Z" fill="currentColor" />
+          <path d="M13.5 1 h3.5 v14 h-3.5 z" fill="currentColor" />
+        </svg>
+      </Plate>
+
+      <Plate delay={120} label={full ? "Leave fullscreen" : "Fullscreen"} on={full} onClick={onFullscreen}>
+        {full ? (
+          <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden>
+            <path d="M7 1 v6 h-6 M11 17 v-6 h6" fill="none" stroke="currentColor" strokeWidth="1.7" />
+          </svg>
+        ) : (
+          <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden>
+            <path d="M1 7 v-6 h6 M17 11 v6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" />
+          </svg>
+        )}
+      </Plate>
+    </div>
+  )
+}
+
+function Plate({
+  children,
+  label,
+  onClick,
+  delay,
+  big,
+  on,
+  disabled,
+}: {
+  children: React.ReactNode
+  label: string
+  onClick: () => void
+  delay: number
+  big?: boolean
+  on?: boolean
+  disabled?: boolean
+}) {
+  const size = big ? 58 : 46
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      className="ds-build group relative grid shrink-0 place-items-center transition-colors disabled:pointer-events-none disabled:opacity-25"
+      style={{
+        width: size,
+        height: size,
+        animationDelay: `${delay}ms`,
+        clipPath: PLATE,
+        background: on ? "rgba(0,217,146,0.16)" : "rgba(4,10,12,0.72)",
+        color: on ? "#00d992" : "#d7d8d9",
+        boxShadow: on
+          ? "inset 0 0 0 1px rgba(0,217,146,0.55)"
+          : "inset 0 0 0 1px rgba(215,216,217,0.14)",
+        backdropFilter: "blur(6px)",
+      }}
+    >
+      {/* The edge that draws itself, and then lives as the plate's highlight. */}
+      <span
+        aria-hidden
+        className="ds-edge absolute left-0 top-0 h-px"
+        style={{ width: `calc(100% - 9px)`, background: on ? "#00d992" : "rgba(0,217,146,0.4)", animationDelay: `${delay + 60}ms` }}
+      />
+      <span className="ds-glyph transition-colors group-hover:text-jade" style={{ animationDelay: `${delay + 140}ms` }}>
+        {children}
+      </span>
+    </button>
+  )
+}
+
+/** The speaker, with its slider folded away until it is pointed at. */
+function Volume({
+  delay,
+  muted,
+  volume,
+  onMute,
+  onVolume,
+}: {
+  delay: number
+  muted: boolean
+  volume: number
+  onMute: () => void
+  onVolume: (v: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const level = muted ? 0 : volume
+
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {open && (
+        <div
+          className="absolute bottom-[calc(100%+8px)] left-1/2 flex h-[104px] w-[38px] -translate-x-1/2 items-center justify-center"
+          style={{ background: "rgba(4,10,12,0.9)", clipPath: PLATE, boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.14)" }}
+        >
+          {/* ⚠️ Rotated rather than a bespoke vertical control: a range input
+              keeps the keyboard and the pointer behaviour the platform already
+              knows, which a div with a drag handler would have to reinvent
+              badly. */}
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.02}
+            value={level}
+            aria-label="Volume"
+            onChange={(e) => onVolume(Number(e.target.value))}
+            className="clip-volume"
+          />
+        </div>
+      )}
+
+      <Plate delay={delay} label={muted ? "Unmute" : "Mute"} on={muted} onClick={onMute}>
+        <svg width="18" height="16" viewBox="0 0 20 16" aria-hidden>
+          <path d="M1 5.5 h3.5 L9 1.5 v13 L4.5 10.5 H1 Z" fill="currentColor" />
+          {muted ? (
+            <path d="M12.5 5 L17.5 11 M17.5 5 L12.5 11" stroke="currentColor" strokeWidth="1.6" fill="none" />
+          ) : (
+            <>
+              <path d="M12 5.6 a3.4 3.4 0 0 1 0 4.8" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={level > 0.1 ? 1 : 0.25} />
+              <path d="M14.6 3.4 a6.8 6.8 0 0 1 0 9.2" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={level > 0.55 ? 1 : 0.25} />
+            </>
+          )}
+        </svg>
+      </Plate>
+    </div>
+  )
+}
+
+/* ── the rest ────────────────────────────────────────────────────────────── */
+
+/**
+ * The one control before anything has been pressed.
+ *
+ * ⚠️ Not a circle with a triangle in it. Every other surface in this app is
+ * built from cut corners and straight lines, and a soft round button was the
+ * one shape from a different set — it read as a placeholder because that is
+ * what it looked like. This is a plate with the same cut, standing inside its
+ * own corner brackets, and it says what it will do.
+ */
+function BigPlay({ onClick, at }: { onClick: () => void; at: number }) {
+  const started = at > 0.6
+  return (
+    <button type="button" onClick={onClick} aria-label="Play" className="absolute inset-0 z-20 grid place-items-center">
+      <span className="relative grid place-items-center" style={{ width: 132, height: 132 }}>
+        {/* corner brackets, which pull outwards on hover */}
+        {[
+          { x: 0, y: 0, d: "M0 22 V0 H22" },
+          { x: 1, y: 0, d: "M0 0 H22 V22" },
+          { x: 0, y: 1, d: "M0 0 V22 H22" },
+          { x: 1, y: 1, d: "M22 0 V22 H0" },
+        ].map((c, i) => (
+          <svg
+            key={i}
+            width="22"
+            height="22"
+            viewBox="0 0 22 22"
+            aria-hidden
+            className="absolute transition-all duration-300 group-hover:opacity-100"
+            style={{
+              [c.x ? "right" : "left"]: 0,
+              [c.y ? "bottom" : "top"]: 0,
+              opacity: 0.5,
+            }}
+          >
+            <path d={c.d} fill="none" stroke="#00d992" strokeWidth="1.4" />
+          </svg>
+        ))}
+
+        <span
+          className="ds-build grid place-items-center transition-transform duration-200 hover:scale-105"
+          style={{
+            width: 84,
+            height: 84,
+            clipPath: PLATE,
+            background: "rgba(4,10,12,0.7)",
+            boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.5), 0 0 34px rgba(0,217,146,0.16)",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          <svg width="24" height="27" viewBox="0 0 24 27" aria-hidden>
+            <path d="M3 1 L23 13.5 L3 26 Z" fill="#00d992" />
+          </svg>
+        </span>
+
+        <span className="absolute -bottom-1 font-jetbrains text-[9px] uppercase tracking-[0.34em] text-jade/60">
+          {started ? "resume" : "play"}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** While drawing, what the pointer is for and how to stop. */
+function DrawBanner({ onClear, onDone, count }: { onClear: () => void; onDone: () => void; count: number }) {
+  return (
+    <div className="pointer-events-auto absolute right-5 top-5 z-20 flex items-center gap-2 px-3 py-2"
+      style={{ background: "rgba(4,10,12,0.9)", boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.35)" }}>
+      <span className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-jade">drawing</span>
+      <Minimal label="clear" title="Wipe the frame" onClick={onClear} on={false} />
+      <Minimal label="done" title="Stop drawing and wipe" onClick={onDone} on={count > 0} />
+    </div>
+  )
+}
 
 const Minimal = ({
   label,
@@ -449,238 +752,3 @@ const Minimal = ({
     {label}
   </button>
 )
-
-/**
- * The timeline, and the three things you actually press.
- *
- * ⚠️ Over the picture, not under it. A control strip that holds its own row
- * takes that height from the video for the whole session; one that floats is
- * only there while it is wanted. It fades with the rest of the chrome.
- */
-function Transport({
-  at,
-  total,
-  buffered,
-  pins,
-  playing,
-  seeking,
-  full,
-  visible,
-  hasNext,
-  onToggle,
-  onSeek,
-  onNext,
-  onFullscreen,
-}: {
-  at: number
-  total: number
-  buffered: number
-  pins: Pin[]
-  playing: boolean
-  seeking: boolean
-  full: boolean
-  visible: boolean
-  hasNext: boolean
-  onToggle: () => void
-  onSeek: (s: number) => void
-  onNext: () => void
-  onFullscreen: () => void
-}) {
-  const bar = useRef<HTMLDivElement | null>(null)
-  const [hover, setHover] = useState<number | null>(null)
-
-  const fromX = (clientX: number) => {
-    const box = bar.current?.getBoundingClientRect()
-    if (!box) return 0
-    return Math.max(0, Math.min(1, (clientX - box.left) / box.width)) * total
-  }
-
-  return (
-    <div
-      className="absolute inset-x-0 bottom-0 px-5 pb-4 pt-10 transition-opacity duration-300"
-      style={{
-        opacity: visible ? 1 : 0,
-        pointerEvents: visible ? "auto" : "none",
-        background: "linear-gradient(rgba(4,10,12,0), rgba(4,10,12,0.88))",
-      }}
-    >
-      {/* ⚠️ Tall enough to hold the pins. They ARE the interface here — a
-          hairline with dots on it would make the one thing worth clicking the
-          hardest thing to hit. */}
-      <div
-        ref={bar}
-        className="relative h-[30px] cursor-pointer"
-        onMouseMove={(e) => setHover(fromX(e.clientX))}
-        onMouseLeave={() => setHover(null)}
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId)
-          onSeek(fromX(e.clientX))
-        }}
-        onPointerMove={(e) => {
-          if (e.buttons === 1) onSeek(fromX(e.clientX))
-        }}
-      >
-        <span
-          className="absolute inset-x-0 bottom-[6px] h-[3px]"
-          style={{ background: "rgba(215,216,217,0.10)" }}
-        />
-        <span
-          className="absolute bottom-[6px] left-0 h-[3px]"
-          style={{ width: `${(buffered / total) * 100}%`, background: "rgba(215,216,217,0.18)" }}
-        />
-        <span
-          className="absolute bottom-[6px] left-0 h-[3px]"
-          style={{ width: `${(at / total) * 100}%`, background: "#00d992" }}
-        />
-
-        {pins.map((p, i) => (
-          <PinBox key={i} p={p} left={Math.min(100, (p.at / 1000 / total) * 100)} onSeek={onSeek} />
-        ))}
-
-        {/* the head */}
-        <span
-          aria-hidden
-          className="absolute bottom-[2px] h-[11px] w-[3px] -translate-x-1/2"
-          style={{
-            left: `${(at / total) * 100}%`,
-            background: "#d7d8d9",
-            boxShadow: "0 0 8px rgba(0,217,146,0.7)",
-          }}
-        />
-
-        {hover !== null && (
-          <span
-            className="pointer-events-none absolute -top-[2px] -translate-x-1/2 font-jetbrains text-[9px] tabular-nums text-flash/50"
-            style={{ left: `${(hover / total) * 100}%` }}
-          >
-            {mmss(hover)}
-          </span>
-        )}
-      </div>
-
-      {/* ⚠️ Three controls, and no more. Everything else this player does is on
-          a key, and a row of eight buttons is how a video player stops feeling
-          like part of the app it is in. */}
-      <div className="mt-2 flex items-center gap-2">
-        <Control onClick={onToggle} label={playing ? "Pause" : "Play"}>
-          {playing ? (
-            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden>
-              <path d="M0 0h3v12H0z M7 0h3v12H7z" fill="currentColor" />
-            </svg>
-          ) : (
-            <svg width="11" height="12" viewBox="0 0 11 12" aria-hidden>
-              <path d="M1 0 L11 6 L1 12 Z" fill="currentColor" />
-            </svg>
-          )}
-        </Control>
-
-        <Control onClick={onNext} label="Next moment" disabled={!hasNext}>
-          <svg width="13" height="12" viewBox="0 0 13 12" aria-hidden>
-            <path d="M0 0 L7 6 L0 12 Z" fill="currentColor" />
-            <path d="M9 0 h3 v12 h-3 z" fill="currentColor" />
-          </svg>
-        </Control>
-
-        <Control onClick={onFullscreen} label={full ? "Leave fullscreen" : "Fullscreen"}>
-          {full ? (
-            <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden>
-              <path d="M5 1 v4 h-4 M8 12 v-4 h4" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
-          ) : (
-            <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden>
-              <path d="M1 5 v-4 h4 M12 8 v4 h-4" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
-          )}
-        </Control>
-
-        <p className="ml-1 font-jetbrains text-[10px] tabular-nums text-flash/45">
-          {mmss(at)} <span className="text-flash/20">/ {mmss(total)}</span>
-        </p>
-        {seeking && (
-          <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/25">
-            seeking
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/** ⚠️ Ghost buttons. A filled control over a picture is a hole punched in the
- *  frame; these read as an overlay because they barely exist until pointed at. */
-const Control = ({
-  onClick,
-  label,
-  disabled,
-  children,
-}: {
-  onClick: () => void
-  label: string
-  disabled?: boolean
-  children: React.ReactNode
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={label}
-    title={label}
-    disabled={disabled}
-    className="grid h-8 w-8 place-items-center text-flash/55 transition-colors hover:text-jade disabled:pointer-events-none disabled:text-flash/15"
-    style={{
-      background: "rgba(215,216,217,0.05)",
-      clipPath: "polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%)",
-    }}
-  >
-    {children}
-  </button>
-)
-
-/**
- * One moment on the timeline, as a box rather than a tick.
- *
- * ⚠️ It has to say WHAT happened, not just that something did. A row of
- * identical hairlines makes you click every one to find out which was the kill
- * and which was the death you would rather not watch again — so each pin
- * carries its letter and its colour, and a run of them carries the count.
- *
- * The corner is cut on the same diagonal as the rest of this app's plates, and
- * the box sits ON the track rather than beside it, so the bar still reads as a
- * bar.
- */
-function PinBox({ p, left, onSeek }: { p: Pin; left: number; onSeek: (s: number) => void }) {
-  const { colour, label, letter } = KIND[p.kind]
-  const many = p.count > 1
-  // Assists are the most numerous and the least worth stopping for. They are
-  // here, but they do not get to shout over the kills.
-  const quiet = p.kind === "assist"
-
-  return (
-    <button
-      type="button"
-      title={`${many ? `${p.count} × ` : ""}${label}${p.label ? ` · ${p.label}` : ""} — ${mmss(p.at / 1000)}`}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSeek(Math.max(0, (p.at - RUNUP) / 1000))
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-      className="absolute bottom-[6px] grid -translate-x-1/2 place-items-center transition-transform hover:scale-[1.18]"
-      style={{
-        left: `${left}%`,
-        height: quiet ? 13 : 17,
-        width: many ? 25 : quiet ? 13 : 17,
-        color: colour,
-        background: many ? `${colour}26` : "rgba(4,10,12,0.9)",
-        boxShadow: `0 0 0 1px ${colour}${quiet ? "55" : "cc"}${many ? `, 0 0 9px ${colour}66` : ""}`,
-        clipPath: "polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%)",
-        opacity: quiet ? 0.65 : 1,
-      }}
-    >
-      {!quiet && (
-        <span className="font-jetbrains text-[9px] font-bold leading-none tracking-tight">
-          {letter}
-          {many && <span className="text-[8px]">{p.count}</span>}
-        </span>
-      )}
-    </button>
-  )
-}
