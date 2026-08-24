@@ -414,3 +414,85 @@ body {
   .totem { animation: none; }
   .wm { animation-duration: 1ms; }
 }
+
+/* ── the metal card ───────────────────────────────────────────────────────
+   A physical object, not a lighter rectangle.
+
+   The first attempt was subtle — a 2% grain and a 5% sheen — and subtle is
+   indistinguishable from "slightly brighter". Metal needs CONTRAST: a lit rim
+   against a dark body, a specular band bright enough to be a reflection, and
+   an edge with thickness. Every value here is chosen to be SEEN.
+
+   Still translucent: the body tops out around 0.86 alpha, so the word behind
+   ghosts through, which is why the card floats over it rather than beside it. */
+.metal {
+  position: relative;
+  overflow: hidden;
+  /* Cool at the top, colder in the middle, warming again at the bottom — a
+     flat gradient reads as plastic; metal turns as the surface turns. */
+  background: linear-gradient(
+    159deg,
+    rgba(30, 45, 52, 0.86) 0%,
+    rgba(15, 26, 31, 0.84) 30%,
+    rgba(8, 16, 20, 0.86) 56%,
+    rgba(20, 33, 39, 0.86) 100%
+  );
+  box-shadow:
+    /* the bevel: lit on the top and left, in shadow on the right and bottom */
+    inset 0 1px 0 rgba(226, 255, 245, 0.26),
+    inset 1px 0 0 rgba(226, 255, 245, 0.08),
+    inset -1px 0 0 rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.75),
+    /* the brand's own hairline, quiet under the metal */
+    inset 0 0 0 1px rgba(0, 217, 146, 0.10),
+    /* thickness, and the card's own shadow on the page */
+    0 2px 0 rgba(0, 0, 0, 0.7),
+    0 26px 60px rgba(0, 0, 0, 0.62);
+}
+
+/* the brushed grain — fine, off-axis, and paired light/dark so it reads as
+   texture rather than as a lightening wash */
+.metal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    103deg,
+    rgba(255, 255, 255, 0.05) 0px,
+    rgba(255, 255, 255, 0.05) 1px,
+    rgba(0, 0, 0, 0.045) 1px,
+    rgba(0, 0, 0, 0.045) 2px,
+    rgba(255, 255, 255, 0) 2px,
+    rgba(255, 255, 255, 0) 4px
+  );
+}
+
+/* the specular band, travelling slowly across the face. Metal catches light
+   as it moves, and this card is already floating — a still highlight on a
+   moving object is the thing that reads as painted-on. */
+.metal::after {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  pointer-events: none;
+  background: linear-gradient(
+    104deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.06) 42%,
+    rgba(232, 255, 247, 0.20) 49%,
+    rgba(255, 255, 255, 0.07) 56%,
+    transparent 68%
+  );
+  animation: metal-sweep 11s ease-in-out infinite;
+}
+
+@keyframes metal-sweep {
+  0%,
+  100% { transform: translateX(-38%); }
+  50%  { transform: translateX(38%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metal::after { animation: none; transform: translateX(-12%); }
+}

@@ -105,51 +105,19 @@ export function Attached({ s }: { s: AppState }) {
           watermark is the ornament on this screen; a second one competes with
           it. A plate and a hairline are enough to lift the card off the word. */}
       <div
-        className="totem relative flex w-[186px] flex-col items-center rounded-[5px] px-5 py-10"
-        style={{
-          /**
-           * Brushed metal, still translucent.
-           *
-           * Metal reads from three things, none of them colour: a DIRECTIONAL
-           * grain, a highlight on the top edge only — light comes from
-           * somewhere — and an oblique sheen. Layered over a dark plate that
-           * stays partly transparent, so the word behind still passes through,
-           * which is the whole reason the card floats over it.
-           *
-           * ⚠️ The grain is a repeating gradient rather than a texture image:
-           * it costs nothing to ship, scales with the card, and cannot 404.
-           * Kept at 2% — at any strength you can actually SEE as stripes it
-           * stops being metal and becomes corduroy.
-           */
-          background: [
-            // the sheen, catching across the top-left corner
-            "linear-gradient(146deg, rgba(255,255,255,0.055) 0%," +
-              " rgba(255,255,255,0.014) 24%, rgba(255,255,255,0) 52%)",
-            // the brushed grain, off-axis so it never lines up with the edges
-            "repeating-linear-gradient(102deg," +
-              " rgba(255,255,255,0.020) 0px, rgba(255,255,255,0.020) 1px," +
-              " rgba(255,255,255,0) 1px, rgba(255,255,255,0) 3px)",
-            // and the plate itself, cool at the top and colder at the bottom
-            "linear-gradient(180deg, rgba(11,22,26,0.74) 0%, rgba(4,10,12,0.82) 100%)",
-          ].join(","),
-          backdropFilter: "blur(7px) saturate(115%)",
-          boxShadow: [
-            // ⚠️ A specular EDGE, not an outline: one hairline on the top rim
-            // where light would land, and a dark one under the bottom. A full
-            // light border would just be a white box.
-            "inset 0 1px 0 rgba(255,255,255,0.10)",
-            "inset 0 -1px 0 rgba(0,0,0,0.55)",
-            "inset 0 0 0 1px rgba(0,217,146,0.10)",
-            "0 20px 55px rgba(0,0,0,0.6)",
-          ].join(","),
-        }}
+        className="totem metal relative flex w-[186px] flex-col items-center rounded-[6px] px-5 py-10"
       >
         {/* A short rule above and below the contents. A totem is a vertical
             thing, and the fastest way to say so is to put the vertical axis on
             the card itself rather than only in its proportions. */}
-        <span aria-hidden className="absolute left-1/2 top-0 h-5 w-px -translate-x-1/2 bg-jade/25" />
-        <span aria-hidden className="absolute bottom-0 left-1/2 h-5 w-px -translate-x-1/2 bg-jade/15" />
+        <span aria-hidden className="absolute left-1/2 top-0 z-[1] h-5 w-px -translate-x-1/2 bg-jade/25" />
+        <span aria-hidden className="absolute bottom-0 left-1/2 z-[1] h-5 w-px -translate-x-1/2 bg-jade/15" />
 
+        {/* ⚠️ Above the specular sweep. That highlight is an ::after, so it
+            paints OVER the children by default — a reflection passing across a
+            face is right for metal and wrong for a name you have to read. The
+            light stays on the plate; the contents sit on top of it. */}
+        <div className="relative z-[1] flex flex-col items-center">
         {s.summoner ? (
           <img
             src={`${CDN}/${patch}/img/profileicon/${s.summoner.iconId}.png`}
@@ -184,6 +152,7 @@ export function Attached({ s }: { s: AppState }) {
             </p>
           </div>
         )}
+        </div>
       </div>
 
       {/* Champion select still gets its own room, below the totem — in champ
