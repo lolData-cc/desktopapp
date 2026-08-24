@@ -123,31 +123,52 @@ export function Timeline({
 
   return (
     <div className="relative">
-      {/* The card, above everything, showing what the mark under the pointer
-          actually is. This is where the words go. */}
+      {/**
+        * What the mark under the pointer actually is.
+        *
+        * ⚠️ A WASH, not a box. Death Stranding 2 almost never puts a label in a
+        * bordered container: it lays a band of colour that is opaque at the
+        * leading edge and fades to nothing across its length, and sets the text
+        * on that. A box with corners here would be the one framed thing on a
+        * screen that has no other frames.
+        *
+        * The band grows from the mark rather than being centred on it, so it
+        * reads as belonging to that mark and never runs off the left end of the
+        * bar at 0:12.
+        */}
       {over && (
         <div
-          className="pointer-events-none absolute -top-[34px] z-10 -translate-x-1/2 whitespace-nowrap px-3 py-1.5"
+          className="clip-arrive pointer-events-none absolute -top-[30px] z-10 flex items-baseline whitespace-nowrap py-1.5 pl-3 pr-16"
           style={{
             left: `${pct(over.at)}%`,
-            background: "rgba(4,10,12,0.94)",
-            boxShadow: `inset 0 1px 0 0 ${KIND[over.kind].colour}, 0 6px 18px rgba(0,0,0,0.5)`,
+            transform: pct(over.at) > 62 ? "translateX(-100%) scaleX(-1)" : undefined,
+            background: `linear-gradient(90deg, ${KIND[over.kind].colour}2e 0%, ${KIND[over.kind].colour}14 42%, transparent 100%)`,
           }}
         >
+          {/* Flipped back upright when the wash itself is mirrored, so a mark
+              near the end of the game does not print its label backwards. */}
           <span
-            className="font-jetbrains text-[9px] uppercase tracking-[0.22em]"
-            style={{ color: KIND[over.kind].colour }}
+            className="flex items-baseline"
+            style={{ transform: pct(over.at) > 62 ? "scaleX(-1)" : undefined }}
           >
-            {over.count > 1 ? `${over.count} × ${KIND[over.kind].label}` : KIND[over.kind].label}
-          </span>
-          <span className="ml-2 font-jetbrains text-[9px] tabular-nums text-flash/35">
-            {mmss(over.at / 1000)}
-          </span>
-          {over.labels.map((l, i) => (
-            <span key={i} className="ml-2.5 font-chakrapetch text-[12px] font-bold text-flash/80">
-              {l}
+            <span
+              className="font-jetbrains text-[9px] tracking-[0.24em]"
+              style={{ color: KIND[over.kind].colour, filter: `drop-shadow(0 0 8px ${KIND[over.kind].colour}88)` }}
+            >
+              {over.count > 1 ? `${over.count} × ${KIND[over.kind].label}` : KIND[over.kind].label}
             </span>
-          ))}
+            <span className="ml-2.5 font-jetbrains text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>
+              {mmss(over.at / 1000)}
+            </span>
+            {/* ⚠️ Every name in the cluster. A pin that swallowed three kills
+                used to print the first one and looked like a mistake: the count
+                said three and the card named one. */}
+            {over.labels.map((l, i) => (
+              <span key={i} className="ml-3 font-chakrapetch text-[12.5px] font-bold text-white">
+                {l}
+              </span>
+            ))}
+          </span>
         </div>
       )}
 
@@ -165,14 +186,18 @@ export function Timeline({
         }}
       >
         {/* the track, at the very bottom so the marks have room to stand on it */}
-        <span className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: "rgba(215,216,217,0.12)" }} />
+        {/* ⚠️ 2px, and the PLAYED portion is near-white rather than the accent.
+            DS2's sliders read as a bright run against a dark one; giving the
+            played part the accent instead turns the bar into a progress meter
+            and leaves the marks competing with it for the same colour. */}
+        <span className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: "rgba(255,255,255,0.1)" }} />
         <span
-          className="absolute bottom-0 left-0 h-[3px]"
-          style={{ width: `${(buffered / total) * 100}%`, background: "rgba(215,216,217,0.2)" }}
+          className="absolute bottom-0 left-0 h-[2px]"
+          style={{ width: `${(buffered / total) * 100}%`, background: "rgba(255,255,255,0.18)" }}
         />
         <span
-          className="absolute bottom-0 left-0 h-[3px]"
-          style={{ width: `${(at / total) * 100}%`, background: "#00d992", boxShadow: "0 0 10px rgba(0,217,146,0.45)" }}
+          className="absolute bottom-0 left-0 h-[2px]"
+          style={{ width: `${(at / total) * 100}%`, background: "rgba(255,255,255,0.92)", boxShadow: "0 0 10px rgba(0,217,146,0.4)" }}
         />
 
         {pins.map((p, i) => (
@@ -188,11 +213,12 @@ export function Timeline({
           />
         ))}
 
-        {/* the playhead */}
+        {/* ⚠️ The playhead is a square-ended WHITE BAR — the shape DS2 puts on
+            every slider it has. Not a knob, not a diamond, no radius. */}
         <span
           aria-hidden
-          className="absolute bottom-[-2px] h-[7px] w-[2px] -translate-x-1/2"
-          style={{ left: `${(at / total) * 100}%`, background: "#d7d8d9", boxShadow: "0 0 9px rgba(0,217,146,0.8)" }}
+          className="absolute bottom-[-8px] h-[19px] w-[5px] -translate-x-1/2"
+          style={{ left: `${(at / total) * 100}%`, background: "#ffffff", boxShadow: "0 0 12px rgba(0,217,146,0.75)" }}
         />
 
         {hover !== null && !over && (

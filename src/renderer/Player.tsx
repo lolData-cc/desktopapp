@@ -223,12 +223,22 @@ export default function Player({
         { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, opacity: 0.72 },
         { transform: "none", opacity: 1 },
       ],
-      // Slower than the interface's own 320ms: this is a whole screen moving,
+      // Slower than the interface's own 170ms: this is a whole screen moving,
       // and a large object that travels at the speed of a small one looks
-      // weightless.
+      // weightless. Ease-out with no overshoot — nothing in this language
+      // bounces.
       { duration: 420, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
     )
+
+    // ⚠️ And a ribbon travels across it, which is what makes this DS2 rather
+    // than a zoom. The interface there does not announce a change by moving
+    // faster; it runs a band of light over the thing that changed.
+    setSweep((n) => n + 1)
   }, [])
+
+  /** Bumped to re-arm the sweep: an animation that merely exists has already
+   *  played, and a second fullscreen would get nothing. */
+  const [sweep, setSweep] = useState(0)
 
   /** The rectangle we were at before the jump, kept across the event. */
   const before = useRef<DOMRect | null>(null)
@@ -392,6 +402,19 @@ export default function Player({
 
       <PlayerDraw active={drawing} strokes={strokes} onChange={setStrokes} />
 
+      {/* the sweep that answers a change of size */}
+      {sweep > 0 && (
+        <span
+          key={sweep}
+          aria-hidden
+          className="clip-ribbon pointer-events-none absolute inset-y-0 z-30 w-[38%]"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent, rgba(0,217,146,0.10) 40%, rgba(255,255,255,0.14) 50%, rgba(0,217,146,0.10) 60%, transparent)",
+          }}
+        />
+      )}
+
       {!ready && !failed && (
         <div className="absolute inset-0 grid place-items-center">
           <p className="font-jetbrains text-[10px] uppercase tracking-[0.22em] text-flash/35">
@@ -530,14 +553,22 @@ export default function Player({
         <Timeline at={at} total={total} buffered={buffered} pins={pins} onSeek={seek} runup={RUNUP} />
 
         <div className="mt-1.5 flex items-center gap-3">
-          <p className="font-jetbrains text-[10px] tabular-nums text-flash/45">
-            {mmss(at)} <span className="text-flash/20">/ {mmss(total)}</span>
-          </p>
+          <Clock at={at} total={total} />
           {seeking && (
-            <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/25">seeking</span>
+            <span className="font-jetbrains text-[9px] tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.45)" }}>
+              seeking
+            </span>
           )}
-          <span className="ml-auto font-jetbrains text-[8.5px] uppercase tracking-[0.18em] text-flash/[0.18]">
-            double-click for fullscreen · ↑↓ moments · d draws
+          {/* The system micro-label, in wide-tracked monospace with a morse run
+              leading into it. DS2 marks every component this way — it is the
+              cheapest and most recognisable thing in its whole vocabulary. */}
+          <span className="ml-auto flex items-center gap-2 font-jetbrains text-[8.5px] tracking-[0.26em]" style={{ color: "rgba(255,255,255,0.28)" }}>
+            <i aria-hidden className="flex items-center gap-[3px]">
+              <b className="block h-[2px] w-[2px] bg-white/40" />
+              <b className="block h-[2px] w-[7px] bg-white/25" />
+              <b className="block h-[2px] w-[2px] bg-white/40" />
+            </i>
+            dbl-click fullscreen · ↑↓ moments · d draws
           </span>
         </div>
       </div>
@@ -546,17 +577,44 @@ export default function Player({
   )
 }
 
-/* ── the cluster ─────────────────────────────────────────────────────────── */
 
-const PLATE = "polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px))"
+/* ── the controls ────────────────────────────────────────────────────────── */
 
 /**
- * The controls, as floating plates.
+ * Built from measurements off Death Stranding 2 rather than from memory of it,
+ * and the headline finding reversed the plan: the boxy, bracketed look is
+ * Death Stranding ONE. DS2 deleted it.
+ *
+ * What DS2 actually does, and what is copied here:
+ *
+ * - **Icons are bare.** No plate behind a glyph, anywhere in its interface
+ *   except the controller face buttons. Focus is a thin ring, not a fill.
+ * - **Nothing is rounded** — every radius in this file is zero. DS2's one
+ *   exception is a rounded corner on the SELECTED card, which is why the
+ *   focused thing here is the only thing allowed to round.
+ * - **A press is a spike in LUMINANCE.** The whole interface composites
+ *   additively, so it answers with light. Nothing in DS2 scales, bounces or
+ *   ripples, and anything that does belongs to a different game.
+ * - **The light-ribbon** — a luminous streak travelling across the thing being
+ *   pointed at — is its single most recognisable device. It builds the row on
+ *   arrival, and it answers a press.
+ *
+ * The one thing deliberately NOT copied is the colour. DS2 is blue into cyan
+ * and dropped Death Stranding 1's amber entirely; this app is jade, and jade
+ * plays exactly the role DS2 gives its cyan. Borrowing the hue as well would
+ * make one screen of a jade application belong to something else.
+ */
+
+/** Fully white, or 45% — DS2 has no middle tier of grey text. */
+const DIM = "rgba(255,255,255,0.45)"
+const JADE = "#00d992"
+
+/**
+ * The five controls, as bare glyphs.
  *
  * ⚠️ Remounted whenever the interface returns, which is what replays the
- * assembly. Each plate opens from a slit of light, its top edge draws across,
- * and the glyph lands last — staggered outwards from the centre, so the thing
- * you press most arrives first.
+ * arrival: each icon slides a few pixels and fades, staggered, while a ribbon
+ * travels across the row and leaves them behind it.
  */
 function Cluster({
   playing,
@@ -586,52 +644,59 @@ function Cluster({
   onVolume: (v: number) => void
 }) {
   return (
-    <div className="mb-5 flex items-end justify-center gap-2.5">
-      <Plate delay={120} label={drawing ? "Stop drawing" : "Draw on the frame"} on={drawing} onClick={onDraw}>
-        <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden>
-          <path d="M2 16 L2.8 12.4 L12.2 3 L15 5.8 L5.6 15.2 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-          <path d="M11 4.2 L13.8 7" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-      </Plate>
+    <div className="relative mb-4 flex items-center justify-center gap-1">
+      {/* the ribbon that builds the row */}
+      <span
+        aria-hidden
+        className="clip-ribbon pointer-events-none absolute inset-y-0 w-[42%]"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${JADE}22 35%, ${JADE}3a 50%, ${JADE}22 65%, transparent)`,
+        }}
+      />
 
-      <Volume delay={60} muted={muted} volume={volume} onMute={onMute} onVolume={onVolume} />
+      <Glyph delay={140} label={drawing ? "Stop drawing" : "Draw on the frame"} on={drawing} onClick={onDraw}>
+        <path d="M3 21 L4 16 L16.5 3.5 L20.5 7.5 L8 20 Z" />
+        <path d="M15 5 L19 9" />
+      </Glyph>
 
-      {/* The one you reach for, and it is bigger for it. */}
-      <Plate delay={0} big label={playing ? "Pause" : "Play"} onClick={onToggle}>
+      <Volume delay={70} muted={muted} volume={volume} onMute={onMute} onVolume={onVolume} />
+
+      <Glyph delay={0} big label={playing ? "Pause" : "Play"} onClick={onToggle}>
         {playing ? (
-          <svg width="15" height="18" viewBox="0 0 15 18" aria-hidden>
-            <path d="M1 0h4v18H1z M10 0h4v18h-4z" fill="currentColor" />
-          </svg>
+          <path d="M7 4 h3.4 v16 h-3.4 z M13.6 4 h3.4 v16 h-3.4 z" fill="currentColor" stroke="none" />
         ) : (
-          <svg width="16" height="18" viewBox="0 0 16 18" aria-hidden>
-            <path d="M2 0 L16 9 L2 18 Z" fill="currentColor" />
-          </svg>
+          <path d="M6 3.5 L20 12 L6 20.5 Z" fill="currentColor" stroke="none" />
         )}
-      </Plate>
+      </Glyph>
 
-      <Plate delay={60} label="Next moment" disabled={!hasNext} onClick={onNext}>
-        <svg width="17" height="15" viewBox="0 0 18 16" aria-hidden>
-          <path d="M1 1 L11 8 L1 15 Z" fill="currentColor" />
-          <path d="M13.5 1 h3.5 v14 h-3.5 z" fill="currentColor" />
-        </svg>
-      </Plate>
+      <Glyph delay={70} label="Next moment" disabled={!hasNext} onClick={onNext}>
+        <path d="M4 4 L15 12 L4 20 Z" fill="currentColor" stroke="none" />
+        <path d="M17.5 4 h3 v16 h-3 z" fill="currentColor" stroke="none" />
+      </Glyph>
 
-      <Plate delay={120} label={full ? "Leave fullscreen" : "Fullscreen"} on={full} onClick={onFullscreen}>
+      <Glyph delay={140} label={full ? "Leave fullscreen" : "Fullscreen"} on={full} onClick={onFullscreen}>
         {full ? (
-          <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden>
-            <path d="M7 1 v6 h-6 M11 17 v-6 h6" fill="none" stroke="currentColor" strokeWidth="1.7" />
-          </svg>
+          <path d="M9 3 v6 h-6 M15 21 v-6 h6" />
         ) : (
-          <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden>
-            <path d="M1 7 v-6 h6 M17 11 v6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" />
-          </svg>
+          <path d="M3 9 v-6 h6 M21 15 v6 h-6" />
         )}
-      </Plate>
+      </Glyph>
     </div>
   )
 }
 
-function Plate({
+/**
+ * One control: a line icon with nothing behind it.
+ *
+ * ⚠️ The hit area is far larger than the drawn glyph, which is the only reason
+ * bare icons are usable at all — without it every press becomes an aiming
+ * exercise at a 20px target.
+ *
+ * ⚠️ The press is a flash, re-armed each time by remounting the animation. A
+ * class that is merely toggled on plays once and then sits there inert, so the
+ * second press does nothing and the control feels broken from then on.
+ */
+function Glyph({
   children,
   label,
   onClick,
@@ -648,41 +713,58 @@ function Plate({
   on?: boolean
   disabled?: boolean
 }) {
-  const size = big ? 58 : 46
+  const [hit, setHit] = useState(0)
+  const size = big ? 30 : 21
+
   return (
     <button
+      key={hit}
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        setHit((n) => n + 1)
+        onClick()
+      }}
       aria-label={label}
       title={label}
       disabled={disabled}
-      className="ds-build group relative grid shrink-0 place-items-center transition-colors disabled:pointer-events-none disabled:opacity-25"
-      style={{
-        // ⚠️ Stated, not inherited. Buttons default to an arrow and the slider
-        // inside the volume panel asks for a pointer, so crossing between them
-        // flipped the cursor back and forth over invisible edges.
-        cursor: "pointer",
-        width: size,
-        height: size,
-        animationDelay: `${delay}ms`,
-        clipPath: PLATE,
-        background: on ? "rgba(0,217,146,0.16)" : "rgba(4,10,12,0.72)",
-        color: on ? "#00d992" : "#d7d8d9",
-        boxShadow: on
-          ? "inset 0 0 0 1px rgba(0,217,146,0.55)"
-          : "inset 0 0 0 1px rgba(215,216,217,0.14)",
-        backdropFilter: "blur(6px)",
-      }}
+      className="clip-arrive group relative grid shrink-0 place-items-center disabled:pointer-events-none disabled:opacity-20"
+      style={{ width: big ? 66 : 52, height: 52, animationDelay: `${delay}ms`, cursor: "pointer" }}
     >
-      {/* The edge that draws itself, and then lives as the plate's highlight. */}
+      <span className={hit ? "clip-spike" : undefined} style={{ display: "grid", placeItems: "center" }}>
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          aria-hidden
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={big ? 1.7 : 1.6}
+          strokeLinecap="square"
+          strokeLinejoin="miter"
+          style={{
+            color: on ? JADE : "#ffffff",
+            opacity: on ? 1 : 0.82,
+            // ⚠️ Bloom on the GLYPH, never on a plate edge. DS2's glow is inset
+            // on surfaces and outward on light — text and icons are light.
+            filter: on ? `drop-shadow(0 0 7px ${JADE}aa)` : "drop-shadow(0 0 5px rgba(255,255,255,0.28))",
+            transition: "opacity 140ms linear, color 140ms linear",
+          }}
+          className="group-hover:!opacity-100"
+        >
+          {children}
+        </svg>
+      </span>
+
+      {/* focus ring: thin, broken, and only on hover — DS2 rings its focused
+          item rather than filling it */}
       <span
         aria-hidden
-        className="ds-edge absolute left-0 top-0 h-px"
-        style={{ width: `calc(100% - 9px)`, background: on ? "#00d992" : "rgba(0,217,146,0.4)", animationDelay: `${delay + 60}ms` }}
+        className="pointer-events-none absolute inset-[7px] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        style={{
+          boxShadow: `inset 0 0 0 1px ${JADE}66, inset 0 0 12px ${JADE}22`,
+          clipPath: "polygon(0 0, 32% 0, 32% 100%, 0 100%, 0 0, 68% 0, 100% 0, 100% 100%, 68% 100%, 68% 0)",
+        }}
       />
-      <span className="ds-glyph transition-colors group-hover:text-jade" style={{ animationDelay: `${delay + 140}ms` }}>
-        {children}
-      </span>
     </button>
   )
 }
@@ -698,7 +780,7 @@ function Plate({
  *
  * ⚠️ And it closes on a short delay rather than instantly. Cutting a corner on
  * the way to the slider leaves the wrapper for a frame or two, and a menu that
- * cannot survive that is a menu you have to approach carefully — which is not
+ * cannot survive that is one you have to approach carefully — which is not
  * something anyone should have to do to a volume control.
  */
 function Volume({
@@ -731,15 +813,19 @@ function Volume({
   return (
     <div className="relative" onMouseEnter={hold} onMouseLeave={release}>
       {open && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-1">
           <div
-            className="ds-build flex h-[104px] w-[42px] items-center justify-center"
-            style={{ background: "rgba(4,10,12,0.92)", clipPath: PLATE, boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.14)" }}
+            className="clip-arrive flex h-[110px] w-[44px] items-center justify-center"
+            style={{
+              background: "rgba(1,11,13,0.92)",
+              // Hairline, square, and lit from the inside — never an outward glow.
+              boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.14), inset 0 0 14px ${JADE}1c`,
+            }}
           >
-            {/* ⚠️ Rotated rather than a bespoke vertical control: a range input
-                keeps the keyboard and the pointer behaviour the platform
-                already implements correctly, which a div with a drag handler
-                would have to reinvent badly, and only for the mouse. */}
+            {/* ⚠️ A rotated range input rather than a bespoke vertical control:
+                it keeps the keyboard and pointer behaviour the platform already
+                implements correctly, which a div with a drag handler would have
+                to reinvent badly, and only for the mouse. */}
             <input
               type="range"
               min={0}
@@ -754,94 +840,107 @@ function Volume({
         </div>
       )}
 
-      <Plate delay={delay} label={muted ? "Unmute" : "Mute"} on={muted} onClick={onMute}>
-        <svg width="18" height="16" viewBox="0 0 20 16" aria-hidden>
-          <path d="M1 5.5 h3.5 L9 1.5 v13 L4.5 10.5 H1 Z" fill="currentColor" />
-          {muted ? (
-            <path d="M12.5 5 L17.5 11 M17.5 5 L12.5 11" stroke="currentColor" strokeWidth="1.6" fill="none" />
-          ) : (
-            <>
-              <path d="M12 5.6 a3.4 3.4 0 0 1 0 4.8" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={level > 0.1 ? 1 : 0.25} />
-              <path d="M14.6 3.4 a6.8 6.8 0 0 1 0 9.2" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={level > 0.55 ? 1 : 0.25} />
-            </>
-          )}
-        </svg>
-      </Plate>
+      <Glyph delay={delay} label={muted ? "Unmute" : "Mute"} on={muted} onClick={onMute}>
+        <path d="M3 9 h3.6 L12 4.2 v15.6 L6.6 15 H3 Z" fill="currentColor" stroke="none" />
+        {muted ? (
+          <path d="M15.5 9 L20.5 15 M20.5 9 L15.5 15" />
+        ) : (
+          <>
+            <path d="M15.4 9.4 a3.6 3.6 0 0 1 0 5.2" opacity={level > 0.1 ? 1 : 0.25} />
+            <path d="M18.2 6.6 a7.4 7.4 0 0 1 0 10.8" opacity={level > 0.55 ? 1 : 0.25} />
+          </>
+        )}
+      </Glyph>
     </div>
   )
 }
 
-/* ── the rest ────────────────────────────────────────────────────────────── */
+/* ── the one control before anything has been pressed ────────────────────── */
 
 /**
- * The one control before anything has been pressed.
+ * DS2's primary call to action is an **arrow-tag plate**: a rectangle that
+ * terminates in a chevron point, with a gradient running towards it. It is the
+ * one place its interface allows a shape to be anything other than a plain
+ * rectangle, and it is exactly right here — the plate itself points forward,
+ * so the button is the arrow rather than containing one.
  *
- * ⚠️ Not a circle with a triangle in it. Every other surface in this app is
- * built from cut corners and straight lines, and a soft round button was the
- * one shape from a different set — it read as a placeholder because that is
- * what it looked like. This is a plate with the same cut, standing inside its
- * own corner brackets, and it says what it will do.
+ * ⚠️ No corner brackets. Those are Death Stranding 1, they were the thing that
+ * looked approximate, and in DS2 the only brackets left are pale grey hairlines
+ * around INSPECTED CONTENT — never around a button.
+ *
+ * ⚠️ Pressing it flashes rather than shrinking. See the note on Cluster: DS2
+ * answers input with light.
  */
 function BigPlay({ onClick, at }: { onClick: () => void; at: number }) {
+  const [hit, setHit] = useState(0)
   const started = at > 0.6
-  return (
-    <button type="button" onClick={onClick} aria-label="Play" className="absolute inset-0 z-20 grid place-items-center">
-      <span className="relative grid place-items-center" style={{ width: 132, height: 132 }}>
-        {/* corner brackets, which pull outwards on hover */}
-        {[
-          { x: 0, y: 0, d: "M0 22 V0 H22" },
-          { x: 1, y: 0, d: "M0 0 H22 V22" },
-          { x: 0, y: 1, d: "M0 0 V22 H22" },
-          { x: 1, y: 1, d: "M22 0 V22 H0" },
-        ].map((c, i) => (
-          <svg
-            key={i}
-            width="22"
-            height="22"
-            viewBox="0 0 22 22"
-            aria-hidden
-            className="absolute transition-all duration-300 group-hover:opacity-100"
-            style={{
-              [c.x ? "right" : "left"]: 0,
-              [c.y ? "bottom" : "top"]: 0,
-              opacity: 0.5,
-            }}
-          >
-            <path d={c.d} fill="none" stroke="#00d992" strokeWidth="1.4" />
-          </svg>
-        ))}
+  const POINT = 30
 
-        <span
-          className="ds-build grid place-items-center transition-transform duration-200 hover:scale-105"
-          style={{
-            width: 84,
-            height: 84,
-            clipPath: PLATE,
-            background: "rgba(4,10,12,0.7)",
-            boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.5), 0 0 34px rgba(0,217,146,0.16)",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <svg width="24" height="27" viewBox="0 0 24 27" aria-hidden>
-            <path d="M3 1 L23 13.5 L3 26 Z" fill="#00d992" />
-          </svg>
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setHit((n) => n + 1)
+        // Let the flash be seen before the frame starts moving under it.
+        setTimeout(onClick, 90)
+      }}
+      aria-label="Play"
+      className="absolute inset-0 z-20 grid place-items-center"
+      style={{ cursor: "pointer" }}
+    >
+      <span
+        key={hit}
+        className={`clip-arrive group relative flex items-center ${hit ? "clip-spike" : ""}`}
+        style={{
+          height: 62,
+          paddingLeft: 26,
+          paddingRight: POINT + 16,
+          background: `linear-gradient(90deg, rgba(1,11,13,0.82) 0%, ${JADE}1f 55%, ${JADE}42 100%)`,
+          clipPath: `polygon(0 0, calc(100% - ${POINT}px) 0, 100% 50%, calc(100% - ${POINT}px) 100%, 0 100%)`,
+        }}
+      >
+        {/* the rule along the top, and the morse run leading into it — DS2 puts
+            this at the edge of everything and it is the cheapest tell there is */}
+        <span aria-hidden className="absolute left-0 right-0 top-0 h-px" style={{ background: `${JADE}88` }} />
+        <span aria-hidden className="absolute left-0 top-[5px] flex items-center gap-[3px]">
+          <i className="block h-[2px] w-[2px]" style={{ background: `${JADE}cc` }} />
+          <i className="block h-[2px] w-[8px]" style={{ background: `${JADE}88` }} />
+          <i className="block h-[2px] w-[2px]" style={{ background: `${JADE}cc` }} />
         </span>
 
-        <span className="absolute -bottom-1 font-jetbrains text-[9px] uppercase tracking-[0.34em] text-jade/60">
-          {started ? "resume" : "play"}
+        <svg width="19" height="22" viewBox="0 0 19 22" aria-hidden className="mr-3.5 shrink-0">
+          <path d="M2 1 L18 11 L2 21 Z" fill="#ffffff" style={{ filter: "drop-shadow(0 0 8px rgba(255,255,255,0.45))" }} />
+        </svg>
+
+        <span className="flex flex-col items-start leading-none">
+          <span
+            className="font-chakrapetch text-[17px] font-bold tracking-[0.2em] text-white"
+            style={{ filter: `drop-shadow(0 0 10px ${JADE}77)` }}
+          >
+            {started ? "RESUME" : "PLAY"}
+          </span>
+          <span className="mt-[5px] font-jetbrains text-[8.5px] tracking-[0.28em]" style={{ color: DIM }}>
+            {started ? mmss(at) : "from the start"}
+          </span>
         </span>
       </span>
     </button>
   )
 }
 
+/* ── the rest ────────────────────────────────────────────────────────────── */
+
 /** While drawing, what the pointer is for and how to stop. */
 function DrawBanner({ onClear, onDone, count }: { onClear: () => void; onDone: () => void; count: number }) {
   return (
-    <div className="pointer-events-auto absolute right-5 top-5 z-20 flex items-center gap-2 px-3 py-2"
-      style={{ background: "rgba(4,10,12,0.9)", boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.35)" }}>
-      <span className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-jade">drawing</span>
-      <Minimal label="clear" title="Wipe the frame" onClick={onClear} on={false} />
+    <div
+      className="pointer-events-auto absolute right-5 top-5 z-20 flex items-center gap-2 px-3 py-2"
+      style={{ background: "rgba(1,11,13,0.9)", boxShadow: `inset 0 0 0 1px ${JADE}55, inset 0 0 14px ${JADE}1c` }}
+    >
+      <span className="font-jetbrains text-[9px] uppercase tracking-[0.2em]" style={{ color: JADE }}>
+        drawing
+      </span>
+      <Minimal label="clear" title="Wipe the frame" onClick={onClear} />
       <Minimal label="done" title="Stop drawing and wipe" onClick={onDone} on={count > 0} />
     </div>
   )
@@ -862,10 +961,33 @@ const Minimal = ({
     type="button"
     onClick={onClick}
     title={title}
-    className={`win-btn h-7 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
-      on ? "bg-jade/15 text-jade" : "text-flash/40"
-    }`}
+    className="win-btn h-7 px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em]"
+    style={{ color: on ? JADE : DIM, cursor: "pointer" }}
   >
     {label}
   </button>
 )
+
+/**
+ * The clock, with its leading zeros dimmed.
+ *
+ * ⚠️ This is DS2's most recognisable typographic habit and it costs nothing:
+ * every value it prints keeps the insignificant characters — leading zeros,
+ * separators, hyphens — a tier down from the digits that carry the meaning, so
+ * a number reads as its magnitude first and its formatting second.
+ */
+export function Clock({ at, total }: { at: number; total: number }) {
+  const cut = (s: string) => {
+    const i = s.search(/[1-9]/)
+    return i <= 0 ? ["", s] : [s.slice(0, i), s.slice(i)]
+  }
+  const [dead, live] = cut(mmss(at))
+
+  return (
+    <p className="font-jetbrains text-[11px] tabular-nums tracking-[0.06em]">
+      <span style={{ color: "rgba(255,255,255,0.3)" }}>{dead}</span>
+      <span className="text-white">{live}</span>
+      <span style={{ color: "rgba(255,255,255,0.3)" }}> / {mmss(total)}</span>
+    </p>
+  )
+}

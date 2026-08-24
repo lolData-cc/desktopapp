@@ -542,30 +542,49 @@ body {
 }
 
 
-/* ── the player's chrome assembling ────────────────────────────────────────
-   Death Stranding does not fade its interface in; it BUILDS it. A plate
-   arrives as a slit of light that opens vertically, its top edge draws itself
-   across, and the glyph lands last. Staggered per button, so the cluster
-   assembles left to right rather than appearing all at once.
+/* ── the player's chrome, in Death Stranding 2's language ──────────────────
+   Rebuilt from measurements off the game rather than from memory, and the
+   headline finding was that the boxy, bracketed look is Death Stranding ONE.
+   DS2 stripped it: bare icons instead of plates, hairlines instead of frames,
+   and a travelling light-ribbon instead of a fill.
 
-   Kept short — 320ms — because this replays every single time the mouse
-   moves after a pause, and a flourish you see two hundred times an evening
-   has to be over before it can annoy. */
-@keyframes ds-build {
-  0%   { opacity: 0; clip-path: inset(48% 0 48% 0); transform: translateY(5px); }
-  60%  { opacity: 1; clip-path: inset(0 0 0 0);     transform: translateY(0); }
-  100% { opacity: 1; clip-path: inset(0 0 0 0);     transform: translateY(0); }
+   ⚠️ No scale, no bounce, no ripple. Nothing in DS2's visual language is
+   springy — a press there reads as a spike in LUMINANCE, because the whole
+   interface is composited additively. Anything that squashes or overshoots
+   belongs to a different game. */
+
+/* ⚠️ Namespaced clip-*: `ds-arrive` is already a keyframe in this file, and
+   a second @keyframes of the same name silently replaces the first — every
+   other entrance in the app would have picked up this timing.
+
+   Arrival: a short slide and a fade, staggered. Fast on purpose — this replays
+   every time the pointer moves after a pause, and a flourish seen two hundred
+   times an evening has to be over before it can annoy. */
+@keyframes clip-arrive {
+  from { opacity: 0; transform: translateX(-7px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-.ds-build { animation: ds-build 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.clip-arrive { animation: clip-arrive 170ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-@keyframes ds-edge { from { transform: scaleX(0); opacity: 0 } to { transform: scaleX(1); opacity: 1 } }
-.ds-edge { animation: ds-edge 300ms cubic-bezier(0.16, 1, 0.3, 1) both; transform-origin: left center; }
+/* The ribbon: DS2's one unmistakable device. A luminous streak that travels
+   across the thing being pointed at, opaque nowhere and brightest in the
+   middle. It builds the row on arrival and answers a press. */
+@keyframes clip-ribbon {
+  from { transform: translateX(-115%); }
+  to   { transform: translateX(115%); }
+}
+.clip-ribbon { animation: clip-ribbon 620ms cubic-bezier(0.3, 0, 0.2, 1) both; }
 
-@keyframes ds-glyph { from { opacity: 0 } to { opacity: 1 } }
-.ds-glyph { animation: ds-glyph 260ms ease both; }
+/* A press: light, not motion. */
+@keyframes clip-spike {
+  0%   { filter: brightness(1); }
+  18%  { filter: brightness(2.6); }
+  100% { filter: brightness(1); }
+}
+.clip-spike { animation: clip-spike 260ms ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ds-build, .ds-edge, .ds-glyph { animation: none; }
+  .clip-arrive, .clip-ribbon, .clip-spike { animation: none; }
 }
 
 /* The recording player, in fullscreen.
@@ -582,24 +601,27 @@ body {
    Rotated rather than rebuilt: a range input keeps the keyboard behaviour and
    the drag behaviour the platform already implements correctly, which a div
    with a pointer handler would have to reinvent — badly, and only for the
-   mouse. */
+   mouse.
+
+   The thumb is a square-ended white BAR, which is the shape DS2 puts on every
+   slider it has. Not a knob, and not a diamond. */
 .clip-volume {
   -webkit-appearance: none;
   appearance: none;
   width: 84px;
-  height: 3px;
+  height: 2px;
   transform: rotate(-90deg);
-  background: rgba(215, 216, 217, 0.16);
+  background: rgba(215, 216, 217, 0.18);
   outline: none;
 }
 .clip-volume::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 11px;
-  height: 11px;
-  background: #00d992;
-  box-shadow: 0 0 8px rgba(0, 217, 146, 0.7);
-  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  width: 6px;
+  height: 20px;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 217, 146, 0.55);
   cursor: pointer;
 }
 .clip-volume:focus-visible {
