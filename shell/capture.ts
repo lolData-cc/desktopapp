@@ -7,6 +7,9 @@
  * program that captures a screen without saying so is spyware regardless of
  * what it does with the file.
  *
+ * ⚠️ And it records THE GAME'S WINDOW, never the display. See leagueWindow()
+ * below: if that window cannot be found, nothing is recorded at all.
+ *
  * The library keeps the last N games and drops the oldest. That is the whole
  * storage policy: a game is ~1GB, nobody prunes a folder by hand, and a
  * recorder that quietly fills a disk gets uninstalled. A recording the player
@@ -75,6 +78,56 @@ export const captureError = () => lastError
 export const isRecording = () => current !== null
 
 /**
+ * The game's window — not the screen.
+ *
+ * ⚠️ This records LEAGUE, and only League. Capturing the display would put
+ * everything else on the monitor into the file too: the second screen's worth
+ * of Discord, a browser, whatever was open behind the game. Nobody asking for
+ * their games to be recorded is asking for that, and the file is the thing
+ * they might later hand to somebody else.
+ *
+ * ⚠️ And if the window cannot be found, NOTHING is recorded. Falling back to
+ * the whole display would be quietly doing the thing this function exists to
+ * avoid. A missing recording is a disappointment; a recording of everything
+ * else on the machine is a breach of what the feature promised.
+ */
+async function leagueWindow(anyWindow = false): Promise<{ id: string; name: string } | null> {
+  const { desktopCapturer } = await import("electron")
+  const windows = await desktopCapturer.getSources({ types: ["window"] })
+
+  const named = (needle: string) =>
+    windows.find((w) => w.name.toLowerCase().includes(needle))
+
+  /**
+   * ⚠️ The GAME window, which is NOT the client window.
+   *
+   * They are two different processes and both are open during a match: the
+   * client is the lobby, the shop, the post-game screen — titled "League of
+   * Legends" — and the game is titled "League of Legends (TM) Client". Falling
+   * back to the client would record a lobby for twenty minutes and call it a
+   * game, so there is no fallback. If the game window is not there yet, the
+   * caller asks again.
+   */
+  const source =
+    named("(tm) client") ??
+    (anyWindow ? named("loldata") ?? named("league of legends") : undefined)
+
+  if (!source) {
+    // Every candidate, so a title we have not met is one game away from being
+    // matched rather than a mystery. And note that a MINIMISED window does not
+    // appear here at all, which is why the caller keeps asking instead of
+    // giving up on the first miss.
+    console.log("[capture] no League window yet. Open windows: %s",
+      windows.map((w) => JSON.stringify(w.name)).join(", ") || "(none)")
+    lastError = "The League window was not found, so nothing was recorded. This app records the game's window only, never your whole screen."
+    return null
+  }
+
+  console.log("[capture] source: %s", source.name)
+  return source
+}
+
+/**
  * The invisible window that owns MediaRecorder.
  *
  * ⚠️ Its own window on purpose. MediaRecorder is a DOM API so this must be a
@@ -131,7 +184,10 @@ ipcMain.on("capture:failed", (_e, message: string) => {
 export async function beginRecording(
   settings: { capture: boolean; captureAudio: "none" | "system" | "mic" | "both" },
   about: { championId: string | null; championName: string | null; queue: string | null },
-  changed: () => void
+  changed: () => void,
+  /** Debug only: record our own window when there is no game, so the recorder
+   *  can be exercised without playing one. */
+  anyWindow = false
 ): Promise<boolean> {
   if (!settings.capture || current) return false
 
@@ -139,17 +195,8 @@ export async function beginRecording(
   onChange = changed
   marked = new Set()
 
-  const { desktopCapturer, screen } = await import("electron")
-  const sources = await desktopCapturer.getSources({ types: ["screen"] })
-  // The screen the game is on is the primary one in every case that matters;
-  // picking by id keeps this honest if that ever stops being true.
-  const primary = screen.getPrimaryDisplay()
-  const source =
-    sources.find((s) => String(s.display_id) === String(primary.id)) ?? sources[0]
-  if (!source) {
-    lastError = "no screen to record"
-    return false
-  }
+  const source = await leagueWindow(anyWindow)
+  if (!source) return false
 
   const w = await ensureWindow()
   // The window may still be loading on the very first game.
@@ -401,12 +448,51 @@ export async function revealRecording(id: string): Promise<void> {
  */
 export async function tidyLibrary(): Promise<void> {
   try {
-    const known = new Set((await readIndex()).map((r) => r.file.toLowerCase()))
-    for (const f of await readdir(dir())) {
-      if (f.endsWith(".json")) continue
-      const full = join(dir(), f)
-      if (known.has(full.toLowerCase())) continue
-      await rm(full, { force: true }).catch(() => undefined)
+    const index = await readIndex()
+    const known = new Set(index.map((r) => r.file.toLowerCase()))
+    const files = (await readdir(dir())).filter((f) => !f.endsWith(".json"))
+    const orphans = files.filter((f) => !known.has(join(dir(), f).toLowerCase()))
+
+    /**
+     * ⚠️ NEVER sweep on an empty or unreadable index. This deleted somebody's
+     * games.
+     *
+     * readIndex() answers [] for a missing file, a half-written one, a locked
+     * one — every failure looks exactly like "there are no recordings". Paired
+     * with "delete everything the index does not mention", that turns one bad
+     * read into the loss of the whole library, silently, at startup.
+     *
+     * An index that lists nothing while videos sit on the disk is not a tidy
+     * job. It is a broken index, and the videos are the part worth keeping.
+     */
+    if (!index.length && files.length) {
+      console.log(
+        "[capture] %d recording(s) on disk and an index that lists none — leaving them alone",
+        files.length
+      )
+      return
+    }
+
+    /**
+     * ⚠️ And never a wholesale sweep. Anything that would take out most of the
+     * library is a bug in here, not a mess out there — a real orphan is the
+     * one `.part` a crash left behind.
+     */
+    if (orphans.length > 2 && orphans.length >= files.length) {
+      console.log("[capture] %d file(s) look orphaned, which is too many to be right — leaving them alone",
+        orphans.length)
+      return
+    }
+
+    for (const f of orphans) {
+      // ⚠️ Only ever an unfinished recording. A finished .mp4 that has fallen
+      // out of the index is a video somebody played a game for; it stays, and
+      // it can be deleted by hand.
+      if (!f.endsWith(".part")) {
+        console.log("[capture] %s is not in the index but is a finished recording — keeping it", f)
+        continue
+      }
+      await rm(join(dir(), f), { force: true }).catch(() => undefined)
       console.log("[capture] swept an unfinished recording (%s)", f)
     }
   } catch {

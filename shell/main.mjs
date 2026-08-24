@@ -18875,6 +18875,19 @@ var onChange = null;
 var lastError = null;
 var captureError = () => lastError;
 var isRecording = () => current !== null;
+async function leagueWindow(anyWindow = false) {
+  const { desktopCapturer } = await import("electron");
+  const windows = await desktopCapturer.getSources({ types: ["window"] });
+  const named = (needle) => windows.find((w) => w.name.toLowerCase().includes(needle));
+  const source = named("(tm) client") ?? (anyWindow ? named("loldata") ?? named("league of legends") : undefined);
+  if (!source) {
+    console.log("[capture] no League window yet. Open windows: %s", windows.map((w) => JSON.stringify(w.name)).join(", ") || "(none)");
+    lastError = "The League window was not found, so nothing was recorded. This app records the game's window only, never your whole screen.";
+    return null;
+  }
+  console.log("[capture] source: %s", source.name);
+  return source;
+}
 async function ensureWindow() {
   if (win && !win.isDestroyed())
     return win;
@@ -18904,20 +18917,15 @@ ipcMain.on("capture:failed", (_e, message) => {
   console.log("[capture] FAILED: %s", message);
   finish();
 });
-async function beginRecording(settings, about, changed) {
+async function beginRecording(settings, about, changed, anyWindow = false) {
   if (!settings.capture || current)
     return false;
   lastError = null;
   onChange = changed;
   marked = new Set;
-  const { desktopCapturer, screen: screen2 } = await import("electron");
-  const sources = await desktopCapturer.getSources({ types: ["screen"] });
-  const primary = screen2.getPrimaryDisplay();
-  const source = sources.find((s) => String(s.display_id) === String(primary.id)) ?? sources[0];
-  if (!source) {
-    lastError = "no screen to record";
+  const source = await leagueWindow(anyWindow);
+  if (!source)
     return false;
-  }
   const w = await ensureWindow();
   for (let i = 0;i < 40 && !ready; i++)
     await new Promise((r) => setTimeout(r, 100));
@@ -19072,14 +19080,24 @@ async function revealRecording(id) {
 }
 async function tidyLibrary() {
   try {
-    const known = new Set((await readIndex()).map((r) => r.file.toLowerCase()));
-    for (const f of await readdir(dir())) {
-      if (f.endsWith(".json"))
+    const index = await readIndex();
+    const known = new Set(index.map((r) => r.file.toLowerCase()));
+    const files = (await readdir(dir())).filter((f) => !f.endsWith(".json"));
+    const orphans = files.filter((f) => !known.has(join3(dir(), f).toLowerCase()));
+    if (!index.length && files.length) {
+      console.log("[capture] %d recording(s) on disk and an index that lists none — leaving them alone", files.length);
+      return;
+    }
+    if (orphans.length > 2 && orphans.length >= files.length) {
+      console.log("[capture] %d file(s) look orphaned, which is too many to be right — leaving them alone", orphans.length);
+      return;
+    }
+    for (const f of orphans) {
+      if (!f.endsWith(".part")) {
+        console.log("[capture] %s is not in the index but is a finished recording — keeping it", f);
         continue;
-      const full = join3(dir(), f);
-      if (known.has(full.toLowerCase()))
-        continue;
-      await rm(full, { force: true }).catch(() => {
+      }
+      await rm(join3(dir(), f), { force: true }).catch(() => {
         return;
       });
       console.log("[capture] swept an unfinished recording (%s)", f);
@@ -20383,6 +20401,8 @@ function push(patch2) {
     else {
       stopGameClock();
       answeringSince = 0;
+      recordingStarted = false;
+      startingRecording = false;
       if (state.recording) {
         const mine = state.matches?.[0];
         if (mine && mine.championId === state.lastPlayed?.championKey)
@@ -20816,23 +20836,11 @@ async function readLoading() {
   if (stamp === loadingFor)
     return;
   loadingFor = stamp;
-  const mine = roster.allies.find((e) => e.puuid === puuid);
-  const champ = mine?.championKey ? await classify(mine.championKey).catch(() => null) : null;
-  const started = await beginRecording(state.settings, { championId: champ?.id ?? null, championName: champ?.name ?? null, queue: null }, () => void pushRecordings()).catch((e) => {
-    console.log("[capture] could not start: %s", e?.message);
-    return false;
-  });
-  if (started) {
-    push({ recording: true, captureError: null });
-    raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS);
-  } else if (captureError()) {
-    push({ recording: false, captureError: captureError() });
-  }
   const resolve2 = (entries) => Promise.all(entries.map(async (e) => {
-    const champ2 = e.championKey ? await classify(e.championKey).catch(() => null) : null;
+    const champ = e.championKey ? await classify(e.championKey).catch(() => null) : null;
     return {
       name: e.name || "-",
-      championId: champ2?.id ?? null,
+      championId: champ?.id ?? null,
       championKey: e.championKey,
       rank: null,
       hidden: false,
@@ -20979,8 +20987,16 @@ async function readGame() {
     livePlayers(),
     liveActivePlayerName().catch(() => null)
   ]);
-  const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null;
+  const mine = (players ?? []).find((p) => p.riotId === me || p.summonerName === me);
+  const myTeam = mine?.team ?? null;
   const championId = await playingChampion(players ?? [], me);
+  if (!recordingStarted && !startingRecording && state.settings.capture && stats.gameTime < RECORD_WINDOW) {
+    startingRecording = true;
+    startRecording(championId, mine?.championName ?? null).then((ok) => {
+      recordingStarted = ok;
+      startingRecording = false;
+    });
+  }
   const enemies = await enemyChampions(players ?? [], myTeam);
   readShop(me, championId, enemies);
   const gold = await teamGold(players ?? [], myTeam).catch(() => null);
@@ -21041,6 +21057,22 @@ async function readScoreboard(players, me, myTeam, gameTime) {
       theirs: theirs.map((r) => r.row)
     }
   });
+}
+var recordingStarted = false;
+var startingRecording = false;
+var RECORD_WINDOW = 90;
+async function startRecording(championId, championName) {
+  const started = await beginRecording(state.settings, { championId, championName: championName ?? championId, queue: null }, () => void pushRecordings()).catch((e) => {
+    console.log("[capture] could not start: %s", e?.message);
+    return false;
+  });
+  if (started) {
+    push({ recording: true, captureError: null });
+    raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS);
+  } else if (captureError()) {
+    push({ recording: false, captureError: captureError() });
+  }
+  return started;
 }
 function markHighlights(events, me, gameTime) {
   if (!me)
@@ -21200,7 +21232,7 @@ ipcMain2.handle("capture:reveal", async (_e, id) => {
 ipcMain2.handle("capture:demo", async () => {
   if (state.recording)
     return;
-  const started = await beginRecording({ capture: true, captureAudio: state.settings.captureAudio }, { championId: "Ahri", championName: "Ahri", queue: "Demo" }, () => void pushRecordings()).catch((e) => {
+  const started = await beginRecording({ capture: true, captureAudio: state.settings.captureAudio }, { championId: "Ahri", championName: "Ahri", queue: "Demo" }, () => void pushRecordings(), true).catch((e) => {
     console.log("[capture] demo could not start: %s", e?.message);
     return false;
   });

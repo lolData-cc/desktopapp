@@ -307,6 +307,8 @@ function push(patch: Partial<AppState>): void {
       stopGameClock()
       // Nothing about the last game's timing survives into the next one.
       answeringSince = 0
+      recordingStarted = false
+      startingRecording = false
       // The recording ends with the game, not with the app. The result is
       // stamped first, while we still know which game it was.
       if (state.recording) {
@@ -1056,28 +1058,6 @@ async function readLoading(): Promise<void> {
   if (stamp === loadingFor) return
   loadingFor = stamp
 
-  // ⚠️ Recording starts HERE, on the loading screen, not when the game answers
-  // — the opening seconds are part of the game and a recorder that misses them
-  // is a recorder you cannot trust with the rest.
-  const mine = roster.allies.find((e) => e.puuid === puuid)
-  const champ = mine?.championKey ? await classify(mine.championKey).catch(() => null) : null
-  const started = await beginRecording(
-    state.settings,
-    { championId: champ?.id ?? null, championName: champ?.name ?? null, queue: null },
-    () => void pushRecordings()
-  ).catch((e) => {
-    console.log("[capture] could not start: %s", (e as Error)?.message)
-    return false
-  })
-  if (started) {
-    push({ recording: true, captureError: null })
-    // ⚠️ SAID OUT LOUD, every game. A program that captures a screen without
-    // announcing it is spyware regardless of what it does with the file.
-    raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS)
-  } else if (captureError()) {
-    push({ recording: false, captureError: captureError() })
-  }
-
   const resolve = (entries: typeof roster.allies): Promise<LoadingPlayer[]> =>
     Promise.all(
       entries.map(async (e) => {
@@ -1412,9 +1392,30 @@ async function readGame(): Promise<void> {
   ])
 
   // Same read, no extra request: /playerlist already carries every inventory.
-  const myTeam = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)?.team ?? null
+  const mine = (players ?? []).find((p) => p.riotId === me || p.summonerName === me)
+  const myTeam = mine?.team ?? null
 
   const championId = await playingChampion(players ?? [], me)
+
+  /**
+   * ⚠️ Recording starts HERE — when the GAME does, not when loading does.
+   *
+   * It used to begin on the loading screen, which put a minute of a still
+   * picture at the head of every file: nothing anybody would ever watch, and
+   * sixty-odd megabytes of it, ten times over. Everything that IS the game —
+   * the fountain, the first buy, the invade — is from this moment on.
+   *
+   * Once per match, and the flag is what makes it once: this runs every two
+   * seconds for the whole game.
+   */
+  if (!recordingStarted && !startingRecording && state.settings.capture && stats.gameTime < RECORD_WINDOW) {
+    startingRecording = true
+    void startRecording(championId, mine?.championName ?? null).then((ok) => {
+      recordingStarted = ok
+      startingRecording = false
+    })
+  }
+
   const enemies = await enemyChampions(players ?? [], myTeam)
   void readShop(me, championId, enemies)
 
@@ -1515,6 +1516,44 @@ async function readScoreboard(
  * Riot also repeats events across polls; the mark itself drops anything within
  * a second and a half of an identical one.
  */
+/** Set once the recording is actually RUNNING — not once it has been tried. */
+let recordingStarted = false
+/** An attempt is in flight, so a two-second poll does not start a second one. */
+let startingRecording = false
+/**
+ * How many seconds into the game we keep trying to start, in seconds.
+ *
+ * Retried, not attempted once. A MINIMISED window does not appear to the
+ * capture API at all, and the game window can take a moment to exist — so a
+ * single try on the first tick would silently record nothing for the whole
+ * game. Past a minute and a half it has stopped being a timing problem and
+ * become a real one, and the Capture screen says so instead.
+ */
+const RECORD_WINDOW = 90
+
+/** `championName` is Riot's own display name from the live game — "Lee Sin",
+ *  where the id is "LeeSin". No lookup needed; it is already in hand. */
+async function startRecording(championId: string | null, championName: string | null): Promise<boolean> {
+  const started = await beginRecording(
+    state.settings,
+    { championId, championName: championName ?? championId, queue: null },
+    () => void pushRecordings()
+  ).catch((e) => {
+    console.log("[capture] could not start: %s", (e as Error)?.message)
+    return false
+  })
+
+  if (started) {
+    push({ recording: true, captureError: null })
+    // ⚠️ SAID OUT LOUD, every game. A program that captures a screen without
+    // announcing it is spyware regardless of what it does with the file.
+    raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS)
+  } else if (captureError()) {
+    push({ recording: false, captureError: captureError() })
+  }
+  return started
+}
+
 /**
  * Put the kills, deaths and assists of this game on the recording's timeline.
  *
@@ -1765,7 +1804,10 @@ ipcMain.handle("capture:demo", async () => {
   const started = await beginRecording(
     { capture: true, captureAudio: state.settings.captureAudio },
     { championId: "Ahri", championName: "Ahri", queue: "Demo" },
-    () => void pushRecordings()
+    () => void pushRecordings(),
+    // No game to record here — this button exists precisely so the recorder
+    // can be exercised without one.
+    true
   ).catch((e) => {
     console.log("[capture] demo could not start: %s", (e as Error)?.message)
     return false

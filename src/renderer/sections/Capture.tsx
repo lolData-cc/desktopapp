@@ -80,7 +80,7 @@ export default function Capture({ s }: { s: AppState }) {
           on={v.capture}
           onChange={(on) => set({ capture: on })}
           label="Record my games"
-          note="Starts on the loading screen and stops when the game ends. The overlay says so at the start of every game — that notice cannot be switched off. Around 1.3 GB per game at 1080p, so a full library of ten is roughly 13 GB."
+          note="Records the League window only — never your whole screen, and nothing else you have open. Starts when the game does and stops when it ends, and the overlay says so every time; that notice cannot be switched off. Around 1.3 GB per game at 1080p, so a full library of ten is roughly 13 GB."
         />
 
         {v.capture && (
