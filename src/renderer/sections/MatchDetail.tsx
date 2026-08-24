@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { championById } from "../../data/champions"
 import Player from "../Player"
 import ShareClip from "../ShareClip"
+import Honour from "../Honour"
 import {
   CDN,
   CDRAGON,
@@ -294,6 +295,8 @@ function Row({
         >
           {p.champLevel}
         </span>
+
+        {p.honour && <Honour kind={p.honour} small />}
       </span>
 
       <div className="flex gap-[3px]">
@@ -341,14 +344,6 @@ function Row({
         )}
       </div>
 
-      {p.honour && (
-        <span
-          className="shrink-0 px-1.5 py-[2px] font-jetbrains text-[8px] font-bold uppercase leading-none"
-          style={{ background: p.honour === "mvp" ? "#FFB615" : "rgba(215,216,217,0.8)", color: "#040A0C" }}
-        >
-          {p.honour}
-        </span>
-      )}
     </button>
   )
 }

@@ -3,6 +3,7 @@ import { championById } from "../../data/champions"
 import Player from "../Player"
 import ShareClip from "../ShareClip"
 import MatchDetail from "./MatchDetail"
+import Honour from "../Honour"
 import {
   CDN,
   mmss,
@@ -446,29 +447,6 @@ function Versus({ opponent, patch }: { opponent: Match["opponent"]; patch: strin
  *  same shape, and two definitions of it drift apart on the first tweak. */
 const DIAMOND = "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)"
 
-/**
- * ⚠️ Ours, and it says so.
- *
- * The client shows an MVP badge on its end screen, does not publish the score
- * behind it, and does not expose the result in match history. So this is our
- * own reckoning — best on the winning side, best on the losing side — and the
- * tooltip says whose opinion it is rather than borrowing the authority of the
- * game's own badge.
- */
-const Honour = ({ kind }: { kind: "mvp" | "ace" }) => (
-  <span
-    title={`${kind === "mvp" ? "Best on the winning team" : "Best on the losing team"} — our reckoning, not the client's badge`}
-    className="absolute -left-[4px] -top-[4px] grid h-[16px] place-items-center px-[4px] font-jetbrains text-[8px] font-bold uppercase leading-none tracking-[0.06em]"
-    style={{
-      background: kind === "mvp" ? "#FFB615" : "rgba(215,216,217,0.85)",
-      color: "#040A0C",
-      clipPath: "polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%)",
-      paddingBottom: 3,
-    }}
-  >
-    {kind}
-  </span>
-)
 
 const Metric = ({ value, unit, sub, good }: { value: string; unit: string; sub: string; good: boolean }) => (
   <div className="hidden w-[74px] shrink-0 lg:block">
