@@ -20051,6 +20051,11 @@ function push(patch2) {
     loadingNudge: state.loadingNudge,
     loadingCalibrating: state.loadingCalibrating
   });
+  const wanted = overlayWanted();
+  if (wanted !== overlayShown) {
+    overlayShown = wanted;
+    syncOverlay();
+  }
   if (state.phase !== before) {
     console.log("[phase] %s -> %s", before ?? "none", state.phase ?? "none");
     if (IN_GAME_PHASES.has(state.phase ?? ""))
@@ -20237,6 +20242,7 @@ function overlayWanted() {
   const wantsLoading = state.loading !== null && state.settings.loadingBoard;
   return state.notice !== null || wantsGold || wantsLoading || state.levelHint !== null;
 }
+var overlayShown = false;
 function syncOverlay() {
   if (overlayWanted()) {
     if (hideTimer) {

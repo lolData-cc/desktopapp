@@ -257,6 +257,25 @@ function push(patch: Partial<AppState>): void {
     loadingCalibrating: state.loadingCalibrating,
   })
 
+  /**
+   * ⚠️ And the window is shown or hidden to MATCH.
+   *
+   * push() only ever sent the overlay its contents; putting the window on
+   * screen was left to whoever called push, by hand. Every feature that draws
+   * there remembered — except the loading board, which pushed ten perfectly
+   * good cards to a window that was never made visible. The log showed the
+   * data arriving and the screen showed nothing.
+   *
+   * Deciding it HERE means the next thing to draw on the overlay cannot forget:
+   * if it is wanted, it appears. The explicit calls elsewhere are now
+   * redundant rather than load-bearing, and harmless — sync is idempotent.
+   */
+  const wanted = overlayWanted()
+  if (wanted !== overlayShown) {
+    overlayShown = wanted
+    syncOverlay()
+  }
+
   // The overlay is only ever on screen during a match. Tying it to the phase
   // rather than to a toggle means there is no state where it is left hanging
   // over the client, which is the thing that makes overlays feel invasive.
@@ -576,6 +595,9 @@ function overlayWanted(): boolean {
   const wantsLoading = state.loading !== null && state.settings.loadingBoard
   return state.notice !== null || wantsGold || wantsLoading || state.levelHint !== null
 }
+
+/** What the last sync decided, so the window is only touched on a change. */
+let overlayShown = false
 
 function syncOverlay(): void {
   if (overlayWanted()) {
