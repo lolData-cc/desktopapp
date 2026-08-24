@@ -12776,8 +12776,8 @@ var require_coerce = __commonJS((exports, module) => {
     const minor = match[3] || "0";
     const patch2 = match[4] || "0";
     const prerelease = options.includePrerelease && match[5] ? `-${match[5]}` : "";
-    const build = options.includePrerelease && match[6] ? `+${match[6]}` : "";
-    return parse(`${major}.${minor}.${patch2}${prerelease}${build}`, options);
+    const build2 = options.includePrerelease && match[6] ? `+${match[6]}` : "";
+    return parse(`${major}.${minor}.${patch2}${prerelease}${build2}`, options);
   };
   module.exports = coerce;
 });
@@ -18680,7 +18680,14 @@ import { join } from "node:path";
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
 var DEV_URL = process.env.VITE_DEV_SERVER_URL;
 var overlay = null;
-function createOverlay(preloadPath) {
+var preload = "";
+var idle = null;
+var IDLE_MS = 90000;
+var said = new Map;
+function configureOverlay(preloadPath) {
+  preload = preloadPath;
+}
+function build() {
   const { bounds } = screen.getPrimaryDisplay();
   overlay = new BrowserWindow({
     x: bounds.x,
@@ -18699,7 +18706,7 @@ function createOverlay(preloadPath) {
     focusable: false,
     show: false,
     webPreferences: {
-      preload: preloadPath,
+      preload,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -18718,30 +18725,54 @@ function createOverlay(preloadPath) {
   overlay.setIgnoreMouseEvents(true, { forward: true });
   const url = DEV_URL ? `${DEV_URL}?overlay=1` : `file://${join(__dirname, "../dist/index.html")}?overlay=1`;
   overlay.loadURL(url);
+  overlay.webContents.on("did-finish-load", () => {
+    for (const [channel, payload] of said) {
+      if (overlay && !overlay.isDestroyed())
+        overlay.webContents.send(channel, payload);
+    }
+  });
   overlay.on("closed", () => {
     overlay = null;
   });
   return overlay;
 }
 function showOverlay() {
+  if (idle) {
+    clearTimeout(idle);
+    idle = null;
+  }
   if (!overlay || overlay.isDestroyed())
+    build();
+  if (!overlay)
     return;
   if (!overlay.isVisible())
     overlay.showInactive();
   overlay.setAlwaysOnTop(true, "screen-saver");
 }
 function hideOverlay() {
-  if (!overlay || overlay.isDestroyed())
-    return;
-  if (overlay.isVisible())
+  if (overlay && !overlay.isDestroyed() && overlay.isVisible())
     overlay.hide();
+  if (idle)
+    clearTimeout(idle);
+  idle = setTimeout(() => {
+    idle = null;
+    destroyOverlay();
+  }, IDLE_MS);
+}
+function releaseOverlay() {
+  destroyOverlay();
 }
 function sendOverlay(channel, payload) {
+  said.set(channel, payload);
   if (!overlay || overlay.isDestroyed())
     return;
   overlay.webContents.send(channel, payload);
 }
 function destroyOverlay() {
+  if (idle) {
+    clearTimeout(idle);
+    idle = null;
+  }
   if (overlay && !overlay.isDestroyed())
     overlay.destroy();
   overlay = null;
@@ -19022,6 +19053,7 @@ async function finish() {
     onChange?.();
     return;
   }
+  destroyRecorder();
   const all = await readIndex();
   all.unshift(rec);
   await writeIndex(await prune(all));
@@ -19487,15 +19519,15 @@ async function askAi(token, messages, signal) {
   const body = await res.json().catch(() => null);
   if (res.ok && body?.reply)
     return { ok: true, reply: body.reply };
-  const said = body?.error ?? body?.message ?? "";
+  const said2 = body?.error ?? body?.message ?? "";
   if (res.status === 401)
-    return { ok: false, reason: "signed-out", message: said || "Sign in to use lolData AI." };
+    return { ok: false, reason: "signed-out", message: said2 || "Sign in to use lolData AI." };
   if (res.status === 403)
-    return { ok: false, reason: "not-premium", message: said || "lolData AI needs a premium plan." };
-  if (res.status === 402 || /credit/i.test(said)) {
-    return { ok: false, reason: "no-credits", message: said || "You are out of AI credits." };
+    return { ok: false, reason: "not-premium", message: said2 || "lolData AI needs a premium plan." };
+  if (res.status === 402 || /credit/i.test(said2)) {
+    return { ok: false, reason: "no-credits", message: said2 || "You are out of AI credits." };
   }
-  return { ok: false, reason: "failed", message: said || `lolData AI returned ${res.status}.` };
+  return { ok: false, reason: "failed", message: said2 || `lolData AI returned ${res.status}.` };
 }
 
 // src/lcu/history.ts
@@ -20432,6 +20464,7 @@ function push(patch2) {
       answeringSince = 0;
       recordingStarted = false;
       startingRecording = false;
+      releaseOverlay();
       if (state.recording) {
         const mine = state.matches?.[0];
         if (mine && mine.championId === state.lastPlayed?.championKey)
@@ -20653,12 +20686,12 @@ function noticesAllowed(kind) {
     return true;
   return kind === "dragon" || kind === "elder" ? state.settings.objectiveNotices : state.settings.buildNotices;
 }
-function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots2, build) {
+function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots2, build2) {
   if (!noticesAllowed(kind))
     return;
   if (noticeTimer)
     clearTimeout(noticeTimer);
-  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots: boots2, build } });
+  push({ notice: { kind, inSeconds, raisedAt: Date.now(), element, tally, item, boots: boots2, build: build2 } });
   syncOverlay();
   if (!state.pinned)
     noticeTimer = setTimeout(dropNotice, ms);
@@ -20778,15 +20811,15 @@ async function readShop(riotId, championId, enemies) {
   const saved = championId ? await buildFor(championId).catch(() => null) : null;
   if (saved && !saved.enabled)
     return;
-  const build = saved?.items.map((item) => ({ item })) ?? state.matchup?.slots;
-  if (!riotId || !build?.length)
+  const build2 = saved?.items.map((item) => ({ item })) ?? state.matchup?.slots;
+  if (!riotId || !build2?.length)
     return shopLog("no build for %s", championId ?? "unknown champion");
   const purse = await liveOwnPurse(riotId).catch(() => null);
   if (!purse)
     return shopLog("no purse for %s", riotId);
   readBoots(purse.items, enemies);
   const owned = new Set(purse.items.map((i) => i.itemID));
-  const nextIndex = build.findIndex((s) => !owned.has(s.item));
+  const nextIndex = build2.findIndex((s) => !owned.has(s.item));
   if (nextIndex < 0)
     return shopLog("build finished");
   if (saved && state.settings.smartBuild) {
@@ -20828,13 +20861,13 @@ async function readShop(riotId, championId, enemies) {
       return;
     }
   }
-  const next = build[nextIndex];
+  const next = build2[nextIndex];
   if (announcedItems.has(next.item))
     return;
   const cost = await costToComplete(next.item, purse.items, purse.gold).catch(() => null);
   if (!cost)
     return shopLog("no price for item %d", next.item);
-  shopLog("%s slot %d/%d: %s needs %dg, have %dg%s", saved ? "profile" : "live build", nextIndex + 1, build.length, cost.name, cost.remaining, purse.gold, cost.affordable ? " → NOTIFY" : "");
+  shopLog("%s slot %d/%d: %s needs %dg, have %dg%s", saved ? "profile" : "live build", nextIndex + 1, build2.length, cost.name, cost.remaining, purse.gold, cost.affordable ? " → NOTIFY" : "");
   if (!cost.affordable)
     return;
   announcedItems.add(next.item);
@@ -20843,7 +20876,7 @@ async function readShop(riotId, championId, enemies) {
     name: cost.name,
     cost: cost.remaining,
     index: nextIndex + 1,
-    total: build.length
+    total: build2.length
   });
 }
 var loadingFor = "";
@@ -21709,7 +21742,7 @@ if (!gotLock) {
     setCaptureBudget((await readSettings()).captureBudgetGb);
     tidyLibrary();
     createWindow();
-    createOverlay(join5(__dirname2, "preload.mjs"));
+    configureOverlay(join5(__dirname2, "preload.mjs"));
     const registered = globalShortcut.register(GOLD_HOTKEY, () => {
       goldVisible = !goldVisible;
       push({});

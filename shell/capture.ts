@@ -375,6 +375,17 @@ async function finish(): Promise<void> {
     return
   }
 
+  /**
+   * ⚠️ The recorder's window goes too, and it is a whole renderer process.
+   *
+   * It used to be built on the first game and kept for the rest of the session
+   * — a process holding a MediaRecorder that had nothing to record, for every
+   * hour somebody left the app open. Rebuilding it costs about a third of a
+   * second at the start of the next game, which is time the loading screen has
+   * to spare.
+   */
+  destroyRecorder()
+
   const all = await readIndex()
   all.unshift(rec)
   await writeIndex(await prune(all))

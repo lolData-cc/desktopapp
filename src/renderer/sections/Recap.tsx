@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import { CDN, mmss, recordingFor, type AppState } from "../types"
 import { championById } from "../../data/champions"
-import ChampionStage from "../ChampionStage"
+/**
+ * ⚠️ three.js is loaded HERE, and only when somebody actually finishes a game.
+ *
+ * It was a static import, which put the whole library — plus the GLTF, KTX2 and
+ * meshopt loaders — into the one chunk the app parses at startup. That is a
+ * megabyte of code compiled and held in memory on every launch, for a screen
+ * most sessions never reach, on a machine that is about to run League.
+ */
+const ChampionStage = lazy(() => import("../ChampionStage"))
 import Player, { RUNUP } from "../Player"
 import Verdict from "../Verdict"
 import type { Highlight, LivePlayer, PlayerRank, Recording } from "../types"
@@ -181,7 +189,17 @@ export default function Recap({
       <div className="mt-4 flex min-h-0 flex-1 gap-7">
         {/* the champion */}
         <div className="relative w-[430px] shrink-0">
-          <ChampionStage championId={slug} championKey={key} className="h-full w-full" />
+          <Suspense
+            fallback={
+              <div className="grid h-full w-full place-items-center">
+                <p className="font-jetbrains text-[10px] uppercase tracking-[0.22em] text-flash/25">
+                  loading the model…
+                </p>
+              </div>
+            }
+          >
+            <ChampionStage championId={slug} championKey={key} className="h-full w-full" />
+          </Suspense>
           <p className="absolute inset-x-0 bottom-0 text-center font-chakrapetch text-[15px] font-bold uppercase tracking-[0.16em] text-flash/70">
             {slug}
             {match && (

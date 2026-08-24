@@ -1,12 +1,23 @@
-import { useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import { CDN, CDRAGON, isPremium, planBadge, type AppState } from "./types"
 import { Attached, Waiting } from "./sections/Overview"
-import Matches from "./sections/Matches"
-import Stats from "./sections/Stats"
-import AiChat from "./sections/AiChat"
-import Builds from "./sections/Builds"
-import BuildEditor from "./sections/BuildEditor"
-import Preferences from "./sections/Preferences"
+/**
+ * ⚠️ Everything except the Overview is fetched when it is first opened.
+ *
+ * They were all imported eagerly, so every section — the build editor, the
+ * settings, the AI chat, the match list — was compiled and held on launch, for
+ * a window that opens on one of them. Sessions that only ever glance at the
+ * Overview paid for all six.
+ *
+ * The Overview stays eager because it is what the window opens on, and a
+ * spinner on the first frame of an app is a worse trade than the memory.
+ */
+const Matches = lazy(() => import("./sections/Matches"))
+const Stats = lazy(() => import("./sections/Stats"))
+const AiChat = lazy(() => import("./sections/AiChat"))
+const Builds = lazy(() => import("./sections/Builds"))
+const BuildEditor = lazy(() => import("./sections/BuildEditor"))
+const Preferences = lazy(() => import("./sections/Preferences"))
 import CyberBackdrop from "./CyberBackdrop"
 import Boundary from "./Boundary"
 import Recap, { isPostGame } from "./sections/Recap"
@@ -166,6 +177,7 @@ export default function App() {
               section so leaving a broken screen clears the fault instead of
               latching it until restart. */}
           <Boundary resetKey={`${section}:${editing ?? ""}:${preview ?? ""}`}>
+          <Suspense fallback={<Loading />}>
           <div className="relative h-full">
           {section === "overview" ? (
             s?.client === "attached" ? (
@@ -197,6 +209,7 @@ export default function App() {
             <AiChat s={s} />
           )}
           </div>
+          </Suspense>
           </Boundary>
         </main>
 
@@ -238,6 +251,14 @@ export default function App() {
     </div>
   )
 }
+
+/** A section on its way in. Deliberately quiet: these arrive in a few
+ *  milliseconds from disk, and a spinner would flash rather than inform. */
+const Loading = () => (
+  <div className="grid h-full place-items-center">
+    <p className="font-jetbrains text-[10px] uppercase tracking-[0.2em] text-flash/20">…</p>
+  </div>
+)
 
 /* ── chrome ──────────────────────────────────────────────────────────────── */
 

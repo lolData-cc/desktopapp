@@ -21,8 +21,44 @@ import { join } from "node:path"
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
 
 let overlay: BrowserWindow | null = null
+let preload = ""
+let idle: ReturnType<typeof setTimeout> | null = null
 
-export function createOverlay(preloadPath: string): BrowserWindow {
+/**
+ * How long a hidden overlay is kept before it is thrown away.
+ *
+ * ⚠️ A grace period, not a policy. The real boundary is leaving the game, and
+ * the shell calls releaseOverlay() there. This exists so that gaps BETWEEN
+ * notices inside a game — a minute between a dragon warning and a build
+ * notice — do not tear the window down and build it again, which would make
+ * every second notice arrive late.
+ */
+const IDLE_MS = 90_000
+
+/**
+ * What has been pushed at it, so a window built later can be caught up.
+ *
+ * ⚠️ Required by the lazy creation below, not an optimisation. The shell pushes
+ * state as it changes and forgets it; a window that did not exist at the time
+ * would miss everything said before it opened and draw an empty screen.
+ */
+const said = new Map<string, unknown>()
+
+/** Remember where the preload lives. The window itself is built on demand. */
+export function configureOverlay(preloadPath: string): void {
+  preload = preloadPath
+}
+
+/**
+ * ⚠️ Built when first needed and destroyed when the game ends, rather than
+ * living for the whole session.
+ *
+ * A hidden BrowserWindow is not free: it is a renderer PROCESS, and this one
+ * was measured at ~90 MB sitting behind a client that was not even running.
+ * The overlay is useful for the twenty-five minutes somebody is in a game and
+ * useless for the hours they are not, so it now exists for the twenty-five.
+ */
+function build(): BrowserWindow {
   const { bounds } = screen.getPrimaryDisplay()
 
   overlay = new BrowserWindow({
@@ -48,7 +84,7 @@ export function createOverlay(preloadPath: string): BrowserWindow {
     focusable: false,
     show: false,
     webPreferences: {
-      preload: preloadPath,
+      preload,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -83,27 +119,46 @@ export function createOverlay(preloadPath: string): BrowserWindow {
   const url = DEV_URL ? `${DEV_URL}?overlay=1` : `file://${join(__dirname, "../dist/index.html")}?overlay=1`
   void overlay.loadURL(url)
 
+  // Everything the shell said while this window did not exist.
+  overlay.webContents.on("did-finish-load", () => {
+    for (const [channel, payload] of said) {
+      if (overlay && !overlay.isDestroyed()) overlay.webContents.send(channel, payload)
+    }
+  })
+
   overlay.on("closed", () => { overlay = null })
   return overlay
 }
 
 export function showOverlay(): void {
-  if (!overlay || overlay.isDestroyed()) return
+  if (idle) { clearTimeout(idle); idle = null }
+  if (!overlay || overlay.isDestroyed()) build()
+  if (!overlay) return
   if (!overlay.isVisible()) overlay.showInactive() // show WITHOUT focusing the game away
   overlay.setAlwaysOnTop(true, "screen-saver")
 }
 
 export function hideOverlay(): void {
-  if (!overlay || overlay.isDestroyed()) return
-  if (overlay.isVisible()) overlay.hide()
+  if (overlay && !overlay.isDestroyed() && overlay.isVisible()) overlay.hide()
+  // Kept briefly in case another notice is a few seconds behind this one.
+  if (idle) clearTimeout(idle)
+  idle = setTimeout(() => { idle = null; destroyOverlay() }, IDLE_MS)
+}
+
+/** The game is over: the window has nothing left to draw for a while. */
+export function releaseOverlay(): void {
+  destroyOverlay()
 }
 
 export function sendOverlay(channel: string, payload: unknown): void {
+  // ⚠️ Recorded whether or not there is a window. This IS the catch-up.
+  said.set(channel, payload)
   if (!overlay || overlay.isDestroyed()) return
   overlay.webContents.send(channel, payload)
 }
 
 export function destroyOverlay(): void {
+  if (idle) { clearTimeout(idle); idle = null }
   if (overlay && !overlay.isDestroyed()) overlay.destroy()
   overlay = null
 }

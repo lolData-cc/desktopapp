@@ -13,7 +13,8 @@ import { dirname, join, resolve } from "node:path"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { LcuConnection, type Phase, type RosterEntry } from "../src/lcu/connection"
 import { championById, championByName, currentPatch, type Champion } from "../src/data/champions"
-import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
+import { configureOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay,
+         releaseOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
 import { createSplash, dismissSplash } from "./splash"
 import { beginRecording, endRecording, mark, setResult, isRecording, captureError,
@@ -309,6 +310,10 @@ function push(patch: Partial<AppState>): void {
       answeringSince = 0
       recordingStarted = false
       startingRecording = false
+      // ⚠️ And the overlay's whole process goes with it. It has nothing to draw
+      // until the next game, and ~90 MB of renderer waiting for that is 90 MB
+      // taken from the machine that is about to play one.
+      releaseOverlay()
       // The recording ends with the game, not with the app. The result is
       // stamped first, while we still know which game it was.
       if (state.recording) {
@@ -2545,7 +2550,7 @@ if (!gotLock) {
     void tidyLibrary()
 
     createWindow()
-    createOverlay(join(__dirname, "preload.mjs"))
+    configureOverlay(join(__dirname, "preload.mjs"))
 
     // Read the player's own HUD scale before anything is drawn over the game, so
     // the first frame is already in the right place rather than being corrected
