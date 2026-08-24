@@ -60,6 +60,9 @@ let win: BrowserWindow | null = null
 let ready = false
 let out: WriteStream | null = null
 let current: Recording | null = null
+/** Event identities already on the timeline, so a repeated feed cannot mark
+ *  the same moment twice. Cleared with each recording. */
+let marked = new Set<string>()
 /** What the recorder actually chose, which decides the file's name. */
 let container: "mp4" | "webm" = "mp4"
 let onChange: (() => void) | null = null
@@ -134,6 +137,7 @@ export async function beginRecording(
 
   lastError = null
   onChange = changed
+  marked = new Set()
 
   const { desktopCapturer, screen } = await import("electron")
   const sources = await desktopCapturer.getSources({ types: ["screen"] })
@@ -223,15 +227,32 @@ ipcMain.on("capture:started", (_e, info: { width: number; height: number; audio:
   onChange?.()
 })
 
-/** A moment worth jumping to later, timestamped against the recording. */
-export function mark(kind: Highlight["kind"], label: string): void {
-  if (!current) return
-  const at = Date.now() - current.startedAt
-  // Riot's event feed repeats; a second mark on the same moment is the same
-  // moment.
-  if (current.highlights.some((h) => h.kind === kind && Math.abs(h.at - at) < 1500)) return
-  current.highlights.push({ at, kind, label })
+/**
+ * A moment worth jumping to later.
+ *
+ * ⚠️ `at` is WHERE IT HAPPENED in the recording, and `key` is what makes it
+ * the same moment twice.
+ *
+ * Both were got wrong, and the failure was total: the position was stamped
+ * with the clock at the moment of marking, while the caller re-reads Riot's
+ * event feed — which hands back every event of the whole game — several times
+ * a minute. So one kill became a fresh mark on every poll, each one further
+ * along the timeline than the last. A nineteen-minute game came back with 961
+ * marks, none of them where anything happened.
+ *
+ * The dedupe was no defence, because it compared the mark TIMES, and those
+ * kept advancing. It has to be the event's own identity.
+ */
+export function mark(kind: Highlight["kind"], label: string, at: number, key: string): void {
+  if (!current || marked.has(key)) return
+  marked.add(key)
+  current.highlights.push({ at: Math.max(0, Math.round(at)), kind, label })
 }
+
+/** Milliseconds into the running recording, right now — or null if there is
+ *  none. Callers convert their own clock against this. */
+export const recordingClock = (): number | null =>
+  current ? Date.now() - current.startedAt : null
 
 /** The result, once the game says so. */
 export function setResult(win: boolean): void {

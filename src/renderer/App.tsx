@@ -42,6 +42,10 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 
 const DISCORD = "https://discord.gg/loldata"
 
+/** Phases that mean the next game has genuinely started, and the last one's
+ *  recap should stand down. */
+const NEW_GAME = new Set(["ChampSelect", "GameStart", "InProgress", "Reconnect"])
+
 export default function App() {
   const [s, setS] = useState<AppState | null>(null)
   const [section, setSection] = useState<SectionId>("overview")
@@ -52,12 +56,24 @@ export default function App() {
   /**
    * Waved away for this game.
    *
-   * ⚠️ Cleared when the PHASE leaves post-game, not keyed on the match id. The
-   * client writes history late, so a dismissal keyed on `matches[0]` would be
-   * keyed on the PREVIOUS game — and the recap would pop straight back up the
-   * moment the real one arrived, having just been dismissed.
+   * ⚠️ Cleared when a NEW GAME BEGINS, not keyed on the match id. The client
+   * writes history late, so a dismissal keyed on `matches[0]` would be keyed
+   * on the PREVIOUS game — and the recap would pop straight back up the moment
+   * the real one arrived, having just been dismissed.
    */
   const [dismissed, setDismissed] = useState(false)
+
+  /**
+   * The recap has opened, and it STAYS OPEN until CONTINUE.
+   *
+   * ⚠️ Latched rather than derived from the phase. The client runs through
+   * WaitingForStats, PreEndOfGame and EndOfGame in a few seconds and is back in
+   * the Lobby before anyone has alt-tabbed — so a recap that existed only while
+   * the phase said "post-game" appeared for about a second and was gone. This
+   * is the screen that summarises the last twenty minutes; it does not get to
+   * decide on its own when you have finished reading it.
+   */
+  const [latched, setLatched] = useState(false)
   // Which past game the recap is being previewed over, or null for off. An
   // INDEX rather than a match, so the button can step through recent games and
   // the framing can be checked on champions of different sizes.
@@ -69,16 +85,33 @@ export default function App() {
   }, [])
 
   const post = isPostGame(s?.phase ?? null)
+  const phase = s?.phase ?? null
+  const haveGame = !!s?.lastPlayed || !!s?.matches?.length
 
   useEffect(() => {
-    if (!post) setDismissed(false)
-  }, [post])
+    if (post && haveGame) setLatched(true)
+  }, [post, haveGame])
+
+  /**
+   * A new game clears it — and only a new game.
+   *
+   * ⚠️ Queuing does NOT count. Lobby and Matchmaking come straight after the
+   * end screen, so treating them as "moved on" would take the recap away from
+   * someone who pressed "find match" and then went back to read it. Champion
+   * select is where the next game genuinely starts and the screen has to be
+   * about that instead.
+   */
+  useEffect(() => {
+    if (phase && NEW_GAME.has(phase)) {
+      setLatched(false)
+      setDismissed(false)
+    }
+  }, [phase])
 
   // Something to show: the champion from the game we just watched, or failing
   // that whatever history has.
   const previewMatch = preview !== null ? (s?.matches?.[preview] ?? null) : null
-  const showRecap =
-    !!previewMatch || (post && !dismissed && (!!s?.lastPlayed || !!s?.matches?.length))
+  const showRecap = !!previewMatch || (latched && !dismissed)
 
   return (
     <div className="relative flex h-full flex-col bg-liquirice text-flash">

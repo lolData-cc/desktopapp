@@ -18,7 +18,8 @@ import { ensureProtocol } from "./protocol"
 import { createSplash, dismissSplash } from "./splash"
 import { beginRecording, endRecording, mark, setResult, isRecording, captureError,
          readIndex, keepRecording, deleteRecording, revealRecording, librarySize,
-         destroyRecorder, serveClips, tidyLibrary, type Recording } from "./capture"
+         destroyRecorder, serveClips, tidyLibrary, recordingClock,
+         type Recording } from "./capture"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -304,6 +305,8 @@ function push(patch: Partial<AppState>): void {
     if (IN_GAME_PHASES.has(state.phase ?? "")) startGameClock()
     else {
       stopGameClock()
+      // Nothing about the last game's timing survives into the next one.
+      answeringSince = 0
       // The recording ends with the game, not with the app. The result is
       // stamped first, while we still know which game it was.
       if (state.recording) {
@@ -1002,7 +1005,47 @@ async function readShop(
  */
 let loadingFor = ""
 
+/**
+ * Seconds on the game clock before the loading board is taken down. One is
+ * enough to know the world exists, and a board that lingers for one second
+ * over the fountain costs nothing.
+ */
+const GAME_UNDER_WAY = 1
+/** How long the game may answer with a stopped clock before we stop believing
+ *  the loading screen is still up. */
+const LOADING_CEILING = 25_000
+/** When the game first answered this match, so the ceiling has a start. */
+let answeringSince = 0
+
 async function readLoading(): Promise<void> {
+  /**
+   * ⚠️ Only while the client says a game is on.
+   *
+   * A poll already in flight when the game ends lands AFTER the phase has
+   * moved to WaitingForStats. It finds the game no longer answering and reads
+   * that as a loading screen — so the rank board flashed back up over the end
+   * screen, and a second recording started behind it. That one was two seconds
+   * long and it went straight to the top of the library, in front of the game
+   * that had just been played.
+   */
+  if (!IN_GAME_PHASES.has(state.phase ?? "")) return
+
+  /**
+   * ⚠️ And never once the game has ANSWERED in this match.
+   *
+   * The phase guard above depends on the client noticing the game is over
+   * before we do, and that ordering is not ours to rely on: the game closes
+   * its port the instant it exits, while the gameflow phase can lag a second
+   * or more behind. In that window the phase still says a game is on and the
+   * game is silent — which is, byte for byte, what a loading screen looks
+   * like.
+   *
+   * This is the rule that does not depend on timing: a match that has already
+   * answered cannot go back to loading. Once the game has spoken, silence
+   * means it has ended.
+   */
+  if (answeringSince) return
+
   const puuid = state.summoner?.puuid
   if (!puuid) return
 
@@ -1323,11 +1366,40 @@ async function readGame(): Promise<void> {
   // way to tell loading from playing: there is no "Loading" gameflow phase.
   if (!stats) return void readLoading()
 
-  // ⚠️ And the moment it DOES answer, the loading board comes down. The game
-  // has started; those cards are over the Rift now, not over a loading screen,
-  // and "UNRANKED" floating in your jungle at 00:15 is exactly what happens
-  // without this. Clearing the stamp too, so the next game reads fresh.
-  if (state.loading) {
+  /**
+   * ⚠️ The board comes down when the CLOCK STARTS, not when the game answers.
+   *
+   * The game serves this API from the moment its process binds the port, and
+   * that is while the loading screen is still up and people are still at 40%.
+   * Taking the board down on the first answer took it away with half the
+   * loading screen left to read — which is the only screen it exists for.
+   *
+   * The clock is the honest signal: it sits at zero until the world appears.
+   *
+   * ⚠️ With a timeout behind it, because the alternative failure is worse. If
+   * the clock never starts for some mode we have not met, the cards would sit
+   * over the Rift instead — "UNRANKED" floating in your jungle at 00:15 is
+   * what the old code was written to prevent, and this must not bring it back.
+   */
+  if (!answeringSince) {
+    answeringSince = Date.now()
+    // One line per game, and the reason it is here: this is the fact the
+    // board's timing rests on — that the game answers with a stopped clock
+    // while the loading screen is still up. If it ever answers with the clock
+    // already running, the board will come down early again and this is where
+    // that shows.
+    console.log("[loading] the game answered at gameTime=%ss, board %s",
+      stats.gameTime.toFixed(1), state.loading ? "still up" : "not up")
+  }
+  const underWay = stats.gameTime >= GAME_UNDER_WAY
+  const overdue = Date.now() - answeringSince > LOADING_CEILING
+
+  if (state.loading && (underWay || overdue)) {
+    console.log(
+      "[loading] board down at gameTime=%ss%s",
+      stats.gameTime.toFixed(1),
+      overdue && !underWay ? " — the clock never started, timed out" : ""
+    )
     loadingFor = ""
     push({ loading: null })
     syncOverlay()
@@ -1354,7 +1426,7 @@ async function readGame(): Promise<void> {
 
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain)
 
-  if (state.recording) markHighlights(events, me)
+  if (state.recording) markHighlights(events, me, stats.gameTime)
 
   void readScoreboard(players ?? [], me, myTeam, stats.gameTime)
 }
@@ -1443,16 +1515,38 @@ async function readScoreboard(
  * Riot also repeats events across polls; the mark itself drops anything within
  * a second and a half of an identical one.
  */
-function markHighlights(events: GameEvent[], me: string | null): void {
+/**
+ * Put the kills, deaths and assists of this game on the recording's timeline.
+ *
+ * ⚠️ Positioned from the GAME clock, not from ours.
+ *
+ * Riot's feed is not a stream of new events — every call returns the whole
+ * history of the match. Marking "now" therefore stamped every past kill again
+ * on every poll, walking each one further down the timeline: 961 marks for a
+ * game with a handful of kills, and not one of them where anything happened.
+ *
+ * `EventTime` is seconds on the game's clock. The recording started earlier,
+ * during loading, so the two are offset by a fixed amount — and we can measure
+ * it, because right now we know both what the game clock reads and how long we
+ * have been recording.
+ */
+function markHighlights(events: GameEvent[], me: string | null, gameTime: number): void {
   if (!me) return
+  const now = recordingClock()
+  if (now === null) return
+
+  const offset = now - gameTime * 1000
   const bare = me.split("#")[0] ?? me
   const isMe = (n?: string) => !!n && (n === me || n === bare)
 
   for (const e of events) {
     if (e.EventName !== "ChampionKill") continue
-    if (isMe(e.KillerName)) mark("kill", e.VictimName ?? "")
-    else if (isMe(e.VictimName)) mark("death", e.KillerName ?? "")
-    else if (e.Assisters?.some(isMe)) mark("assist", e.VictimName ?? "")
+    const at = e.EventTime * 1000 + offset
+    // EventID is Riot's own identity for the event and is stable across polls.
+    const key = `k${e.EventID}`
+    if (isMe(e.KillerName)) mark("kill", e.VictimName ?? "", at, key)
+    else if (isMe(e.VictimName)) mark("death", e.KillerName ?? "", at, key)
+    else if (e.Assisters?.some(isMe)) mark("assist", e.VictimName ?? "", at, key)
   }
 }
 
@@ -1685,10 +1779,15 @@ ipcMain.handle("capture:demo", async () => {
   push({ recording: true, captureError: null })
   raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS)
 
-  // Spread across the clip so the timeline has something to navigate.
-  setTimeout(() => mark("kill", "Ahri → Zed"), 3000)
-  setTimeout(() => mark("death", "Khazix → Ahri"), 7000)
-  setTimeout(() => mark("multi", "Double kill"), 11000)
+  // Spread across the clip so the timeline has something to navigate. Marked
+  // against the recording's own clock, exactly as a real game's events are.
+  const demoMark = (kind: "kill" | "death" | "multi", label: string, key: string) => {
+    const at = recordingClock()
+    if (at !== null) mark(kind, label, at, key)
+  }
+  setTimeout(() => demoMark("kill", "Ahri → Zed", "demo-1"), 3000)
+  setTimeout(() => demoMark("death", "Khazix → Ahri", "demo-2"), 7000)
+  setTimeout(() => demoMark("multi", "Double kill", "demo-3"), 11000)
   setTimeout(() => {
     setResult(true)
     void endRecording()

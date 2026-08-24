@@ -18869,6 +18869,7 @@ var win = null;
 var ready = false;
 var out = null;
 var current = null;
+var marked = new Set;
 var container = "mp4";
 var onChange = null;
 var lastError = null;
@@ -18908,6 +18909,7 @@ async function beginRecording(settings, about, changed) {
     return false;
   lastError = null;
   onChange = changed;
+  marked = new Set;
   const { desktopCapturer, screen: screen2 } = await import("electron");
   const sources = await desktopCapturer.getSources({ types: ["screen"] });
   const primary = screen2.getPrimaryDisplay();
@@ -18960,14 +18962,13 @@ ipcMain.on("capture:started", (_e, info) => {
   console.log("[capture] recording %dx%d, %d audio track(s), %s", info.width, info.height, info.audio, info.mimeType);
   onChange?.();
 });
-function mark(kind, label) {
-  if (!current)
+function mark(kind, label, at, key) {
+  if (!current || marked.has(key))
     return;
-  const at = Date.now() - current.startedAt;
-  if (current.highlights.some((h) => h.kind === kind && Math.abs(h.at - at) < 1500))
-    return;
-  current.highlights.push({ at, kind, label });
+  marked.add(key);
+  current.highlights.push({ at: Math.max(0, Math.round(at)), kind, label });
 }
+var recordingClock = () => current ? Date.now() - current.startedAt : null;
 function setResult(win2) {
   if (current)
     current.win = win2;
@@ -20381,6 +20382,7 @@ function push(patch2) {
       startGameClock();
     else {
       stopGameClock();
+      answeringSince = 0;
       if (state.recording) {
         const mine = state.matches?.[0];
         if (mine && mine.championId === state.lastPlayed?.championKey)
@@ -20796,7 +20798,14 @@ async function readShop(riotId, championId, enemies) {
   });
 }
 var loadingFor = "";
+var GAME_UNDER_WAY = 1;
+var LOADING_CEILING = 25000;
+var answeringSince = 0;
 async function readLoading() {
+  if (!IN_GAME_PHASES.has(state.phase ?? ""))
+    return;
+  if (answeringSince)
+    return;
   const puuid = state.summoner?.puuid;
   if (!puuid)
     return;
@@ -20953,7 +20962,14 @@ async function readGame() {
   const stats = await liveGameStats();
   if (!stats)
     return void readLoading();
-  if (state.loading) {
+  if (!answeringSince) {
+    answeringSince = Date.now();
+    console.log("[loading] the game answered at gameTime=%ss, board %s", stats.gameTime.toFixed(1), state.loading ? "still up" : "not up");
+  }
+  const underWay = stats.gameTime >= GAME_UNDER_WAY;
+  const overdue = Date.now() - answeringSince > LOADING_CEILING;
+  if (state.loading && (underWay || overdue)) {
+    console.log("[loading] board down at gameTime=%ss%s", stats.gameTime.toFixed(1), overdue && !underWay ? " — the clock never started, timed out" : "");
     loadingFor = "";
     push({ loading: null });
     syncOverlay();
@@ -20974,7 +20990,7 @@ async function readGame() {
   }
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain);
   if (state.recording)
-    markHighlights(events, me);
+    markHighlights(events, me, stats.gameTime);
   readScoreboard(players ?? [], me, myTeam, stats.gameTime);
 }
 var keyCache = new Map;
@@ -21026,20 +21042,26 @@ async function readScoreboard(players, me, myTeam, gameTime) {
     }
   });
 }
-function markHighlights(events, me) {
+function markHighlights(events, me, gameTime) {
   if (!me)
     return;
+  const now = recordingClock();
+  if (now === null)
+    return;
+  const offset = now - gameTime * 1000;
   const bare = me.split("#")[0] ?? me;
   const isMe = (n) => !!n && (n === me || n === bare);
   for (const e of events) {
     if (e.EventName !== "ChampionKill")
       continue;
+    const at = e.EventTime * 1000 + offset;
+    const key = `k${e.EventID}`;
     if (isMe(e.KillerName))
-      mark("kill", e.VictimName ?? "");
+      mark("kill", e.VictimName ?? "", at, key);
     else if (isMe(e.VictimName))
-      mark("death", e.KillerName ?? "");
+      mark("death", e.KillerName ?? "", at, key);
     else if (e.Assisters?.some(isMe))
-      mark("assist", e.VictimName ?? "");
+      mark("assist", e.VictimName ?? "", at, key);
   }
 }
 function readObjective(gameTime, events, players, me, mapTerrain) {
@@ -21188,9 +21210,14 @@ ipcMain2.handle("capture:demo", async () => {
   }
   push({ recording: true, captureError: null });
   raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS);
-  setTimeout(() => mark("kill", "Ahri → Zed"), 3000);
-  setTimeout(() => mark("death", "Khazix → Ahri"), 7000);
-  setTimeout(() => mark("multi", "Double kill"), 11000);
+  const demoMark = (kind, label, key) => {
+    const at = recordingClock();
+    if (at !== null)
+      mark(kind, label, at, key);
+  };
+  setTimeout(() => demoMark("kill", "Ahri → Zed", "demo-1"), 3000);
+  setTimeout(() => demoMark("death", "Khazix → Ahri", "demo-2"), 7000);
+  setTimeout(() => demoMark("multi", "Double kill", "demo-3"), 11000);
   setTimeout(() => {
     setResult(true);
     endRecording();
