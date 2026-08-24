@@ -296,7 +296,18 @@ function Row({
           </p>
         </div>
 
-        <div className="w-[104px] shrink-0">
+        {/**
+          * ⚠️ RIGHT-aligned, and that is what makes the spacing equal.
+          *
+          * Left-aligned in a fixed column, the ink stopped wherever the score
+          * happened to end — 60px from the rhombus for "11 / 3 / 9" against 18
+          * on the other side, and a different 60 for every other score. No
+          * fixed width fixes that, because the gap moves with the numbers.
+          * Aligned to the right edge, the ink always ends in the same place and
+          * both gaps are the flex gap plus the diamond's own padding: 18 and
+          * 18, on every row, whatever was scored.
+          */}
+        <div className="w-[92px] shrink-0 text-right">
           <p className="font-chakrapetch text-[15px] font-bold tabular-nums leading-tight">
             {m.kills} <span className="text-flash/25">/</span>{" "}
             <span className={m.deaths === 0 ? "text-jade" : "text-flash"}>{m.deaths}</span>{" "}
@@ -389,7 +400,7 @@ function Versus({ opponent, patch }: { opponent: Match["opponent"]; patch: strin
 
   return (
     <span
-      className="relative grid w-[52px] shrink-0 place-items-center"
+      className="relative grid w-[58px] shrink-0 place-items-center"
       title={opponent ? `against ${slug ?? "?"} in ${opponent.role?.toLowerCase() ?? "lane"}` : "no lane opponent for this game"}
     >
       {/**
@@ -400,26 +411,30 @@ function Versus({ opponent, patch }: { opponent: Match["opponent"]; patch: strin
         * left no way to say WHERE in the picture the window should sit. A
         * clip-path is the diamond, and the image behind it can then be nudged.
         */}
+      {/* ⚠️ A BIGGER window, not a bigger picture. More of the champion becomes
+          visible by widening the diamond; zooming the image inside it does the
+          opposite — a diamond already discards the four corners of any square,
+          and magnifying on top of that throws away the middle too. */}
       <span
-        className="relative block h-[38px] w-[38px] overflow-hidden"
+        className="relative block h-[46px] w-[46px] overflow-hidden"
         style={{ clipPath: DIAMOND, background: "rgba(4,10,12,0.6)" }}
       >
         {opponent && slug ? (
           /**
-           * ⚠️ Biased UPWARDS in the frame, and only just zoomed.
+           * ⚠️ Barely zoomed at all — 1.04, where it started at 1.35.
            *
-           * Riot's square portraits put the face above centre, so a window on
-           * the middle of one keeps the chin and cuts the forehead — which is
-           * exactly what "shifted down" looks like. The image is moved down by
-           * 6% so the face rises into the diamond, and the zoom is 1.16 rather
-           * than 1.35: a diamond already hides the four corners of any square,
-           * and magnifying on top of that was throwing away half the width.
+           * The zoom exists only to give the vertical nudge somewhere to move
+           * without exposing an edge at the vertices. Riot's square portraits
+           * put the face above centre, so a window on the middle of one keeps
+           * the chin and cuts the forehead; two per cent up is enough to
+           * correct that at this size, and any more costs recognisability,
+           * which is the entire job of this picture.
            */
           <img
             src={`${CDN}/${patch}/img/champion/${slug}.png`}
             alt=""
-            className="absolute left-1/2 top-1/2 h-[44px] w-[44px] max-w-none"
-            style={{ transform: "translate(-50%, -44%)" }}
+            className="absolute left-1/2 top-1/2 h-[48px] w-[48px] max-w-none"
+            style={{ transform: "translate(-50%, -48%)" }}
           />
         ) : (
           <span className="grid h-full w-full place-items-center font-jetbrains text-[10px] text-flash/15">—</span>
@@ -427,9 +442,9 @@ function Versus({ opponent, patch }: { opponent: Match["opponent"]; patch: strin
       </span>
 
       {/* The outline on top, so the clip cannot eat its own edge. */}
-      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden className="pointer-events-none absolute">
+      <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden className="pointer-events-none absolute">
         <path
-          d="M20 1 L39 20 L20 39 L1 20 Z"
+          d="M24 1 L47 24 L24 47 L1 24 Z"
           fill="none"
           stroke={opponent ? "rgba(255,98,134,0.42)" : "rgba(215,216,217,0.10)"}
           strokeWidth="1"
