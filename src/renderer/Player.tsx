@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { CDN, mmss, type Highlight, type Recording } from "./types"
 
 /**
@@ -165,10 +166,28 @@ export default function Player({
     return hit
   }, [marks, at])
 
-  return (
-    /* Starts below the title bar rather than over it: the window still has to
-       be draggable, and closable, while a game is playing. */
-    <div className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col" style={{ background: "rgba(4,10,12,0.93)", backdropFilter: "blur(10px)" }}>
+  /**
+   * ⚠️ Rendered into the BODY, not where it sits in the tree.
+   *
+   * This is positioned against the window: below the title bar, beside the
+   * menu. `position: fixed` only means that when no ancestor is a containing
+   * block — and <main> is one, because its entrance animation touches
+   * `transform` and fills forwards, which Chromium honours even once the
+   * computed value is back to `none`. So the panel was measuring itself
+   * against a box that starts below the section's own padding, and landed
+   * fifty pixels low.
+   *
+   * Worse, it was CONDITIONAL: with reduced motion the animation is off, the
+   * containing block disappears, and the same markup lands somewhere else. A
+   * portal takes the question away rather than answering it.
+   */
+  return createPortal(
+    /* Below the title bar and BESIDE the menu, not over either. The window
+       still has to be draggable and closable while a game plays, and the
+       navigation has to stay reachable — a player that swallows the whole
+       window is a mode you have to escape from rather than a screen you are
+       on. */
+    <div className="fixed bottom-0 left-[196px] right-0 top-11 z-50 flex flex-col" style={{ background: "rgba(4,10,12,0.93)", backdropFilter: "blur(10px)" }}>
       <Head rec={rec} patch={patch} onClose={onClose} />
 
       {/* the picture */}
@@ -256,7 +275,8 @@ export default function Player({
         onSeek={seek}
         onStep={step}
       />
-    </div>
+    </div>,
+    document.body
   )
 }
 

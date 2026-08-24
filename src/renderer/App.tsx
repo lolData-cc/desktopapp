@@ -113,6 +113,18 @@ export default function App() {
   const previewMatch = preview !== null ? (s?.matches?.[preview] ?? null) : null
   const showRecap = !!previewMatch || (latched && !dismissed)
 
+  /**
+   * Whether the Overview is being a SCENE right now.
+   *
+   * ⚠️ The full width belongs to the scene, not to the section. The Overview
+   * is two different things wearing one name: a totem over a watermark the
+   * size of the window, which is composed against the whole thing and would be
+   * knocked off-centre by a menu column — and, once a game starts, ten rows of
+   * numbers, which is a document like every other section and belongs beside
+   * the menu rather than under it. The recap is a document too.
+   */
+  const scene = section === "overview" && !s?.scoreboard && !showRecap
+
   return (
     <div className="relative flex h-full flex-col bg-liquirice text-flash">
       <div aria-hidden className="dot-field pointer-events-none absolute inset-0" />
@@ -132,13 +144,13 @@ export default function App() {
         <main
           key={`${section}:${editing ?? ""}`}
           className={`ds-enter absolute inset-0 overflow-hidden py-6 ${
-            section === "overview" ? "px-7" : "pl-[210px] pr-7"
+            scene ? "px-7" : "pl-[210px] pr-7"
           }`}
         >
           {/* Only on the Overview, and only when there is no live board: over
               ten rows of numbers this would be noise, and the board is the one
               screen already full. */}
-          {section === "overview" && !s?.scoreboard && !showRecap && <CyberBackdrop />}
+          {scene && <CyberBackdrop />}
           {/* One section throwing must not blank the window. Keyed on the
               section so leaving a broken screen clears the fault instead of
               latching it until restart. */}

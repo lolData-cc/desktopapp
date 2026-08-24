@@ -535,6 +535,65 @@ const BASE = {
   },
 }
 
+/**
+ * The live board, which is otherwise only reachable by being in a game.
+ *
+ * It is the Overview's OTHER shape — ten rows of numbers rather than a totem
+ * over a watermark — and it lays out differently for that reason, so it has to
+ * be openable at a desk.
+ */
+const BOARD_PLAYER = (
+  name: string,
+  champion: string,
+  championId: string,
+  position: string,
+  k: number,
+  d: number,
+  a: number,
+  cs: number,
+  isMe = false
+) => ({
+  name,
+  riotId: `${name}#EUW`,
+  champion,
+  championId,
+  level: 14,
+  position,
+  dead: false,
+  respawnIn: 0,
+  kills: k,
+  deaths: d,
+  assists: a,
+  cs,
+  csPerMin: +(cs / 22).toFixed(1),
+  wards: 6,
+  worth: 1200 + k * 300,
+  items: [3157, 6653, 3020, 0, 0, 0],
+  keystone: 8214,
+  isMe,
+})
+
+SCENES.board = {
+  ...(SCENES.game as object),
+  scoreboard: {
+    gameTime: 1320,
+    ours: [
+      BOARD_PLAYER("MOSCARDINO 5kg", "Darius", "Darius", "TOP", 3, 5, 12, 198),
+      BOARD_PLAYER("EGO A CATERVE", "Lillia", "Lillia", "JUNGLE", 5, 3, 14, 216, true),
+      BOARD_PLAYER("Alessàndro", "Galio", "Galio", "MIDDLE", 2, 4, 14, 180),
+      BOARD_PLAYER("Stefano", "Kai'Sa", "Kaisa", "BOTTOM", 22, 4, 7, 240),
+      BOARD_PLAYER("lottie", "Nami", "Nami", "UTILITY", 0, 6, 28, 30),
+    ],
+    theirs: [
+      BOARD_PLAYER("LETHALITY JETZO", "Aatrox", "Aatrox", "TOP", 8, 5, 4, 190),
+      BOARD_PLAYER("Caosse2001", "Kha'Zix", "Khazix", "JUNGLE", 9, 8, 6, 150),
+      BOARD_PLAYER("BenjaminMayo", "Diana", "Diana", "MIDDLE", 3, 5, 7, 172),
+      BOARD_PLAYER("Mr Spring Onion", "Camille", "Camille", "BOTTOM", 2, 8, 8, 205),
+      BOARD_PLAYER("Cedarwood Junk", "Sion", "Sion", "UTILITY", 0, 6, 14, 40),
+    ],
+  },
+}
+
 export function installDevShell(): void {
   if ((window as any).desktop) return // running inside Electron — nothing to do
 
