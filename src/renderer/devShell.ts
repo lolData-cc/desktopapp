@@ -480,7 +480,12 @@ const BASE = {
         { at: 214_000, kind: "kill", label: "Lillia → Zed" },
         { at: 402_000, kind: "death", label: "Khazix → Lillia" },
         { at: 617_000, kind: "kill", label: "Lillia → Nami" },
-        { at: 1_105_000, kind: "multi", label: "Double kill" },
+        // A teamfight: three kills and a death inside ten seconds. Drawn as one
+        // pin each way rather than four marks smeared over four pixels.
+        { at: 1_103_000, kind: "kill", label: "Lillia → Ashe" },
+        { at: 1_105_000, kind: "kill", label: "Lillia → Thresh" },
+        { at: 1_108_000, kind: "kill", label: "Lillia → Zed" },
+        { at: 1_110_000, kind: "death", label: "Camille → Lillia" },
         { at: 1_402_000, kind: "assist", label: "Ashe → Zed" },
         { at: 1_690_000, kind: "kill", label: "Lillia → Khazix" },
       ],
