@@ -84,7 +84,7 @@ export default function MatchDetail({
     <div className="flex h-full flex-col">
       <Head match={match} onBack={onBack} />
 
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
         {/* ── the recording, first ─────────────────────────────────────── */}
         {clip && (
           <div className="mb-6">

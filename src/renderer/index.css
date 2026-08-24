@@ -618,3 +618,10 @@ body {
 .clip-volume:focus-visible {
   box-shadow: 0 0 0 1px rgba(0, 217, 146, 0.6);
 }
+
+/* A pane that scrolls without saying so.
+   ⚠️ The scrolling still works — wheel, trackpad, keyboard, everything. Only
+   the bar is gone. Used where the content's own structure already says there
+   is more below, and a thin line down the edge is just a line. */
+.no-bar { scrollbar-width: none; }
+.no-bar::-webkit-scrollbar { width: 0; height: 0; }
