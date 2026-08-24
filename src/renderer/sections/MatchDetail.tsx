@@ -167,21 +167,38 @@ function Head({ match, onBack }: { match: Match; onBack: () => void }) {
         * it, and a hover that moves. Reading as a caption was the whole
         * complaint.
         */}
+      {/**
+        * ⚠️ The arrow is an SVG, and the label is line-height 1.
+        *
+        * Measured, because it looked high and loose and guessing at padding
+        * would have moved it without fixing it: a 9px uppercase label was
+        * sitting in a 14px line box holding 7px of ink — uppercase has no
+        * descenders, so half the box below the letters is empty and centring
+        * the BOX lifts the letters. And "◂" is a character, whose vertical
+        * metrics belong to the font: its ink sat a further 1.5px off the
+        * label's. A drawn arrow has the metrics we give it.
+        */}
       <button
         type="button"
         onClick={onBack}
         title="Back to your matches — Escape does it too"
-        className="group flex h-9 shrink-0 items-center gap-2 rounded-[3px] pl-2.5 pr-4 transition-colors"
+        className="group flex h-[30px] shrink-0 items-center gap-2 rounded-[3px] pl-2.5 pr-3.5 transition-colors"
         style={{
           cursor: "pointer",
           background: "rgba(215,216,217,0.055)",
           boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.16)",
         }}
       >
-        <span className="font-jetbrains text-[12px] leading-none text-flash/50 transition-transform group-hover:-translate-x-[2px]">
-          ◂
-        </span>
-        <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/60">
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 9 9"
+          aria-hidden
+          className="shrink-0 transition-transform group-hover:-translate-x-[2px]"
+        >
+          <path d="M6.2 1 L2.4 4.5 L6.2 8" fill="none" stroke="currentColor" strokeWidth="1.4" className="text-flash/55" />
+        </svg>
+        <span className="font-jetbrains text-[9px] uppercase leading-none tracking-[0.18em] text-flash/60">
           matches
         </span>
       </button>

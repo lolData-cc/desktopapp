@@ -97,6 +97,15 @@ body {
  */
 .win-btn {
   cursor: pointer;
+  /**
+   * ⚠️ line-height 1, or every label sits high inside its own button.
+   *
+   * These labels are uppercase micro-type, and uppercase has no descenders —
+   * so the default line box is half again as tall as the letters, with all the
+   * spare room BELOW them. Centring that box therefore lifts the letters, by
+   * about two pixels at 9px, on every button in the app at once.
+   */
+  line-height: 1;
   background: rgba(215, 216, 217, 0.045);
   box-shadow: inset 0 0 0 1px rgba(215, 216, 217, 0.13);
   transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
