@@ -420,7 +420,17 @@ function awaitMatch(tries = 8): void {
   const attempt = async (left: number) => {
     await readProfile()
     const got = state.matches?.[0]?.championId ?? -1
-    if (!want || got === want || left <= 0) return
+    if (got === want) {
+      console.log("[recap] history caught up: champion %d", got)
+      return
+    }
+    if (!want || left <= 0) {
+      // Said out loud, because the recap's fallback for "no match" used to be
+      // indistinguishable from a real defeat.
+      console.log("[recap] history did NOT catch up: wanted %d, newest is %d — no verdict",
+        want, got)
+      return
+    }
     awaiting = setTimeout(() => void attempt(left - 1), 4000)
   }
 

@@ -20151,8 +20151,14 @@ function awaitMatch(tries = 8) {
   const attempt = async (left) => {
     await readProfile();
     const got = state.matches?.[0]?.championId ?? -1;
-    if (!want || got === want || left <= 0)
+    if (got === want) {
+      console.log("[recap] history caught up: champion %d", got);
       return;
+    }
+    if (!want || left <= 0) {
+      console.log("[recap] history did NOT catch up: wanted %d, newest is %d — no verdict", want, got);
+      return;
+    }
     awaiting = setTimeout(() => void attempt(left - 1), 4000);
   };
   attempt(tries);

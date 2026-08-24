@@ -96,7 +96,18 @@ export default function Recap({
     return () => window.removeEventListener("focus", on)
   }, [focused])
 
-  const showVerdict = !verdictDone && focused
+  /**
+   * ⚠️ The verdict waits for a RESULT, not just for focus.
+   *
+   * `won` is derived from a match that may not exist yet, and `!!undefined` is
+   * false — so a game whose history had not landed announced DEFEAT to someone
+   * who had just won. That is the single worst thing this screen can do: it is
+   * the loudest claim in the app and it was being made from missing data.
+   *
+   * If the client never writes the game, no verdict plays at all. Silence is
+   * the honest outcome; a coin flip dressed as a result is not.
+   */
+  const showVerdict = !verdictDone && focused && !!match
 
   const slug = played?.championId ?? fallbackSlug
   const key = played?.championKey ?? newest?.championId ?? 0
@@ -117,6 +128,8 @@ export default function Recap({
 
   const mins = match ? Math.max(1, match.durationSeconds / 60) : 1
   const kda = match ? (match.kills + match.assists) / Math.max(1, match.deaths) : 0
+  // Only meaningful WITH a match. Every reader below is guarded on that, and
+  // must stay so: without the guard this is "false", which reads as a loss.
   const won = !!match?.win && !match?.remake
 
   return (
