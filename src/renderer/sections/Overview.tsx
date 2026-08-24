@@ -105,7 +105,7 @@ export function Attached({ s }: { s: AppState }) {
           watermark is the ornament on this screen; a second one competes with
           it. A plate and a hairline are enough to lift the card off the word. */}
       <div
-        className="totem relative flex w-[240px] flex-col items-center rounded-[5px] px-6 py-7"
+        className="totem relative flex w-[186px] flex-col items-center rounded-[5px] px-5 py-10"
         style={{
           // Opaque enough to read against, translucent enough that the word
           // behind still passes through it — which is the whole reason the
@@ -115,11 +115,17 @@ export function Attached({ s }: { s: AppState }) {
           backdropFilter: "blur(3px)",
         }}
       >
+        {/* A short rule above and below the contents. A totem is a vertical
+            thing, and the fastest way to say so is to put the vertical axis on
+            the card itself rather than only in its proportions. */}
+        <span aria-hidden className="absolute left-1/2 top-0 h-5 w-px -translate-x-1/2 bg-jade/25" />
+        <span aria-hidden className="absolute bottom-0 left-1/2 h-5 w-px -translate-x-1/2 bg-jade/15" />
+
         {s.summoner ? (
           <img
             src={`${CDN}/${patch}/img/profileicon/${s.summoner.iconId}.png`}
             alt=""
-            className="h-[76px] w-[76px] rounded-full ring-1 ring-jade/25"
+            className="h-[74px] w-[74px] rounded-full ring-1 ring-jade/25"
             onError={(e) => {
               // An icon we cannot fetch leaves the frame, not a broken glyph.
               ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
@@ -129,21 +135,21 @@ export function Attached({ s }: { s: AppState }) {
           <div className="h-[76px] w-[76px] rounded-full bg-jade/[0.05] ring-1 ring-jade/15" />
         )}
 
-        <p className="mt-4 max-w-full truncate font-chakrapetch text-[20px] font-bold leading-none">
+        <p className="mt-6 max-w-full truncate font-chakrapetch text-[19px] font-bold leading-none">
           {s.summoner?.name ?? "—"}
         </p>
 
         {r?.tier && (
-          <div className="mt-3.5 flex items-center gap-2">
+          <div className="mt-7 flex flex-col items-center gap-2">
             <img
               src={`${RANKS}/${r.tier.toLowerCase()}.png`}
               alt=""
-              className="h-7 w-7"
+              className="h-11 w-11"
               onError={(e) => {
                 ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
               }}
             />
-            <p className="font-jetbrains text-[10px] uppercase tracking-[0.18em] text-flash/45">
+            <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/45">
               {title(r.tier)}
               {r.division ? ` ${r.division}` : ""}
             </p>
