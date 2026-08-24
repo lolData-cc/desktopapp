@@ -19681,12 +19681,23 @@ function honours(g) {
   };
   return { mvp: best(true), ace: best(false) };
 }
+var SMITE = 11;
+var hasSmite = (p) => p.spell1Id === SMITE || p.spell2Id === SMITE;
 function opponentOf(g, me) {
   const role = readRole(me.timeline);
-  if (!role || me.teamId === undefined)
+  if (me.teamId === undefined)
     return null;
   const them = (g.participants ?? []).filter((p) => p.teamId !== me.teamId);
-  const match = them.find((p) => readRole(p.timeline) === role);
+  if (!them.length)
+    return null;
+  if (hasSmite(me)) {
+    const jungler = them.find(hasSmite);
+    return jungler ? { championId: num(jungler.championId), role: "JUNGLE" } : null;
+  }
+  if (!role || role === "JUNGLE")
+    return null;
+  const laners = them.filter((p) => !hasSmite(p));
+  const match = laners.find((p) => readRole(p.timeline) === role);
   return match ? { championId: num(match.championId), role } : null;
 }
 function toMatch(g, puuid) {

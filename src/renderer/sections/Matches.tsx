@@ -297,17 +297,19 @@ function Row({
         </div>
 
         {/**
-          * ⚠️ RIGHT-aligned, and that is what makes the spacing equal.
+          * ⚠️ 66px because the score MEASURES 61–64px, not because 104 looked
+          * about right. The column was forty pixels wider than its own ink, and
+          * all forty of them sat between the score and the rhombus — 60px on
+          * that side against 18 on the other.
           *
-          * Left-aligned in a fixed column, the ink stopped wherever the score
-          * happened to end — 60px from the rhombus for "11 / 3 / 9" against 18
-          * on the other side, and a different 60 for every other score. No
-          * fixed width fixes that, because the gap moves with the numbers.
-          * Aligned to the right edge, the ink always ends in the same place and
-          * both gaps are the flex gap plus the diamond's own padding: 18 and
-          * 18, on every row, whatever was scored.
+          * Right-aligning would make the two exactly equal and was tried; it
+          * also tore the score away from the queue beside it, which was worse
+          * than the thing it fixed. With the text left-aligned, exact equality
+          * is not available at any width — the ink ends wherever the numbers
+          * end — so this is sized to the widest ordinary score and the gap
+          * closes on the rare one that runs long.
           */}
-        <div className="w-[92px] shrink-0 text-right">
+        <div className="w-[66px] shrink-0 whitespace-nowrap">
           <p className="font-chakrapetch text-[15px] font-bold tabular-nums leading-tight">
             {m.kills} <span className="text-flash/25">/</span>{" "}
             <span className={m.deaths === 0 ? "text-jade" : "text-flash"}>{m.deaths}</span>{" "}

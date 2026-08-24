@@ -128,21 +128,48 @@ function honours(g: RawGame): { mvp: number | null; ace: number | null } {
   return { mvp: best(true), ace: best(false) }
 }
 
+/** Smite. The one role signal in this data that cannot be wrong. */
+const SMITE = 11
+const hasSmite = (p: NonNullable<RawGame["participants"]>[number]) =>
+  p.spell1Id === SMITE || p.spell2Id === SMITE
+
 /**
  * The champion who stood in the same lane on the other side.
  *
- * ⚠️ Null when the lane is not knowable, which is often — Riot's own lane
- * assignment is a guess, and in an ARAM or a mode with no lanes there is no
- * answer. A wrong opponent printed confidently is worse than a blank.
+ * ⚠️ Riot's lane assignment in match history is a GUESS, derived from where
+ * somebody farmed, and it is wrong often enough to matter: a Lillia jungle game
+ * came back paired with the enemy TOP laner, because Yorick had been given
+ * "JUNGLE" by that heuristic and matched first.
+ *
+ * So the jungle is decided by SMITE, which is a fact rather than an inference,
+ * and everybody else is matched on lane with the enemy jungler removed from the
+ * candidates first — a laner can be mislabelled as a jungler, but a jungler
+ * carrying Smite cannot be your lane opponent.
+ *
+ * ⚠️ Null whenever this is not confident. A blank rhombus says "we do not
+ * know", which is true and cheap; a confident wrong champion is the app lying
+ * about a game the player was in and remembers.
  */
 function opponentOf(
   g: RawGame,
   me: NonNullable<RawGame["participants"]>[number]
 ): { championId: number; role: string | null } | null {
   const role = readRole(me.timeline)
-  if (!role || me.teamId === undefined) return null
+  if (me.teamId === undefined) return null
   const them = (g.participants ?? []).filter((p) => p.teamId !== me.teamId)
-  const match = them.find((p) => readRole(p.timeline) === role)
+  if (!them.length) return null
+
+  // Smite in hand: the opponent is whoever else brought it, whatever the
+  // history thinks either of you farmed.
+  if (hasSmite(me)) {
+    const jungler = them.find(hasSmite)
+    return jungler ? { championId: num(jungler.championId), role: "JUNGLE" } : null
+  }
+
+  if (!role || role === "JUNGLE") return null
+
+  const laners = them.filter((p) => !hasSmite(p))
+  const match = laners.find((p) => readRole(p.timeline) === role)
   return match ? { championId: num(match.championId), role } : null
 }
 
