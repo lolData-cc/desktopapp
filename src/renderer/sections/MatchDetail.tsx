@@ -397,7 +397,10 @@ function Card({
   const games = rank ? rank.wins + rank.losses : 0
 
   return (
-    <div className="ds-enter mb-4 flex flex-wrap items-start gap-x-9 gap-y-4 px-4 py-4" style={{ background: "rgba(0,217,146,0.045)", boxShadow: "inset 2px 0 0 0 rgba(0,217,146,0.5)" }}>
+    /* ⚠️ Centred, not top-aligned. The blocks in here are different heights —
+       a 48px portrait, a crest, two three-row tables — so aligning their tops
+       left every one of them sitting at a different height down the panel. */
+    <div className="ds-enter mb-4 flex flex-wrap items-center gap-x-9 gap-y-4 px-4 py-4" style={{ background: "rgba(0,217,146,0.045)", boxShadow: "inset 2px 0 0 0 rgba(0,217,146,0.5)" }}>
       <div className="flex items-center gap-3">
         {slug && <img src={`${CDN}/${patch}/img/champion/${slug}.png`} alt="" className="h-12 w-12 rounded-[3px] ring-1 ring-jade/20" />}
         <div>
@@ -454,7 +457,7 @@ function Card({
       <button
         type="button"
         onClick={onClose}
-        className="win-btn ml-auto h-7 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/35"
+        className="win-btn ml-auto h-7 shrink-0 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/35"
       >
         close
       </button>
