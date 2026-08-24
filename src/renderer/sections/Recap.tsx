@@ -122,7 +122,16 @@ export default function Recap({
    */
   const showVerdict = !verdictDone && focused && !!match
 
-  const clip = recordingFor(s.recordings, match)
+  /**
+   * ⚠️ Two ways to find the recording, and the second is not a fallback.
+   *
+   * By overlap with the match is the right answer when there IS a match. But
+   * the recap opens the moment the game ends, seconds before the client writes
+   * history — and for a practice tool it never writes it. The board we were
+   * watching a moment ago knows which champion was just played, and a
+   * recording of that champion that stopped a minute ago is this game.
+   */
+  const clip = recordingFor(s.recordings, match) ?? justFinished(s.recordings, played)
 
   const slug = played?.championId ?? fallbackSlug
   const key = played?.championKey ?? newest?.championId ?? 0
@@ -235,10 +244,15 @@ export default function Recap({
             </div>
           )}
 
-          {clip && <Moments clip={clip} onOpen={setWatchFrom} />}
-
           </>
           )}
+
+          {/* ⚠️ OUTSIDE the score, because it does not depend on it.
+              The recording exists the moment the game ends; the client writes
+              history seconds later, and for a practice tool it never writes it
+              at all. Tying the moments to the score would hide them for the
+              first few seconds of every game and for the whole of some. */}
+          {clip && <Moments clip={clip} onOpen={setWatchFrom} />}
 
           <p className="mt-6 max-w-[52ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
             Model by Khada (modelviewer.lol), cached on your machine after the first
@@ -259,6 +273,26 @@ export default function Recap({
       )}
     </div>
   )
+}
+
+/**
+ * The recording that has only just stopped, for a game with no history behind
+ * it yet.
+ *
+ * Deliberately narrow: the NEWEST recording, on the champion we just played,
+ * finished within the last ten minutes. Anything looser would put an older
+ * game's kills under this game's champion, which is the one mistake this
+ * screen must not make.
+ */
+function justFinished(
+  recordings: Recording[],
+  played: AppState["lastPlayed"]
+): Recording | null {
+  if (!played) return null
+  // The library arrives newest first.
+  const newest = recordings[0]
+  if (!newest || newest.championId !== played.championId) return null
+  return Date.now() - (newest.startedAt + newest.durationMs) < 600_000 ? newest : null
 }
 
 /* ── what happened, as places to jump to ─────────────────────────────────── */

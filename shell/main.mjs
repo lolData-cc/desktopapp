@@ -18946,7 +18946,7 @@ async function beginRecording(settings, about, changed) {
     sourceId: source.id,
     audio: settings.captureAudio,
     fps: 30,
-    bitrate: 8000000
+    bitrate: 6000000
   });
   return true;
 }
