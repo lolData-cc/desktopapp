@@ -20,7 +20,7 @@ import { soulPoint, SOUL_AT, type DragonElement, type DragonTally } from "../dat
  * underneath is click-through, so none of this may look interactive.
  */
 type Notice = {
-  kind: "dragon" | "elder" | "item" | "boots" | "build"
+  kind: "dragon" | "elder" | "item" | "boots" | "build" | "capture"
   inSeconds: number
   raisedAt: number
   /** Null until the Rift's element is knowable — see objectives.ts. */
@@ -874,6 +874,9 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
   const shopping = n.kind === "item" && !!n.item
   const boots = n.kind === "boots" && !!n.boots
   const opening = n.kind === "build" && !!n.build
+  // ⚠️ Its own kind, borrowing nothing. Every other notice is advice; this one
+  // is a DISCLOSURE, and it must not look like a tip about dragons.
+  const capturing = n.kind === "capture"
   const CDN = "https://cdn2.loldata.cc/16.16.1"
   const elder = n.kind === "elder"
 
@@ -941,6 +944,20 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
         style={{ textShadow: "0 1px 6px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.85)" }}
       >
         <div className="flex items-center gap-3.5">
+          {/* ⚠️ A DRAWN mark, not an image with an empty src. Every other
+              notice has a portrait to show; this one is about the app itself,
+              and a recording dot is the one symbol nobody has to be taught. */}
+          {capturing ? (
+            <span
+              className="ds-icon grid h-11 w-11 shrink-0 place-items-center rounded-[3px] ring-1 ring-jade/25"
+              style={{ background: "rgba(4,10,12,0.9)", boxShadow: `0 0 14px ${accent}33` }}
+            >
+              <span
+                className="beat block h-[13px] w-[13px] rounded-full"
+                style={{ background: accent, boxShadow: `0 0 12px ${accent}` }}
+              />
+            </span>
+          ) : (
           <img
             src={
               shopping
@@ -960,13 +977,16 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
               filter: unknownElement ? "grayscale(1) brightness(1.12) contrast(0.92)" : undefined,
             }}
           />
+          )}
 
           <div className="min-w-0">
             <p
               className={`ds-eyebrow font-jetbrains text-[9px] uppercase tracking-[0.28em] ${soul ? "soul-pulse" : ""}`}
               style={{ color: accent }}
             >
-              {boots
+              {capturing
+                ? "recording"
+                : boots
                 ? "boots · this matchup"
                 : opening
                   ? n.build!.recalibrated
@@ -987,7 +1007,11 @@ function Card({ n, visible }: { n: Notice; visible: boolean }) {
                       : "lolData"}
             </p>
             <p className="ds-head whitespace-nowrap font-chakrapetch text-[19px] font-bold leading-tight text-flash">
-              {boots ? (
+              {capturing ? (
+                <>
+                  lolData is <span style={{ color: accent }}>recording</span> your screen
+                </>
+              ) : boots ? (
                 <>
                   {n.boots!.name}{" "}
                   <span style={{ color: accent }}>recommended</span>

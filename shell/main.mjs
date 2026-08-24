@@ -3452,10 +3452,10 @@ GFS4: `);
     polyfills(fs2);
     fs2.gracefulify = patch2;
     fs2.createReadStream = createReadStream;
-    fs2.createWriteStream = createWriteStream;
+    fs2.createWriteStream = createWriteStream2;
     var fs$readFile = fs2.readFile;
-    fs2.readFile = readFile2;
-    function readFile2(path, options, cb) {
+    fs2.readFile = readFile3;
+    function readFile3(path, options, cb) {
       if (typeof options === "function")
         cb = options, options = null;
       return go$readFile(path, options, cb);
@@ -3471,8 +3471,8 @@ GFS4: `);
       }
     }
     var fs$writeFile = fs2.writeFile;
-    fs2.writeFile = writeFile;
-    function writeFile(path, data, options, cb) {
+    fs2.writeFile = writeFile2;
+    function writeFile2(path, data, options, cb) {
       if (typeof options === "function")
         cb = options, options = null;
       return go$writeFile(path, data, options, cb);
@@ -3526,9 +3526,9 @@ GFS4: `);
       }
     }
     var fs$readdir = fs2.readdir;
-    fs2.readdir = readdir;
+    fs2.readdir = readdir2;
     var noReaddirOptionVersions = /^v[0-5]\./;
-    function readdir(path, options, cb) {
+    function readdir2(path, options, cb) {
       if (typeof options === "function")
         cb = options, options = null;
       var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir(path2, options2, cb2, startTime) {
@@ -3654,7 +3654,7 @@ GFS4: `);
     function createReadStream(path, options) {
       return new fs2.ReadStream(path, options);
     }
-    function createWriteStream(path, options) {
+    function createWriteStream2(path, options) {
       return new fs2.WriteStream(path, options);
     }
     var fs$open = fs2.open;
@@ -3852,16 +3852,16 @@ var require_make_dir = __commonJS((exports, module) => {
       return options;
     return { ...defaults, ...options }.mode;
   };
-  exports.makeDir = async (dir, options) => {
-    checkPath(dir);
-    return fs.mkdir(dir, {
+  exports.makeDir = async (dir2, options) => {
+    checkPath(dir2);
+    return fs.mkdir(dir2, {
       mode: getMode(options),
       recursive: true
     });
   };
-  exports.makeDirSync = (dir, options) => {
-    checkPath(dir);
-    return fs.mkdirSync(dir, {
+  exports.makeDirSync = (dir2, options) => {
+    checkPath(dir2);
+    return fs.mkdirSync(dir2, {
       mode: getMode(options),
       recursive: true
     });
@@ -4064,7 +4064,7 @@ var require_copy = __commonJS((exports, module) => {
   var mkdirs = require_mkdirs().mkdirs;
   var pathExists = require_path_exists().pathExists;
   var utimesMillis = require_utimes().utimesMillis;
-  var stat = require_stat();
+  var stat2 = require_stat();
   function copy(src, dest, opts, cb) {
     if (typeof opts === "function" && !cb) {
       cb = opts;
@@ -4081,11 +4081,11 @@ var require_copy = __commonJS((exports, module) => {
 
 ` + "\tsee https://github.com/jprichardson/node-fs-extra/issues/269", "Warning", "fs-extra-WARN0001");
     }
-    stat.checkPaths(src, dest, "copy", opts, (err, stats) => {
+    stat2.checkPaths(src, dest, "copy", opts, (err, stats) => {
       if (err)
         return cb(err);
       const { srcStat, destStat } = stats;
-      stat.checkParentPaths(src, srcStat, dest, "copy", (err2) => {
+      stat2.checkParentPaths(src, srcStat, dest, "copy", (err2) => {
         if (err2)
           return cb(err2);
         if (opts.filter)
@@ -4121,8 +4121,8 @@ var require_copy = __commonJS((exports, module) => {
     return getStats(destStat, src, dest, opts, cb);
   }
   function getStats(destStat, src, dest, opts, cb) {
-    const stat2 = opts.dereference ? fs.stat : fs.lstat;
-    stat2(src, (err, srcStat) => {
+    const stat3 = opts.dereference ? fs.stat : fs.lstat;
+    stat3(src, (err, srcStat) => {
       if (err)
         return cb(err);
       if (srcStat.isDirectory())
@@ -4229,7 +4229,7 @@ var require_copy = __commonJS((exports, module) => {
   function copyDirItem(items, item, src, dest, opts, cb) {
     const srcItem = path.join(src, item);
     const destItem = path.join(dest, item);
-    stat.checkPaths(srcItem, destItem, "copy", opts, (err, stats) => {
+    stat2.checkPaths(srcItem, destItem, "copy", opts, (err, stats) => {
       if (err)
         return cb(err);
       const { destStat } = stats;
@@ -4259,10 +4259,10 @@ var require_copy = __commonJS((exports, module) => {
           if (opts.dereference) {
             resolvedDest = path.resolve(process.cwd(), resolvedDest);
           }
-          if (stat.isSrcSubdir(resolvedSrc, resolvedDest)) {
+          if (stat2.isSrcSubdir(resolvedSrc, resolvedDest)) {
             return cb(new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`));
           }
-          if (destStat.isDirectory() && stat.isSrcSubdir(resolvedDest, resolvedSrc)) {
+          if (destStat.isDirectory() && stat2.isSrcSubdir(resolvedDest, resolvedSrc)) {
             return cb(new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`));
           }
           return copyLink(resolvedSrc, dest, cb);
@@ -4286,7 +4286,7 @@ var require_copy_sync = __commonJS((exports, module) => {
   var path = __require("path");
   var mkdirsSync = require_mkdirs().mkdirsSync;
   var utimesMillisSync = require_utimes().utimesMillisSync;
-  var stat = require_stat();
+  var stat2 = require_stat();
   function copySync(src, dest, opts) {
     if (typeof opts === "function") {
       opts = { filter: opts };
@@ -4299,8 +4299,8 @@ var require_copy_sync = __commonJS((exports, module) => {
 
 ` + "\tsee https://github.com/jprichardson/node-fs-extra/issues/269", "Warning", "fs-extra-WARN0002");
     }
-    const { srcStat, destStat } = stat.checkPathsSync(src, dest, "copy", opts);
-    stat.checkParentPathsSync(src, srcStat, dest, "copy");
+    const { srcStat, destStat } = stat2.checkPathsSync(src, dest, "copy", opts);
+    stat2.checkParentPathsSync(src, srcStat, dest, "copy");
     return handleFilterAndCopy(destStat, src, dest, opts);
   }
   function handleFilterAndCopy(destStat, src, dest, opts) {
@@ -4384,7 +4384,7 @@ var require_copy_sync = __commonJS((exports, module) => {
   function copyDirItem(item, src, dest, opts) {
     const srcItem = path.join(src, item);
     const destItem = path.join(dest, item);
-    const { destStat } = stat.checkPathsSync(srcItem, destItem, "copy", opts);
+    const { destStat } = stat2.checkPathsSync(srcItem, destItem, "copy", opts);
     return startCopy(destStat, srcItem, destItem, opts);
   }
   function onLink(destStat, src, dest, opts) {
@@ -4406,10 +4406,10 @@ var require_copy_sync = __commonJS((exports, module) => {
       if (opts.dereference) {
         resolvedDest = path.resolve(process.cwd(), resolvedDest);
       }
-      if (stat.isSrcSubdir(resolvedSrc, resolvedDest)) {
+      if (stat2.isSrcSubdir(resolvedSrc, resolvedDest)) {
         throw new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`);
       }
-      if (fs.statSync(dest).isDirectory() && stat.isSrcSubdir(resolvedDest, resolvedSrc)) {
+      if (fs.statSync(dest).isDirectory() && stat2.isSrcSubdir(resolvedDest, resolvedSrc)) {
         throw new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`);
       }
       return copyLink(resolvedSrc, dest);
@@ -4692,26 +4692,26 @@ var require_empty = __commonJS((exports, module) => {
   var u = require_universalify().fromPromise;
   var fs = require_fs();
   var path = __require("path");
-  var mkdir = require_mkdirs();
+  var mkdir2 = require_mkdirs();
   var remove = require_remove();
-  var emptyDir = u(async function emptyDir(dir) {
+  var emptyDir = u(async function emptyDir(dir2) {
     let items;
     try {
-      items = await fs.readdir(dir);
+      items = await fs.readdir(dir2);
     } catch {
-      return mkdir.mkdirs(dir);
+      return mkdir2.mkdirs(dir2);
     }
-    return Promise.all(items.map((item) => remove.remove(path.join(dir, item))));
+    return Promise.all(items.map((item) => remove.remove(path.join(dir2, item))));
   });
-  function emptyDirSync(dir) {
+  function emptyDirSync(dir2) {
     let items;
     try {
-      items = fs.readdirSync(dir);
+      items = fs.readdirSync(dir2);
     } catch {
-      return mkdir.mkdirsSync(dir);
+      return mkdir2.mkdirsSync(dir2);
     }
     items.forEach((item) => {
-      item = path.join(dir, item);
+      item = path.join(dir2, item);
       remove.removeSync(item);
     });
   }
@@ -4728,7 +4728,7 @@ var require_file = __commonJS((exports, module) => {
   var u = require_universalify().fromCallback;
   var path = __require("path");
   var fs = require_graceful_fs();
-  var mkdir = require_mkdirs();
+  var mkdir2 = require_mkdirs();
   function createFile(file, callback) {
     function makeFile() {
       fs.writeFile(file, "", (err) => {
@@ -4740,11 +4740,11 @@ var require_file = __commonJS((exports, module) => {
     fs.stat(file, (err, stats) => {
       if (!err && stats.isFile())
         return callback();
-      const dir = path.dirname(file);
-      fs.stat(dir, (err2, stats2) => {
+      const dir2 = path.dirname(file);
+      fs.stat(dir2, (err2, stats2) => {
         if (err2) {
           if (err2.code === "ENOENT") {
-            return mkdir.mkdirs(dir, (err3) => {
+            return mkdir2.mkdirs(dir2, (err3) => {
               if (err3)
                 return callback(err3);
               makeFile();
@@ -4755,7 +4755,7 @@ var require_file = __commonJS((exports, module) => {
         if (stats2.isDirectory())
           makeFile();
         else {
-          fs.readdir(dir, (err3) => {
+          fs.readdir(dir2, (err3) => {
             if (err3)
               return callback(err3);
           });
@@ -4770,14 +4770,14 @@ var require_file = __commonJS((exports, module) => {
     } catch {}
     if (stats && stats.isFile())
       return;
-    const dir = path.dirname(file);
+    const dir2 = path.dirname(file);
     try {
-      if (!fs.statSync(dir).isDirectory()) {
-        fs.readdirSync(dir);
+      if (!fs.statSync(dir2).isDirectory()) {
+        fs.readdirSync(dir2);
       }
     } catch (err) {
       if (err && err.code === "ENOENT")
-        mkdir.mkdirsSync(dir);
+        mkdir2.mkdirsSync(dir2);
       else
         throw err;
     }
@@ -4794,7 +4794,7 @@ var require_link = __commonJS((exports, module) => {
   var u = require_universalify().fromCallback;
   var path = __require("path");
   var fs = require_graceful_fs();
-  var mkdir = require_mkdirs();
+  var mkdir2 = require_mkdirs();
   var pathExists = require_path_exists().pathExists;
   var { areIdentical } = require_stat();
   function createLink(srcpath, dstpath, callback) {
@@ -4813,13 +4813,13 @@ var require_link = __commonJS((exports, module) => {
         }
         if (dstStat && areIdentical(srcStat, dstStat))
           return callback(null);
-        const dir = path.dirname(dstpath);
-        pathExists(dir, (err2, dirExists) => {
+        const dir2 = path.dirname(dstpath);
+        pathExists(dir2, (err2, dirExists) => {
           if (err2)
             return callback(err2);
           if (dirExists)
             return makeLink(srcpath, dstpath);
-          mkdir.mkdirs(dir, (err3) => {
+          mkdir2.mkdirs(dir2, (err3) => {
             if (err3)
               return callback(err3);
             makeLink(srcpath, dstpath);
@@ -4841,11 +4841,11 @@ var require_link = __commonJS((exports, module) => {
       err.message = err.message.replace("lstat", "ensureLink");
       throw err;
     }
-    const dir = path.dirname(dstpath);
-    const dirExists = fs.existsSync(dir);
+    const dir2 = path.dirname(dstpath);
+    const dirExists = fs.existsSync(dir2);
     if (dirExists)
       return fs.linkSync(srcpath, dstpath);
-    mkdir.mkdirsSync(dir);
+    mkdir2.mkdirsSync(dir2);
     return fs.linkSync(srcpath, dstpath);
   }
   module.exports = {
@@ -5006,13 +5006,13 @@ var require_symlink = __commonJS((exports, module) => {
       symlinkType(relative.toCwd, type, (err2, type2) => {
         if (err2)
           return callback(err2);
-        const dir = path.dirname(dstpath);
-        pathExists(dir, (err3, dirExists) => {
+        const dir2 = path.dirname(dstpath);
+        pathExists(dir2, (err3, dirExists) => {
           if (err3)
             return callback(err3);
           if (dirExists)
             return fs.symlink(srcpath, dstpath, type2, callback);
-          mkdirs(dir, (err4) => {
+          mkdirs(dir2, (err4) => {
             if (err4)
               return callback(err4);
             fs.symlink(srcpath, dstpath, type2, callback);
@@ -5035,11 +5035,11 @@ var require_symlink = __commonJS((exports, module) => {
     const relative = symlinkPathsSync(srcpath, dstpath);
     srcpath = relative.toDst;
     type = symlinkTypeSync(relative.toCwd, type);
-    const dir = path.dirname(dstpath);
-    const exists = fs.existsSync(dir);
+    const dir2 = path.dirname(dstpath);
+    const exists = fs.existsSync(dir2);
     if (exists)
       return fs.symlinkSync(srcpath, dstpath, type);
-    mkdirsSync(dir);
+    mkdirsSync(dir2);
     return fs.symlinkSync(srcpath, dstpath, type);
   }
   module.exports = {
@@ -5119,7 +5119,7 @@ var require_jsonfile = __commonJS((exports, module) => {
     }
     return obj;
   }
-  var readFile2 = universalify.fromPromise(_readFile);
+  var readFile3 = universalify.fromPromise(_readFile);
   function readFileSync(file, options = {}) {
     if (typeof options === "string") {
       options = { encoding: options };
@@ -5144,16 +5144,16 @@ var require_jsonfile = __commonJS((exports, module) => {
     const str = stringify(obj, options);
     await universalify.fromCallback(fs.writeFile)(file, str, options);
   }
-  var writeFile = universalify.fromPromise(_writeFile);
+  var writeFile2 = universalify.fromPromise(_writeFile);
   function writeFileSync(file, obj, options = {}) {
     const fs = options.fs || _fs;
     const str = stringify(obj, options);
     return fs.writeFileSync(file, str, options);
   }
   module.exports = {
-    readFile: readFile2,
+    readFile: readFile3,
     readFileSync,
-    writeFile,
+    writeFile: writeFile2,
     writeFileSync
   };
 });
@@ -5174,20 +5174,20 @@ var require_output_file = __commonJS((exports, module) => {
   var u = require_universalify().fromCallback;
   var fs = require_graceful_fs();
   var path = __require("path");
-  var mkdir = require_mkdirs();
+  var mkdir2 = require_mkdirs();
   var pathExists = require_path_exists().pathExists;
   function outputFile(file, data, encoding, callback) {
     if (typeof encoding === "function") {
       callback = encoding;
       encoding = "utf8";
     }
-    const dir = path.dirname(file);
-    pathExists(dir, (err, itDoes) => {
+    const dir2 = path.dirname(file);
+    pathExists(dir2, (err, itDoes) => {
       if (err)
         return callback(err);
       if (itDoes)
         return fs.writeFile(file, data, encoding, callback);
-      mkdir.mkdirs(dir, (err2) => {
+      mkdir2.mkdirs(dir2, (err2) => {
         if (err2)
           return callback(err2);
         fs.writeFile(file, data, encoding, callback);
@@ -5195,11 +5195,11 @@ var require_output_file = __commonJS((exports, module) => {
     });
   }
   function outputFileSync(file, ...args) {
-    const dir = path.dirname(file);
-    if (fs.existsSync(dir)) {
+    const dir2 = path.dirname(file);
+    if (fs.existsSync(dir2)) {
       return fs.writeFileSync(file, ...args);
     }
-    mkdir.mkdirsSync(dir);
+    mkdir2.mkdirsSync(dir2);
     fs.writeFileSync(file, ...args);
   }
   module.exports = {
@@ -5253,7 +5253,7 @@ var require_move = __commonJS((exports, module) => {
   var remove = require_remove().remove;
   var mkdirp = require_mkdirs().mkdirp;
   var pathExists = require_path_exists().pathExists;
-  var stat = require_stat();
+  var stat2 = require_stat();
   function move(src, dest, opts, cb) {
     if (typeof opts === "function") {
       cb = opts;
@@ -5261,11 +5261,11 @@ var require_move = __commonJS((exports, module) => {
     }
     opts = opts || {};
     const overwrite = opts.overwrite || opts.clobber || false;
-    stat.checkPaths(src, dest, "move", opts, (err, stats) => {
+    stat2.checkPaths(src, dest, "move", opts, (err, stats) => {
       if (err)
         return cb(err);
       const { srcStat, isChangingCase = false } = stats;
-      stat.checkParentPaths(src, srcStat, dest, "move", (err2) => {
+      stat2.checkParentPaths(src, srcStat, dest, "move", (err2) => {
         if (err2)
           return cb(err2);
         if (isParentRoot(dest))
@@ -5331,12 +5331,12 @@ var require_move_sync = __commonJS((exports, module) => {
   var copySync = require_copy2().copySync;
   var removeSync = require_remove().removeSync;
   var mkdirpSync = require_mkdirs().mkdirpSync;
-  var stat = require_stat();
+  var stat2 = require_stat();
   function moveSync(src, dest, opts) {
     opts = opts || {};
     const overwrite = opts.overwrite || opts.clobber || false;
-    const { srcStat, isChangingCase = false } = stat.checkPathsSync(src, dest, "move", opts);
-    stat.checkParentPathsSync(src, srcStat, dest, "move");
+    const { srcStat, isChangingCase = false } = stat2.checkPathsSync(src, dest, "move", opts);
+    stat2.checkParentPathsSync(src, srcStat, dest, "move");
     if (!isParentRoot(dest))
       mkdirpSync(path.dirname(dest));
     return doRename(src, dest, overwrite, isChangingCase);
@@ -9084,11 +9084,11 @@ var require_exception = __commonJS((exports, module) => {
     }
     return message + " " + where;
   }
-  function YAMLException(reason, mark) {
+  function YAMLException(reason, mark2) {
     Error.call(this);
     this.name = "YAMLException";
     this.reason = reason;
-    this.mark = mark;
+    this.mark = mark2;
     this.message = formatError(this, false);
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
@@ -9127,9 +9127,9 @@ var require_snippet = __commonJS((exports, module) => {
   function padStart(string, max) {
     return common.repeat(" ", max - string.length) + string;
   }
-  function makeSnippet(mark, options) {
+  function makeSnippet(mark2, options) {
     options = Object.create(options || null);
-    if (!mark.buffer)
+    if (!mark2.buffer)
       return null;
     if (!options.maxLength)
       options.maxLength = 79;
@@ -9144,35 +9144,35 @@ var require_snippet = __commonJS((exports, module) => {
     const lineEnds = [];
     let match;
     let foundLineNo = -1;
-    while (match = re.exec(mark.buffer)) {
+    while (match = re.exec(mark2.buffer)) {
       lineEnds.push(match.index);
       lineStarts.push(match.index + match[0].length);
-      if (mark.position <= match.index && foundLineNo < 0) {
+      if (mark2.position <= match.index && foundLineNo < 0) {
         foundLineNo = lineStarts.length - 2;
       }
     }
     if (foundLineNo < 0)
       foundLineNo = lineStarts.length - 1;
     let result = "";
-    const lineNoLength = Math.min(mark.line + options.linesAfter, lineEnds.length).toString().length;
+    const lineNoLength = Math.min(mark2.line + options.linesAfter, lineEnds.length).toString().length;
     const maxLineLength = options.maxLength - (options.indent + lineNoLength + 3);
     for (let i = 1;i <= options.linesBefore; i++) {
       if (foundLineNo - i < 0)
         break;
-      const line2 = getLine(mark.buffer, lineStarts[foundLineNo - i], lineEnds[foundLineNo - i], mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo - i]), maxLineLength);
-      result = common.repeat(" ", options.indent) + padStart((mark.line - i + 1).toString(), lineNoLength) + " | " + line2.str + `
+      const line2 = getLine(mark2.buffer, lineStarts[foundLineNo - i], lineEnds[foundLineNo - i], mark2.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo - i]), maxLineLength);
+      result = common.repeat(" ", options.indent) + padStart((mark2.line - i + 1).toString(), lineNoLength) + " | " + line2.str + `
 ` + result;
     }
-    const line = getLine(mark.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
-    result += common.repeat(" ", options.indent) + padStart((mark.line + 1).toString(), lineNoLength) + " | " + line.str + `
+    const line = getLine(mark2.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark2.position, maxLineLength);
+    result += common.repeat(" ", options.indent) + padStart((mark2.line + 1).toString(), lineNoLength) + " | " + line.str + `
 `;
     result += common.repeat("-", options.indent + lineNoLength + 3 + line.pos) + "^" + `
 `;
     for (let i = 1;i <= options.linesAfter; i++) {
       if (foundLineNo + i >= lineEnds.length)
         break;
-      const line2 = getLine(mark.buffer, lineStarts[foundLineNo + i], lineEnds[foundLineNo + i], mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo + i]), maxLineLength);
-      result += common.repeat(" ", options.indent) + padStart((mark.line + i + 1).toString(), lineNoLength) + " | " + line2.str + `
+      const line2 = getLine(mark2.buffer, lineStarts[foundLineNo + i], lineEnds[foundLineNo + i], mark2.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo + i]), maxLineLength);
+      result += common.repeat(" ", options.indent) + padStart((mark2.line + i + 1).toString(), lineNoLength) + " | " + line2.str + `
 `;
     }
     return result.replace(/\n$/, "");
@@ -10108,15 +10108,15 @@ var require_loader = __commonJS((exports, module) => {
     this.anchorMapTransactions = [];
   }
   function generateError(state, message) {
-    const mark = {
+    const mark2 = {
       name: state.filename,
       buffer: state.input.slice(0, -1),
       position: state.position,
       line: state.line,
       column: state.position - state.lineStart
     };
-    mark.snippet = makeSnippet(mark);
-    return new YAMLException(message, mark);
+    mark2.snippet = makeSnippet(mark2);
+    return new YAMLException(message, mark2);
   }
   function throwError(state, message) {
     throw generateError(state, message);
@@ -14700,8 +14700,8 @@ var require_ElectronAppAdapter = __commonJS((exports) => {
   var AppAdapter_1 = require_AppAdapter();
 
   class ElectronAppAdapter {
-    constructor(app = __require("electron").app) {
-      this.app = app;
+    constructor(app2 = __require("electron").app) {
+      this.app = app2;
     }
     whenReady() {
       return this.app.whenReady();
@@ -15872,7 +15872,7 @@ var require_DataSplitter = __commonJS((exports) => {
     ReadState2[ReadState2["HEADER"] = 1] = "HEADER";
     ReadState2[ReadState2["BODY"] = 2] = "BODY";
   })(ReadState || (ReadState = {}));
-  function copyData(task, out, oldFileFd, reject, resolve) {
+  function copyData(task, out2, oldFileFd, reject, resolve) {
     const readStream = (0, fs_1.createReadStream)("", {
       fd: oldFileFd,
       autoClose: false,
@@ -15881,15 +15881,15 @@ var require_DataSplitter = __commonJS((exports) => {
     });
     readStream.on("error", reject);
     readStream.once("end", resolve);
-    readStream.pipe(out, {
+    readStream.pipe(out2, {
       end: false
     });
   }
 
   class DataSplitter extends stream_1.Writable {
-    constructor(out, options, partIndexToTaskIndex, boundary, partIndexToLength, finishHandler, grandTotalBytes, onProgress) {
+    constructor(out2, options, partIndexToTaskIndex, boundary, partIndexToLength, finishHandler, grandTotalBytes, onProgress) {
       super();
-      this.out = out;
+      this.out = out2;
       this.options = options;
       this.partIndexToTaskIndex = partIndexToTaskIndex;
       this.partIndexToLength = partIndexToLength;
@@ -16057,14 +16057,14 @@ var require_DataSplitter = __commonJS((exports) => {
       this.actualPartLength += end - start;
       this.transferred += end - start;
       this.delta += end - start;
-      const out = this.out;
-      if (out.write(start === 0 && data.length === end ? data : data.slice(start, end))) {
+      const out2 = this.out;
+      if (out2.write(start === 0 && data.length === end ? data : data.slice(start, end))) {
         return Promise.resolve();
       } else {
         return new Promise((resolve, reject) => {
-          out.on("error", reject);
-          out.once("drain", () => {
-            out.removeListener("error", reject);
+          out2.on("error", reject);
+          out2.once("drain", () => {
+            out2.removeListener("error", reject);
             resolve();
           });
         });
@@ -16082,13 +16082,13 @@ var require_multipleRangeDownloader = __commonJS((exports) => {
   var builder_util_runtime_1 = require_out();
   var DataSplitter_1 = require_DataSplitter();
   var downloadPlanBuilder_1 = require_downloadPlanBuilder();
-  function executeTasksUsingMultipleRangeRequests(differentialDownloader, tasks, out, oldFileFd, reject) {
+  function executeTasksUsingMultipleRangeRequests(differentialDownloader, tasks, out2, oldFileFd, reject) {
     const w = (taskOffset) => {
       if (taskOffset >= tasks.length) {
         if (differentialDownloader.fileMetadataBuffer != null) {
-          out.write(differentialDownloader.fileMetadataBuffer);
+          out2.write(differentialDownloader.fileMetadataBuffer);
         }
-        out.end();
+        out2.end();
         return;
       }
       const nextOffset = taskOffset + 1000;
@@ -16097,11 +16097,11 @@ var require_multipleRangeDownloader = __commonJS((exports) => {
         start: taskOffset,
         end: Math.min(tasks.length, nextOffset),
         oldFileFd
-      }, out, () => w(nextOffset), reject);
+      }, out2, () => w(nextOffset), reject);
     };
     return w;
   }
-  function doExecuteTasks(differentialDownloader, options, out, resolve, reject) {
+  function doExecuteTasks(differentialDownloader, options, out2, resolve, reject) {
     let ranges = "bytes=";
     let partCount = 0;
     let grandTotalBytes = 0;
@@ -16125,7 +16125,7 @@ var require_multipleRangeDownloader = __commonJS((exports) => {
         }
         const task = options.tasks[index++];
         if (task.kind === downloadPlanBuilder_1.OperationKind.COPY) {
-          (0, DataSplitter_1.copyData)(task, out, options.oldFileFd, reject, () => w(index));
+          (0, DataSplitter_1.copyData)(task, out2, options.oldFileFd, reject, () => w(index));
         } else {
           const requestOptions2 = differentialDownloader.createRequestOptions();
           requestOptions2.headers.Range = `bytes=${task.start}-${task.end - 1}`;
@@ -16134,7 +16134,7 @@ var require_multipleRangeDownloader = __commonJS((exports) => {
             if (!checkIsRangesSupported(response, reject)) {
               return;
             }
-            response.pipe(out, {
+            response.pipe(out2, {
               end: false
             });
             response.once("end", () => w(index));
@@ -16158,7 +16158,7 @@ var require_multipleRangeDownloader = __commonJS((exports) => {
         reject(new Error(`Content-Type "multipart/byteranges" is expected, but got "${contentType}"`));
         return;
       }
-      const dicer = new DataSplitter_1.DataSplitter(out, options, partIndexToTaskIndex, m[1] || m[2], partIndexToLength, resolve, grandTotalBytes, differentialDownloader.options.onProgress);
+      const dicer = new DataSplitter_1.DataSplitter(out2, options, partIndexToTaskIndex, m[1] || m[2], partIndexToLength, resolve, grandTotalBytes, differentialDownloader.options.onProgress);
       dicer.on("error", reject);
       response.pipe(dicer);
       response.on("end", () => {
@@ -16648,7 +16648,7 @@ var require_AppUpdater = __commonJS((exports) => {
         this._isUserWithinRollout = value;
       }
     }
-    constructor(options, app) {
+    constructor(options, app2) {
       super();
       this.autoDownload = true;
       this.autoInstallOnAppQuit = true;
@@ -16678,11 +16678,11 @@ var require_AppUpdater = __commonJS((exports) => {
       this.on("error", (error) => {
         this._logger.error(`Error: ${error.stack || error.message}`);
       });
-      if (app == null) {
+      if (app2 == null) {
         this.app = new ElectronAppAdapter_1.ElectronAppAdapter;
         this.httpExecutor = new electronHttpExecutor_1.ElectronHttpExecutor((authInfo, callback) => this.emit("login", authInfo, callback));
       } else {
-        this.app = app;
+        this.app = app2;
         this.httpExecutor = null;
       }
       const currentVersionString = this.app.version;
@@ -17158,8 +17158,8 @@ var require_BaseUpdater = __commonJS((exports) => {
   var AppUpdater_1 = require_AppUpdater();
 
   class BaseUpdater extends AppUpdater_1.AppUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
       this.quitAndInstallCalled = false;
       this.quitHandlerAdded = false;
     }
@@ -17236,7 +17236,7 @@ var require_BaseUpdater = __commonJS((exports) => {
       });
     }
     sanitizeEnvPath(envPath) {
-      return envPath.split(path.delimiter).filter((dir) => path.isAbsolute(dir)).join(path.delimiter);
+      return envPath.split(path.delimiter).filter((dir2) => path.isAbsolute(dir2)).join(path.delimiter);
     }
     spawnSyncLog(cmd, args = [], env2 = {}) {
       var _a;
@@ -17333,8 +17333,8 @@ var require_AppImageUpdater = __commonJS((exports) => {
   var types_1 = require_types();
 
   class AppImageUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
     }
     isUpdaterActive() {
       if (process.env["APPIMAGE"] == null && !this.forceDevUpdateConfig) {
@@ -17436,8 +17436,8 @@ var require_LinuxUpdater = __commonJS((exports) => {
   var SAFE_PM_REGEX = /^[a-zA-Z0-9_-]+$/;
 
   class LinuxUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
     }
     isRunningAsRoot() {
       var _a;
@@ -17530,8 +17530,8 @@ var require_DebUpdater = __commonJS((exports) => {
   var LinuxUpdater_1 = require_LinuxUpdater();
 
   class DebUpdater extends LinuxUpdater_1.LinuxUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
     }
     doDownloadUpdate(downloadUpdateOptions) {
       const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
@@ -17609,8 +17609,8 @@ var require_PacmanUpdater = __commonJS((exports) => {
   var LinuxUpdater_1 = require_LinuxUpdater();
 
   class PacmanUpdater extends LinuxUpdater_1.LinuxUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
     }
     doDownloadUpdate(downloadUpdateOptions) {
       const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
@@ -17673,8 +17673,8 @@ var require_RpmUpdater = __commonJS((exports) => {
   var LinuxUpdater_1 = require_LinuxUpdater();
 
   class RpmUpdater extends LinuxUpdater_1.LinuxUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
     }
     doDownloadUpdate(downloadUpdateOptions) {
       const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
@@ -17745,8 +17745,8 @@ var require_MacUpdater = __commonJS((exports) => {
   var crypto_1 = __require("crypto");
 
   class MacUpdater extends AppUpdater_1.AppUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
       this.nativeUpdater = __require("electron").autoUpdater;
       this.squirrelDownloadedUpdate = false;
       this.nativeUpdater.on("error", (it) => {
@@ -18044,8 +18044,8 @@ var require_windowsExecutableCodeSignatureVerifier = __commonJS((exports) => {
       });
     });
   }
-  function parseOut(out) {
-    const data = JSON.parse(out);
+  function parseOut(out2) {
+    const data = JSON.parse(out2);
     delete data.PrivateKey;
     delete data.IsOSBinary;
     delete data.SignatureType;
@@ -18098,8 +18098,8 @@ var require_NsisUpdater = __commonJS((exports) => {
   var url_1 = __require("url");
 
   class NsisUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app) {
-      super(options, app);
+    constructor(options, app2) {
+      super(options, app2);
       this._verifyUpdateCodeSignature = (publisherNames, unescapedTempUpdateFile) => (0, windowsExecutableCodeSignatureVerifier_1.verifySignature)(publisherNames, unescapedTempUpdateFile, this._logger);
     }
     get verifyUpdateCodeSignature() {
@@ -18345,10 +18345,10 @@ var require_main2 = __commonJS((exports) => {
 });
 
 // shell/main.ts
-import { app as app3, BrowserWindow as BrowserWindow3, globalShortcut, ipcMain, screen as screen2, shell } from "electron";
+import { app as app4, BrowserWindow as BrowserWindow4, globalShortcut, ipcMain as ipcMain2, screen as screen2, shell as shell2 } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname as dirname2, join as join4, resolve } from "node:path";
-import { readFile as readFile4, writeFile as writeFile2, mkdir as mkdir2 } from "node:fs/promises";
+import { dirname as dirname2, join as join5, resolve } from "node:path";
+import { readFile as readFile5, writeFile as writeFile3, mkdir as mkdir3 } from "node:fs/promises";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -18850,23 +18850,240 @@ function dismissSplash(reveal) {
   }, wait);
 }
 
+// shell/capture.ts
+import { app, BrowserWindow as BrowserWindow3, ipcMain, shell } from "electron";
+import { createWriteStream } from "node:fs";
+import { mkdir, readFile as readFile2, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { join as join3 } from "node:path";
+var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
+var MAX_AUTOMATIC = 10;
+var dir = () => join3(app.getPath("userData"), "recordings");
+var indexFile = () => join3(dir(), "index.json");
+var win = null;
+var ready = false;
+var out = null;
+var current = null;
+var onChange = null;
+var lastError = null;
+var captureError = () => lastError;
+var isRecording = () => current !== null;
+async function ensureWindow() {
+  if (win && !win.isDestroyed())
+    return win;
+  ready = false;
+  win = new BrowserWindow3({
+    show: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      backgroundThrottling: false
+    }
+  });
+  await win.loadFile(join3(__dirname, "..", "capture", "recorder.html"));
+  return win;
+}
+ipcMain.on("capture:ready", () => {
+  ready = true;
+});
+ipcMain.on("capture:warn", (_e, message) => {
+  console.log("[capture] %s", message);
+});
+ipcMain.on("capture:chunk", (_e, chunk) => {
+  out?.write(Buffer.from(chunk));
+});
+ipcMain.on("capture:failed", (_e, message) => {
+  lastError = message;
+  console.log("[capture] FAILED: %s", message);
+  finish();
+});
+async function beginRecording(settings, about, changed) {
+  if (!settings.capture || current)
+    return false;
+  lastError = null;
+  onChange = changed;
+  const { desktopCapturer, screen: screen2 } = await import("electron");
+  const sources = await desktopCapturer.getSources({ types: ["screen"] });
+  const primary = screen2.getPrimaryDisplay();
+  const source = sources.find((s) => String(s.display_id) === String(primary.id)) ?? sources[0];
+  if (!source) {
+    lastError = "no screen to record";
+    return false;
+  }
+  const w = await ensureWindow();
+  for (let i = 0;i < 40 && !ready; i++)
+    await new Promise((r) => setTimeout(r, 100));
+  if (!ready) {
+    lastError = "the recorder did not start";
+    return false;
+  }
+  await mkdir(dir(), { recursive: true });
+  const id = `${Date.now()}`;
+  const file = join3(dir(), `${id}.webm`);
+  out = createWriteStream(file);
+  current = {
+    id,
+    file,
+    startedAt: Date.now(),
+    durationMs: 0,
+    bytes: 0,
+    championId: about.championId,
+    championName: about.championName,
+    queue: about.queue,
+    win: null,
+    highlights: [],
+    kept: false,
+    width: 0,
+    height: 0
+  };
+  w.webContents.send("capture:start", {
+    sourceId: source.id,
+    audio: settings.captureAudio,
+    fps: 30,
+    bitrate: 8000000
+  });
+  return true;
+}
+ipcMain.on("capture:started", (_e, info) => {
+  if (current) {
+    current.width = info.width;
+    current.height = info.height;
+  }
+  console.log("[capture] recording %dx%d, %d audio track(s), %s", info.width, info.height, info.audio, info.mimeType);
+  onChange?.();
+});
+function mark(kind, label) {
+  if (!current)
+    return;
+  const at = Date.now() - current.startedAt;
+  if (current.highlights.some((h) => h.kind === kind && Math.abs(h.at - at) < 1500))
+    return;
+  current.highlights.push({ at, kind, label });
+}
+function setResult(win2) {
+  if (current)
+    current.win = win2;
+}
+async function endRecording() {
+  if (!current || !win || win.isDestroyed())
+    return;
+  win.webContents.send("capture:stop");
+}
+ipcMain.on("capture:stopped", () => {
+  finish();
+});
+async function finish() {
+  const rec = current;
+  const stream = out;
+  current = null;
+  out = null;
+  if (!rec || !stream)
+    return;
+  await new Promise((resolve) => stream.end(resolve));
+  rec.durationMs = Date.now() - rec.startedAt;
+  try {
+    rec.bytes = (await stat(rec.file)).size;
+  } catch {
+    rec.bytes = 0;
+  }
+  if (rec.bytes < 131072) {
+    console.log("[capture] discarded an empty recording (%d bytes)", rec.bytes);
+    await rm(rec.file, { force: true });
+    onChange?.();
+    return;
+  }
+  const all = await readIndex();
+  all.unshift(rec);
+  await writeIndex(await prune(all));
+  console.log("[capture] saved %s — %ds, %s MB, %d highlight(s)", rec.championName ?? "game", Math.round(rec.durationMs / 1000), (rec.bytes / 1048576).toFixed(0), rec.highlights.length);
+  onChange?.();
+}
+async function prune(all) {
+  const kept = all.filter((r) => r.kept);
+  const automatic = all.filter((r) => !r.kept);
+  const doomed = automatic.slice(MAX_AUTOMATIC);
+  for (const r of doomed) {
+    await rm(r.file, { force: true }).catch(() => {
+      return;
+    });
+    console.log("[capture] dropped the oldest recording (%s)", r.championName ?? r.id);
+  }
+  return [...kept, ...automatic.slice(0, MAX_AUTOMATIC)].sort((a, b) => b.startedAt - a.startedAt);
+}
+async function readIndex() {
+  try {
+    return JSON.parse(await readFile2(indexFile(), "utf8"));
+  } catch {
+    return [];
+  }
+}
+async function writeIndex(all) {
+  await mkdir(dir(), { recursive: true });
+  await writeFile(indexFile(), JSON.stringify(all, null, 2), "utf8");
+}
+async function keepRecording(id, keep) {
+  const all = await readIndex();
+  const found = all.find((r) => r.id === id);
+  if (found)
+    found.kept = keep;
+  const pruned = await prune(all);
+  await writeIndex(pruned);
+  return pruned;
+}
+async function deleteRecording(id) {
+  const all = await readIndex();
+  const found = all.find((r) => r.id === id);
+  if (found)
+    await rm(found.file, { force: true }).catch(() => {
+      return;
+    });
+  const rest = all.filter((r) => r.id !== id);
+  await writeIndex(rest);
+  return rest;
+}
+async function revealRecording(id) {
+  const all = await readIndex();
+  const found = all.find((r) => r.id === id);
+  if (found)
+    shell.showItemInFolder(found.file);
+}
+async function librarySize() {
+  try {
+    const files = await readdir(dir());
+    let total = 0;
+    for (const f of files) {
+      if (!f.endsWith(".webm"))
+        continue;
+      total += (await stat(join3(dir(), f))).size;
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+function destroyRecorder() {
+  if (win && !win.isDestroyed())
+    win.destroy();
+  win = null;
+  ready = false;
+}
+
 // shell/updater.ts
 var import_electron_updater = __toESM(require_main2(), 1);
-import { app } from "electron";
+import { app as app2 } from "electron";
 var { autoUpdater } = import_electron_updater.default;
 var emit = () => {};
-var current;
-var canUpdate = () => app.isPackaged;
-function initUpdater(onChange) {
-  emit = onChange;
-  current = { state: "idle", version: app.getVersion() };
+var current2;
+var canUpdate = () => app2.isPackaged;
+function initUpdater(onChange2) {
+  emit = onChange2;
+  current2 = { state: "idle", version: app2.getVersion() };
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   const set = (s) => {
-    current = s;
+    current2 = s;
     emit(s);
   };
-  const v = () => app.getVersion();
+  const v = () => app2.getVersion();
   autoUpdater.on("checking-for-update", () => set({ state: "checking", version: v() }));
   autoUpdater.on("update-not-available", () => set({ state: "current", version: v(), checkedAt: Date.now() }));
   autoUpdater.on("update-available", (info) => set({
@@ -18878,12 +19095,12 @@ function initUpdater(onChange) {
   autoUpdater.on("download-progress", (p) => set({
     state: "downloading",
     version: v(),
-    next: current.state === "downloading" || current.state === "available" ? current.next : "",
+    next: current2.state === "downloading" || current2.state === "available" ? current2.next : "",
     percent: Math.round(p.percent)
   }));
   autoUpdater.on("update-downloaded", (info) => set({ state: "ready", version: v(), next: info.version }));
   autoUpdater.on("error", (e) => set({ state: "failed", version: v(), message: e?.message ?? "the update check failed" }));
-  return current;
+  return current2;
 }
 async function checkForUpdate() {
   if (!canUpdate())
@@ -18992,22 +19209,24 @@ async function championRunes(championKey, championName, role, signal) {
 }
 
 // shell/prefs.ts
-import { app as app2 } from "electron";
-import { readFile as readFile2, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join as join3 } from "node:path";
+import { app as app3 } from "electron";
+import { readFile as readFile3, writeFile as writeFile2, mkdir as mkdir2 } from "node:fs/promises";
+import { dirname, join as join4 } from "node:path";
 var DEFAULT_SETTINGS = {
   launchAtLogin: false,
   smartBuild: false,
   goldReadout: true,
   loadingBoard: true,
+  capture: false,
+  captureAudio: "system",
   objectiveNotices: true,
   buildNotices: true
 };
-var file = () => join3(app2.getPath("userData"), "preferences.json");
+var file = () => join4(app3.getPath("userData"), "preferences.json");
 async function load2() {
   let cache2;
   try {
-    const raw = await readFile2(file(), "utf8");
+    const raw = await readFile3(file(), "utf8");
     const parsed = JSON.parse(raw);
     cache2 = {
       chosen: parsed?.chosen ?? {},
@@ -19099,8 +19318,8 @@ async function deleteBuild(championId) {
 }
 async function persist(store) {
   try {
-    await mkdir(dirname(file()), { recursive: true });
-    await writeFile(file(), JSON.stringify(store, null, 2), "utf8");
+    await mkdir2(dirname(file()), { recursive: true });
+    await writeFile2(file(), JSON.stringify(store, null, 2), "utf8");
   } catch {}
 }
 
@@ -19381,7 +19600,7 @@ function abilityBox(ability, screen2, hud) {
 }
 
 // src/live/hudConfig.ts
-import { readFile as readFile3 } from "node:fs/promises";
+import { readFile as readFile4 } from "node:fs/promises";
 var CONFIG_PATHS = [
   "C:/Riot Games/League of Legends/Config/game.cfg",
   "C:/Program Files/Riot Games/League of Legends/Config/game.cfg",
@@ -19393,7 +19612,7 @@ async function readHudSettings() {
   for (const path of CONFIG_PATHS) {
     let text;
     try {
-      text = await readFile3(path, "utf8");
+      text = await readFile4(path, "utf8");
     } catch {
       continue;
     }
@@ -19559,18 +19778,18 @@ var warmItemCosts = () => void load3().catch(() => {
 async function teamGold(players, myTeam) {
   if (!players.length || !myTeam)
     return null;
-  const out = { ours: 0, theirs: 0, oursCounted: 0, theirsCounted: 0 };
+  const out2 = { ours: 0, theirs: 0, oursCounted: 0, theirsCounted: 0 };
   for (const p of players) {
     const value = await inventoryValue(p.items ?? []);
     if (p.team === myTeam) {
-      out.ours += value;
-      out.oursCounted++;
+      out2.ours += value;
+      out2.oursCounted++;
     } else {
-      out.theirs += value;
-      out.theirsCounted++;
+      out2.theirs += value;
+      out2.theirsCounted++;
     }
   }
-  return out;
+  return out2;
 }
 
 // src/data/affordability.ts
@@ -19804,7 +20023,7 @@ async function load6() {
     if (!res.ok)
       throw new Error(`item data ${res.status}`);
     const json = await res.json();
-    const out = [];
+    const out2 = [];
     for (const [id, it] of Object.entries(json.data)) {
       const cost = it.gold?.total ?? 0;
       if (!it.gold?.purchasable)
@@ -19821,7 +20040,7 @@ async function load6() {
         continue;
       if (cost < 500)
         continue;
-      out.push({
+      out2.push({
         id: Number(id),
         name: it.name,
         cost,
@@ -19830,9 +20049,9 @@ async function load6() {
         boots
       });
     }
-    out.sort((a, b) => Number(b.boots) - Number(a.boots) || a.cost - b.cost || a.name.localeCompare(b.name));
-    cache2 = out;
-    return out;
+    out2.sort((a, b) => Number(b.boots) - Number(a.boots) || a.cost - b.cost || a.name.localeCompare(b.name));
+    cache2 = out2;
+    return out2;
   })();
   try {
     return await loading4;
@@ -19853,16 +20072,16 @@ async function bootsIds() {
   if (!res.ok)
     throw new Error(`item data ${res.status}`);
   const json = await res.json();
-  const out = new Set;
+  const out2 = new Set;
   for (const [id, it] of Object.entries(json.data)) {
     if (!(it.tags ?? []).includes("Boots"))
       continue;
     if (it.maps && it.maps["11"] === false)
       continue;
-    out.add(Number(id));
+    out2.add(Number(id));
   }
-  boots = out;
-  return out;
+  boots = out2;
+  return out2;
 }
 
 // src/data/smartBuild.ts
@@ -20025,12 +20244,16 @@ var state = {
   runes: null,
   runeImport: { state: "idle" },
   account: null,
-  update: { state: "idle", version: app3.getVersion() },
+  update: { state: "idle", version: app4.getVersion() },
   canUpdate: false,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
+  recording: false,
+  recordings: [],
+  libraryBytes: 0,
+  captureError: null,
   loadingNudge: { x: 0, y: 0, scale: 0 },
   loadingCalibrating: false,
   lastPlayed: null,
@@ -20038,11 +20261,11 @@ var state = {
   finalBoard: null,
   scoreboard: null
 };
-var win = null;
+var win2 = null;
 function push(patch2) {
   const before = state.phase;
   state = { ...state, ...patch2 };
-  win?.webContents.send("state", state);
+  win2?.webContents.send("state", state);
   sendOverlay("state", {
     ...state,
     goldBar: goldVisible,
@@ -20062,6 +20285,13 @@ function push(patch2) {
       startGameClock();
     else {
       stopGameClock();
+      if (state.recording) {
+        const mine = state.matches?.[0];
+        if (mine && mine.championId === state.lastPlayed?.championKey)
+          setResult(mine.win);
+        endRecording();
+        push({ recording: false });
+      }
       if (state.loading) {
         loadingFor = "";
         push({ loading: null });
@@ -20233,6 +20463,7 @@ async function readSelect(data) {
 var NOTIFY_LEAD = 90;
 var NOTICE_MS = 9000;
 var OPENING_MS = 14000;
+var CAPTURE_MS = 6000;
 var RECAL_MS = 11000;
 var POLL_MS = 2000;
 var DEMO_MS = 5000;
@@ -20271,6 +20502,8 @@ function dropNotice() {
   syncOverlay();
 }
 function noticesAllowed(kind) {
+  if (kind === "capture")
+    return true;
   return kind === "dragon" || kind === "elder" ? state.settings.objectiveNotices : state.settings.buildNotices;
 }
 function raiseNotice(kind, inSeconds, element, tally, ms = NOTICE_MS, item, boots2, build) {
@@ -20478,11 +20711,23 @@ async function readLoading() {
   if (stamp === loadingFor)
     return;
   loadingFor = stamp;
+  const mine = roster.allies.find((e) => e.puuid === puuid);
+  const champ = mine?.championKey ? await classify(mine.championKey).catch(() => null) : null;
+  const started = await beginRecording(state.settings, { championId: champ?.id ?? null, championName: champ?.name ?? null, queue: null }, () => void pushRecordings()).catch((e) => {
+    console.log("[capture] could not start: %s", e?.message);
+    return false;
+  });
+  if (started) {
+    push({ recording: true, captureError: null });
+    raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS);
+  } else if (captureError()) {
+    push({ recording: false, captureError: captureError() });
+  }
   const resolve2 = (entries) => Promise.all(entries.map(async (e) => {
-    const champ = e.championKey ? await classify(e.championKey).catch(() => null) : null;
+    const champ2 = e.championKey ? await classify(e.championKey).catch(() => null) : null;
     return {
       name: e.name || "-",
-      championId: champ?.id ?? null,
+      championId: champ2?.id ?? null,
       championKey: e.championKey,
       rank: null,
       hidden: false,
@@ -20632,6 +20877,8 @@ async function readGame() {
     syncOverlay();
   }
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain);
+  if (state.recording)
+    markHighlights(events, me);
   readScoreboard(players ?? [], me, myTeam, stats.gameTime);
 }
 var keyCache = new Map;
@@ -20683,6 +20930,22 @@ async function readScoreboard(players, me, myTeam, gameTime) {
     }
   });
 }
+function markHighlights(events, me) {
+  if (!me)
+    return;
+  const bare = me.split("#")[0] ?? me;
+  const isMe = (n) => !!n && (n === me || n === bare);
+  for (const e of events) {
+    if (e.EventName !== "ChampionKill")
+      continue;
+    if (isMe(e.KillerName))
+      mark("kill", e.VictimName ?? "");
+    else if (isMe(e.VictimName))
+      mark("death", e.KillerName ?? "");
+    else if (e.Assisters?.some(isMe))
+      mark("assist", e.VictimName ?? "");
+  }
+}
 function readObjective(gameTime, events, players, me, mapTerrain) {
   const next = nextObjective(events, gameTime, players, mapTerrain);
   if (!next)
@@ -20725,53 +20988,53 @@ function stopGameClock() {
   dropNotice();
 }
 function createWindow() {
-  win = new BrowserWindow3({
+  win2 = new BrowserWindow4({
     width: 1280,
     height: 840,
     minWidth: 1040,
     minHeight: 700,
-    icon: join4(__dirname2, "../build/icon.png"),
+    icon: join5(__dirname2, "../build/icon.png"),
     show: false,
     frame: false,
     backgroundColor: "#040A0C",
     webPreferences: {
-      preload: join4(__dirname2, "preload.mjs"),
+      preload: join5(__dirname2, "preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
     }
   });
-  win.once("ready-to-show", () => dismissSplash(() => {
-    win?.show();
-    win?.focus();
+  win2.once("ready-to-show", () => dismissSplash(() => {
+    win2?.show();
+    win2?.focus();
   }));
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+  win2.webContents.setWindowOpenHandler(({ url }) => {
+    shell2.openExternal(url);
     return { action: "deny" };
   });
   if (DEV_URL2)
-    win.loadURL(DEV_URL2);
+    win2.loadURL(DEV_URL2);
   else
-    win.loadFile(join4(__dirname2, "../dist/index.html"));
+    win2.loadFile(join5(__dirname2, "../dist/index.html"));
 }
-ipcMain.handle("state:get", () => state);
-ipcMain.on("win:minimise", () => win?.minimize());
-ipcMain.on("win:close", () => win?.close());
-ipcMain.on("hud:calibrate-topright", (_e, patch2) => {
+ipcMain2.handle("state:get", () => state);
+ipcMain2.on("win:minimise", () => win2?.minimize());
+ipcMain2.on("win:close", () => win2?.close());
+ipcMain2.on("hud:calibrate-topright", (_e, patch2) => {
   const topRight = { ...state.hud.topRight ?? NO_NUDGE, ...patch2 };
   push({ hud: { ...state.hud, topRight } });
   console.log("[hud] top-right nudge x=%s y=%s size=%s", topRight.x.toFixed(4), topRight.y.toFixed(4), topRight.size.toFixed(2));
 });
-ipcMain.on("hud:calibrate", (_e, patch2) => {
+ipcMain2.on("hud:calibrate", (_e, patch2) => {
   const nudge = { ...state.hud.nudge, ...patch2 };
   push({ hud: { ...state.hud, nudge } });
   console.log("[hud] nudge x=%s y=%s size=%s", nudge.x.toFixed(2), nudge.y.toFixed(2), nudge.size.toFixed(2));
 });
-ipcMain.on("hud:hint", (_e, ability) => {
+ipcMain2.on("hud:hint", (_e, ability) => {
   push({ levelHint: ability });
   syncOverlay();
 });
-ipcMain.on("overlay:report", (_e, info) => {
+ipcMain2.on("overlay:report", (_e, info) => {
   const d = screen2.getPrimaryDisplay();
   console.log("[hud] overlay viewport %dx%d dpr=%s | display bounds %dx%d at (%d,%d) scale=%s | physical %dx%d", info.w, info.h, info.dpr, d.bounds.width, d.bounds.height, d.bounds.x, d.bounds.y, d.scaleFactor, Math.round(d.bounds.width * d.scaleFactor), Math.round(d.bounds.height * d.scaleFactor));
   const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud);
@@ -20795,20 +21058,38 @@ async function applyPage(champion, patch2, page) {
     push({ runeImport: { state: "error", message: e?.message ?? "import failed" } });
   }
 }
-ipcMain.handle("profile:refresh", async () => {
+ipcMain2.handle("profile:refresh", async () => {
   await readProfile();
+});
+async function pushRecordings() {
+  const [recordings, bytes] = await Promise.all([readIndex(), librarySize()]);
+  push({ recordings, libraryBytes: bytes, recording: isRecording(), captureError: captureError() });
+}
+ipcMain2.handle("capture:list", async () => {
+  await pushRecordings();
+});
+ipcMain2.handle("capture:keep", async (_e, id, keep) => {
+  await keepRecording(id, keep);
+  await pushRecordings();
+});
+ipcMain2.handle("capture:delete", async (_e, id) => {
+  await deleteRecording(id);
+  await pushRecordings();
+});
+ipcMain2.handle("capture:reveal", async (_e, id) => {
+  await revealRecording(id);
 });
 var rankCache = new Map;
 async function lookupRanks(riotIds, region) {
-  const out = {};
+  const out2 = {};
   if (!region || !Array.isArray(riotIds))
-    return out;
+    return out2;
   await Promise.all(riotIds.slice(0, 10).map(async (riotId) => {
     if (typeof riotId !== "string" || !riotId.includes("#"))
       return;
     const cacheKey = `${region}:${riotId}`;
     if (rankCache.has(cacheKey)) {
-      out[riotId] = rankCache.get(cacheKey) ?? null;
+      out2[riotId] = rankCache.get(cacheKey) ?? null;
       return;
     }
     const [name, tag] = riotId.split("#");
@@ -20829,24 +21110,24 @@ async function lookupRanks(riotIds, region) {
         losses: Number(json?.summoner?.losses ?? 0)
       } : null;
       rankCache.set(cacheKey, clean);
-      out[riotId] = clean;
+      out2[riotId] = clean;
     } catch {
-      out[riotId] = null;
+      out2[riotId] = null;
     }
   }));
-  return out;
+  return out2;
 }
-ipcMain.handle("ranks:get", async (_e, riotIds, region) => lookupRanks(Array.isArray(riotIds) ? riotIds : [], region));
-var MODEL_DIR = () => join4(app3.getPath("userData"), "models");
-ipcMain.handle("model:get", async (_e, championId, key) => {
+ipcMain2.handle("ranks:get", async (_e, riotIds, region) => lookupRanks(Array.isArray(riotIds) ? riotIds : [], region));
+var MODEL_DIR = () => join5(app4.getPath("userData"), "models");
+ipcMain2.handle("model:get", async (_e, championId, key) => {
   if (!/^[A-Za-z0-9]{1,32}$/.test(championId))
     return null;
   if (!Number.isInteger(key) || key < 1 || key > 1e5)
     return null;
   const id = `${key}000`;
-  const file2 = join4(MODEL_DIR(), `${championId}-${id}.glb`);
+  const file2 = join5(MODEL_DIR(), `${championId}-${id}.glb`);
   try {
-    const cached = await readFile4(file2);
+    const cached = await readFile5(file2);
     return cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength);
   } catch {}
   try {
@@ -20858,8 +21139,8 @@ ipcMain.handle("model:get", async (_e, championId, key) => {
     if (buf.length < 20 || buf.subarray(0, 4).toString() !== "glTF") {
       throw new Error("not a glTF");
     }
-    await mkdir2(MODEL_DIR(), { recursive: true });
-    await writeFile2(file2, buf);
+    await mkdir3(MODEL_DIR(), { recursive: true });
+    await writeFile3(file2, buf);
     console.log("[model] %s cached, %s MB", championId, (buf.length / 1048576).toFixed(1));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   } catch (e) {
@@ -20867,11 +21148,11 @@ ipcMain.handle("model:get", async (_e, championId, key) => {
     return null;
   }
 });
-ipcMain.handle("settings:set", async (_e, patch2) => {
+ipcMain2.handle("settings:set", async (_e, patch2) => {
   const settings = await writeSettings(patch2);
   if ("launchAtLogin" in patch2) {
     try {
-      app3.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
+      app4.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
     } catch (e) {
       console.log("[settings] login item failed: %s", e?.message);
     }
@@ -20881,16 +21162,16 @@ ipcMain.handle("settings:set", async (_e, patch2) => {
     syncOverlay();
   return settings;
 });
-ipcMain.handle("settings:reveal", () => {
-  shell.showItemInFolder(join4(app3.getPath("userData"), "preferences.json"));
+ipcMain2.handle("settings:reveal", () => {
+  shell2.showItemInFolder(join5(app4.getPath("userData"), "preferences.json"));
 });
-ipcMain.handle("update:check", async () => {
+ipcMain2.handle("update:check", async () => {
   await checkForUpdate();
 });
-ipcMain.handle("update:download", async () => {
+ipcMain2.handle("update:download", async () => {
   await downloadUpdate();
 });
-ipcMain.on("update:install", () => installUpdate());
+ipcMain2.on("update:install", () => installUpdate());
 var GOLD_DEMOS = [
   { ours: 15250, theirs: 7700, oursCounted: 5, theirsCounted: 5 },
   { ours: 21400, theirs: 23900, oursCounted: 5, theirsCounted: 5 },
@@ -20971,11 +21252,11 @@ async function importBuild(raw) {
     push({ runeImport: { state: "error", message: `${link.champion} is not a champion we know` } });
     return;
   }
-  if (win) {
-    if (win.isMinimized())
-      win.restore();
-    win.show();
-    win.focus();
+  if (win2) {
+    if (win2.isMinimized())
+      win2.restore();
+    win2.show();
+    win2.focus();
   }
   const existing = await buildFor(champ.slug).catch(() => null);
   await saveBuild({
@@ -20998,7 +21279,7 @@ async function pushBuilds() {
   console.log("[builds] %d profile(s): %s", builds.length, builds.map((b) => b.championName).join(", ") || "none");
   push({ builds });
 }
-ipcMain.handle("builds:save", async () => {
+ipcMain2.handle("builds:save", async () => {
   const m = state.matchup;
   const champ = state.select?.champion;
   if (!m || !champ || !m.slots.length)
@@ -21018,7 +21299,7 @@ ipcMain.handle("builds:save", async () => {
   await saveBuild(profile);
   await pushBuilds();
 });
-ipcMain.handle("builds:update", async (_e, championId, items, runes) => {
+ipcMain2.handle("builds:update", async (_e, championId, items, runes) => {
   const existing = await buildFor(championId).catch(() => null);
   if (!existing)
     return;
@@ -21031,44 +21312,44 @@ ipcMain.handle("builds:update", async (_e, championId, items, runes) => {
   });
   await pushBuilds();
 });
-ipcMain.handle("builds:toggle", async (_e, championId, enabled) => {
+ipcMain2.handle("builds:toggle", async (_e, championId, enabled) => {
   await setBuildEnabled(championId, enabled);
   await pushBuilds();
 });
-ipcMain.handle("builds:delete", async (_e, championId) => {
+ipcMain2.handle("builds:delete", async (_e, championId) => {
   await deleteBuild(championId);
   await pushBuilds();
 });
-ipcMain.on("gold:demo", () => {
+ipcMain2.on("gold:demo", () => {
   goldDemo = (goldDemo + 1) % GOLD_DEMOS.length;
   goldVisible = GOLD_DEMOS[goldDemo] != null;
   push({ gold: GOLD_DEMOS[goldDemo] ?? null });
   syncOverlay();
 });
-ipcMain.on("app:relaunch", () => {
-  app3.relaunch();
-  app3.quit();
+ipcMain2.on("app:relaunch", () => {
+  app4.relaunch();
+  app4.quit();
 });
-ipcMain.on("account:signin", () => {
-  shell.openExternal(`${SITE}/login?desktop=1`);
+ipcMain2.on("account:signin", () => {
+  shell2.openExternal(`${SITE}/login?desktop=1`);
 });
-ipcMain.handle("account:signout", async () => {
+ipcMain2.handle("account:signout", async () => {
   await setSession(null);
 });
-ipcMain.handle("ai:ask", async (_e, messages) => {
+ipcMain2.handle("ai:ask", async (_e, messages) => {
   return askAi(session?.token ?? null, messages);
 });
-ipcMain.on("shell:open", (_e, url) => {
+ipcMain2.on("shell:open", (_e, url) => {
   if (/^https?:\/\//i.test(url))
-    shell.openExternal(url);
+    shell2.openExternal(url);
 });
-ipcMain.on("runes:choose", (_e, index) => {
+ipcMain2.on("runes:choose", (_e, index) => {
   const r = state.runes;
   if (!r || index < 0 || index >= r.variants.length)
     return;
   push({ runes: { ...r, chosen: index }, runeImport: { state: "idle" } });
 });
-ipcMain.handle("runes:import", async () => {
+ipcMain2.handle("runes:import", async () => {
   const r = state.runes;
   const champ = state.select?.champion;
   if (!r || !champ)
@@ -21090,9 +21371,9 @@ async function handleLink(raw) {
     console.log("[link] auth received, valid=%s", !!auth);
     if (auth) {
       await setSession(auth);
-      if (win) {
-        win.show();
-        win.focus();
+      if (win2) {
+        win2.show();
+        win2.focus();
       }
     }
     return;
@@ -21107,22 +21388,22 @@ async function handleLink(raw) {
     push({ runeImport: { state: "error", message: "that link was not a valid rune page" } });
     return;
   }
-  if (win) {
-    if (win.isMinimized())
-      win.restore();
-    win.show();
-    win.focus();
+  if (win2) {
+    if (win2.isMinimized())
+      win2.restore();
+    win2.show();
+    win2.focus();
   }
   await applyPage(link.champion, link.patch ?? state.patch ?? "", link.page);
 }
-ipcMain.on("overlay:pin", (_e, on) => {
+ipcMain2.on("overlay:pin", (_e, on) => {
   push({ pinned: on });
   if (on)
     readGame();
   else if (state.notice)
     noticeTimer = setTimeout(dropNotice, NOTICE_MS);
 });
-ipcMain.on("overlay:demo", async () => {
+ipcMain2.on("overlay:demo", async () => {
   const stats = await liveGameStats();
   if (stats) {
     const [events, players, me] = await Promise.all([
@@ -21165,7 +21446,7 @@ var DEMO_LOADING = {
     demo("enemy five", "Senna", 235, "EMERALD I", 33, 21, { otp: true })
   ]
 };
-ipcMain.on("loading:demo", () => {
+ipcMain2.on("loading:demo", () => {
   const on = state.loading === null;
   push({
     loading: on ? DEMO_LOADING : null,
@@ -21173,12 +21454,12 @@ ipcMain.on("loading:demo", () => {
   });
   syncOverlay();
 });
-ipcMain.on("loading:calibrate", (_e, patch2) => {
+ipcMain2.on("loading:calibrate", (_e, patch2) => {
   const loadingNudge = { ...state.loadingNudge, ...patch2 };
   push({ loadingNudge });
   console.log("[loading] nudge x=%s y=%s scale=%s", loadingNudge.x.toFixed(4), loadingNudge.y.toFixed(4), loadingNudge.scale.toFixed(3));
 });
-ipcMain.on("overlay:demo-recal", () => {
+ipcMain2.on("overlay:demo-recal", () => {
   raiseNotice("build", 0, null, { ours: [], theirs: [] }, DEMO_MS, undefined, undefined, {
     items: [4633],
     shapeLabel: "3 items you have built",
@@ -21187,32 +21468,32 @@ ipcMain.on("overlay:demo-recal", () => {
     note: "+2.6pp"
   });
 });
-var gotLock = app3.requestSingleInstanceLock();
+var gotLock = app4.requestSingleInstanceLock();
 if (!gotLock) {
-  app3.quit();
+  app4.quit();
 } else {
-  app3.on("second-instance", (_e, argv) => {
+  app4.on("second-instance", (_e, argv) => {
     console.log("[link] second-instance argv=%s", JSON.stringify(argv));
     handleLink(linkFromArgv(argv));
   });
-  app3.on("open-url", (e, url) => {
+  app4.on("open-url", (e, url) => {
     e.preventDefault();
     handleLink(url);
   });
-  app3.whenReady().then(async () => {
+  app4.whenReady().then(async () => {
     createSplash();
     const dev = process.defaultApp && process.argv.length >= 2;
     const launch = {
       exe: process.execPath,
       args: dev ? [resolve(process.argv[1])] : [],
       label: "LolData",
-      icon: dev ? join4(__dirname2, "..", "build", "icon.ico") : process.execPath
+      icon: dev ? join5(__dirname2, "..", "build", "icon.ico") : process.execPath
     };
-    const claimed = dev ? app3.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app3.setAsDefaultProtocolClient(PROTOCOL);
+    const claimed = dev ? app4.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app4.setAsDefaultProtocolClient(PROTOCOL);
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
     console.log("[link] %s:// ok=%s via=%s named=%s%s", PROTOCOL, result.ok, result.via, result.named ?? false, result.command ? ` cmd=${result.command}` : "");
     createWindow();
-    createOverlay(join4(__dirname2, "preload.mjs"));
+    createOverlay(join5(__dirname2, "preload.mjs"));
     const registered = globalShortcut.register(GOLD_HOTKEY, () => {
       goldVisible = !goldVisible;
       push({});
@@ -21227,7 +21508,7 @@ if (!gotLock) {
     const settings = await readSettings().catch(() => ({ ...DEFAULT_SETTINGS }));
     push({ settings });
     try {
-      app3.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
+      app4.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
     } catch {}
     await backfillRuneProfiles();
     await pushBuilds();
@@ -21239,18 +21520,20 @@ if (!gotLock) {
     handleLink(linkFromArgv(process.argv));
   });
 }
-app3.on("before-quit", () => {
+app4.on("before-quit", () => {
   stopGameClock();
+  endRecording();
+  destroyRecorder();
   destroyOverlay();
   globalShortcut.unregisterAll();
 });
-app3.on("window-all-closed", () => {
+app4.on("window-all-closed", () => {
   lcu.stop();
   destroyOverlay();
   if (process.platform !== "darwin")
-    app3.quit();
+    app4.quit();
 });
-app3.on("activate", () => {
-  if (BrowserWindow3.getAllWindows().length === 0)
+app4.on("activate", () => {
+  if (BrowserWindow4.getAllWindows().length === 0)
     createWindow();
 });

@@ -35,6 +35,27 @@ export type PlayerRank = {
   losses: number
 }
 
+/** One moment worth jumping to, timestamped against its recording. */
+export type Highlight = { at: number; kind: "kill" | "death" | "assist" | "multi"; label: string }
+
+/** One recorded game. Mirrors Recording in shell/capture.ts. */
+export type Recording = {
+  id: string
+  file: string
+  startedAt: number
+  durationMs: number
+  bytes: number
+  championId: string | null
+  championName: string | null
+  queue: string | null
+  win: boolean | null
+  highlights: Highlight[]
+  /** Exempt from the ring buffer, because the player asked to keep it. */
+  kept: boolean
+  width: number
+  height: number
+}
+
 /** One card on the loading screen. */
 export type LoadingPlayer = {
   name: string
@@ -77,6 +98,8 @@ export type AppSettings = {
   smartBuild: boolean
   goldReadout: boolean
   loadingBoard: boolean
+  capture: boolean
+  captureAudio: "none" | "system" | "mic" | "both"
   objectiveNotices: boolean
   buildNotices: boolean
 }
@@ -207,6 +230,11 @@ export type AppState = {
     allies: LoadingPlayer[]
     enemies: LoadingPlayer[]
   } | null
+  /** A recording is running right now. */
+  recording: boolean
+  recordings: Recording[]
+  libraryBytes: number
+  captureError: string | null
   /** Alignment for the loading cards, and whether the outlines are drawn. */
   loadingNudge: { x: number; y: number; scale: number }
   loadingCalibrating: boolean
@@ -249,6 +277,10 @@ declare global {
       /** A champion's model as a GLB, cached on disk by the shell. Null when
        *  it could not be fetched. */
       model(championId: string, key: number): Promise<ArrayBuffer | null>
+      listRecordings(): Promise<void>
+      keepRecording(id: string, keep: boolean): Promise<void>
+      deleteRecording(id: string): Promise<void>
+      revealRecording(id: string): Promise<void>
       /** Ranked standing per riotId, for the players in a finished game. */
       ranks(riotIds: string[], region: string | null): Promise<Record<string, PlayerRank | null>>
       signIn(): void

@@ -84,6 +84,25 @@ export type AppSettings = {
   goldReadout: boolean
   /** Ranks over the ten cards on the loading screen. */
   loadingBoard: boolean
+
+  /**
+   * Record the screen while a game is running.
+   *
+   * ⚠️ Off by default and it must stay that way. Recording someone's screen is
+   * not a feature you enable for them, whatever the default would be worth.
+   */
+  capture: boolean
+
+  /**
+   * What audio goes into the recording.
+   *
+   * ⚠️ "system" is EVERYTHING the machine plays — game, Discord, music, all
+   * mixed into one track. Per-application audio is not separable here: the
+   * loopback Chromium exposes is a single mix, and splitting it needs Windows'
+   * process-loopback through native code. Offering "game only" or "Discord
+   * only" would be a switch that quietly did something else.
+   */
+  captureAudio: "none" | "system" | "mic" | "both"
   /** Dragon and Baron warnings. */
   objectiveNotices: boolean
   /** "X is purchasable", boots advice, the opening build. */
@@ -95,6 +114,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   smartBuild: false,
   goldReadout: true,
   loadingBoard: true,
+  capture: false,
+  captureAudio: "system",
   objectiveNotices: true,
   buildNotices: true,
 }

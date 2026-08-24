@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>loldata capture</title>
+  </head>
+  <body style="margin:0;background:#000">
+    <script type="module">
+      /**
+       * The recorder.
+       *
+       * Lives in its own invisible window, and that is the design rather than a
+       * convenience: MediaRecorder is a DOM API, so this has to be a renderer —
+       * and putting it in the MAIN window would tie a twenty-minute recording to
+       * whatever that window is doing. A section change, a 3D scene, a React
+       * error: none of them can touch a recording that has its own process.
+       *
+       * ⚠️ Chunks go to the shell as they arrive and are appended to a file
+       * there. Holding a whole game in memory as Blobs is a gigabyte of RAM for
+       * something that belongs on disk, and it loses everything if the app dies.
+       * At one chunk a second, a crash costs one second.
+       *
+       * ⚠️ H264 by preference. It is the codec with hardware encoding on
+       * essentially every GPU, which is the whole difference between "no FPS
+       * lost" and a recorder that competes with the game it is recording. VP9
+       * is software-encoded here and would do exactly that.
+       */
+      const { ipcRenderer } = require("electron")
+
+      const CODECS = [
+        "video/webm;codecs=h264,opus",
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/webm;codecs=vp8,opus",
+      ]
+
+      let recorder = null
+      let stream = null
+
+      const pick = () => CODECS.find((t) => MediaRecorder.isTypeSupported(t)) ?? ""
+
+      async function start({ sourceId, audio, fps, bitrate }) {
+        await stop()
+
+        const wantsSystem = audio === "system" || audio === "both"
+        const wantsMic = audio === "mic" || audio === "both"
+
+        // The desktop video track, and the system mix alongside it when asked.
+        // ⚠️ Loopback audio has to be requested in the SAME getUserMedia call as
+        // the desktop video; asked for on its own, Chromium has no surface to
+        // attach it to and fails.
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: wantsSystem ? { mandatory: { chromeMediaSource: "desktop" } } : false,
+          video: {
+            mandatory: {
+              chromeMediaSource: "desktop",
+              chromeMediaSourceId: sourceId,
+              maxFrameRate: fps,
+            },
+          },
+        })
+
+        if (wantsMic) {
+          // A separate call, because a microphone is a real device and cannot
+          // ride the desktop constraint. Failure here is not fatal: a recording
+          // without your voice beats no recording.
+          try {
+            const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+            mic.getAudioTracks().forEach((t) => stream.addTrack(t))
+          } catch (e) {
+            ipcRenderer.send("capture:warn", "microphone unavailable: " + String(e).slice(0, 120))
+          }
+        }
+
+        const mimeType = pick()
+        recorder = new MediaRecorder(stream, {
+          mimeType,
+          videoBitsPerSecond: bitrate,
+        })
+
+        recorder.ondataavailable = async (e) => {
+          if (!e.data || e.data.size === 0) return
+          const buf = await e.data.arrayBuffer()
+          ipcRenderer.send("capture:chunk", buf)
+        }
+
+        recorder.onerror = (e) => {
+          ipcRenderer.send("capture:failed", String(e?.error ?? e).slice(0, 200))
+        }
+
+        // One second per chunk: small enough that a crash costs a second, large
+        // enough that the IPC is not the expensive part.
+        recorder.start(1000)
+
+        const track = stream.getVideoTracks()[0]
+        const settings = track.getSettings()
+
+        // The user can revoke the capture from Windows itself; if the track
+        // ends we are no longer recording whatever the app believes.
+        track.onended = () => ipcRenderer.send("capture:failed", "the capture was ended by the system")
+
+        return {
+          mimeType,
+          width: settings.width ?? 0,
+          height: settings.height ?? 0,
+          fps: Math.round(settings.frameRate ?? 0),
+          audio: stream.getAudioTracks().length,
+        }
+      }
+
+      async function stop() {
+        if (recorder && recorder.state !== "inactive") {
+          await new Promise((resolve) => {
+            recorder.onstop = resolve
+            recorder.stop()
+          })
+        }
+        recorder = null
+        // Tracks are stopped by hand: a MediaRecorder that has finished does not
+        // release the capture, and a live desktop track keeps the whole pipeline
+        // running for nothing.
+        stream?.getTracks().forEach((t) => t.stop())
+        stream = null
+      }
+
+      ipcRenderer.on("capture:start", async (_e, opts) => {
+        try {
+          const info = await start(opts)
+          ipcRenderer.send("capture:started", info)
+        } catch (e) {
+          ipcRenderer.send("capture:failed", String(e).slice(0, 200))
+        }
+      })
+
+      ipcRenderer.on("capture:stop", async () => {
+        await stop()
+        ipcRenderer.send("capture:stopped")
+      })
+
+      ipcRenderer.send("capture:ready")
+    </script>
+  </body>
+</html>

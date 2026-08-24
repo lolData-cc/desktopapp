@@ -29,6 +29,10 @@ export type GameEvent = {
   EventName: string
   EventTime: number // seconds on the same clock as gameTime
   KillerName?: string
+  /** ChampionKill: who died. */
+  VictimName?: string
+  /** ChampionKill: everyone who helped. */
+  Assisters?: string[]
   DragonType?: string
   Stolen?: string
 }

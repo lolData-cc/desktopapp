@@ -16,6 +16,9 @@ import { championById, championByName, currentPatch, type Champion } from "../sr
 import { createOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay } from "./overlay"
 import { ensureProtocol } from "./protocol"
 import { createSplash, dismissSplash } from "./splash"
+import { beginRecording, endRecording, mark, setResult, isRecording, captureError,
+         readIndex, keepRecording, deleteRecording, revealRecording, librarySize,
+         destroyRecorder, type Recording } from "./capture"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -64,7 +67,7 @@ export type AppState = {
    *  Null the rest of the time — the overlay is a notification now, not a
    *  panel that lives on screen for the whole match. */
   notice: {
-    kind: "dragon" | "elder" | "item" | "boots" | "build"
+    kind: "dragon" | "elder" | "item" | "boots" | "build" | "capture"
     /** Seconds remaining AT THE MOMENT it was raised; the renderer ticks down. */
     inSeconds: number
     raisedAt: number
@@ -171,6 +174,12 @@ export type AppState = {
    * loading the only roster available comes from the client's own session.
    */
   loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
+  /** Whether a recording is running, and the library behind it. */
+  recording: boolean
+  recordings: Recording[]
+  /** What the library is costing on disk. */
+  libraryBytes: number
+  captureError: string | null
   /** Alignment for the loading cards, and whether the outlines are drawn. */
   loadingNudge: { x: number; y: number; scale: number }
   loadingCalibrating: boolean
@@ -227,6 +236,10 @@ let state: AppState = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
+  recording: false,
+  recordings: [],
+  libraryBytes: 0,
+  captureError: null,
   loadingNudge: { x: 0, y: 0, scale: 0 },
   loadingCalibrating: false,
   lastPlayed: null,
@@ -291,6 +304,14 @@ function push(patch: Partial<AppState>): void {
     if (IN_GAME_PHASES.has(state.phase ?? "")) startGameClock()
     else {
       stopGameClock()
+      // The recording ends with the game, not with the app. The result is
+      // stamped first, while we still know which game it was.
+      if (state.recording) {
+        const mine = state.matches?.[0]
+        if (mine && mine.championId === state.lastPlayed?.championKey) setResult(mine.win)
+        void endRecording()
+        push({ recording: false })
+      }
       // Nothing about a game survives leaving one.
       if (state.loading) {
         loadingFor = ""
@@ -547,6 +568,8 @@ const NOTIFY_LEAD = 90        // seconds before the spawn — the "1:30" mark
 const NOTICE_MS = 9_000       // how long it stays up
 /** The opening build is a LIST, not an alert — six icons need reading time. */
 const OPENING_MS = 14_000
+/** Long enough to read once, short enough not to sit on the loading art. */
+const CAPTURE_MS = 6_000
 /** A recalibration is a change of plan, so it is held like the opening one. */
 const RECAL_MS = 11_000
 const POLL_MS = 2_000
@@ -632,14 +655,19 @@ function dropNotice(): void {
 
 /** One gate for every notice, so a switch that is off means SILENCE rather
  *  than "off in most of the places that raise one". */
-function noticesAllowed(kind: "dragon" | "elder" | "item" | "boots" | "build"): boolean {
+function noticesAllowed(kind: "dragon" | "elder" | "item" | "boots" | "build" | "capture"): boolean {
+  // ⚠️ The capture notice is NOT optional. Every other notice is a
+  // convenience the player can switch off; this one tells them their screen is
+  // being recorded, and a switch that hides that would make the feature
+  // something else entirely.
+  if (kind === "capture") return true
   return kind === "dragon" || kind === "elder"
     ? state.settings.objectiveNotices
     : state.settings.buildNotices
 }
 
 function raiseNotice(
-  kind: "dragon" | "elder" | "item" | "boots" | "build",
+  kind: "dragon" | "elder" | "item" | "boots" | "build" | "capture",
   inSeconds: number,
   element: DragonElement | null,
   tally: DragonTally,
@@ -985,6 +1013,28 @@ async function readLoading(): Promise<void> {
   if (stamp === loadingFor) return
   loadingFor = stamp
 
+  // ⚠️ Recording starts HERE, on the loading screen, not when the game answers
+  // — the opening seconds are part of the game and a recorder that misses them
+  // is a recorder you cannot trust with the rest.
+  const mine = roster.allies.find((e) => e.puuid === puuid)
+  const champ = mine?.championKey ? await classify(mine.championKey).catch(() => null) : null
+  const started = await beginRecording(
+    state.settings,
+    { championId: champ?.id ?? null, championName: champ?.name ?? null, queue: null },
+    () => void pushRecordings()
+  ).catch((e) => {
+    console.log("[capture] could not start: %s", (e as Error)?.message)
+    return false
+  })
+  if (started) {
+    push({ recording: true, captureError: null })
+    // ⚠️ SAID OUT LOUD, every game. A program that captures a screen without
+    // announcing it is spyware regardless of what it does with the file.
+    raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS)
+  } else if (captureError()) {
+    push({ recording: false, captureError: captureError() })
+  }
+
   const resolve = (entries: typeof roster.allies): Promise<LoadingPlayer[]> =>
     Promise.all(
       entries.map(async (e) => {
@@ -1304,6 +1354,8 @@ async function readGame(): Promise<void> {
 
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain)
 
+  if (state.recording) markHighlights(events, me)
+
   void readScoreboard(players ?? [], me, myTeam, stats.gameTime)
 }
 
@@ -1381,6 +1433,27 @@ async function readScoreboard(
       theirs: theirs.map((r) => r.row),
     },
   })
+}
+
+/**
+ * Kills and deaths, as points to jump to later.
+ *
+ * ⚠️ Names come with and without the tag depending on the field, which is the
+ * same trap that made the drake tally read zero — so both forms are matched.
+ * Riot also repeats events across polls; the mark itself drops anything within
+ * a second and a half of an identical one.
+ */
+function markHighlights(events: GameEvent[], me: string | null): void {
+  if (!me) return
+  const bare = me.split("#")[0] ?? me
+  const isMe = (n?: string) => !!n && (n === me || n === bare)
+
+  for (const e of events) {
+    if (e.EventName !== "ChampionKill") continue
+    if (isMe(e.KillerName)) mark("kill", e.VictimName ?? "")
+    else if (isMe(e.VictimName)) mark("death", e.KillerName ?? "")
+    else if (e.Assisters?.some(isMe)) mark("assist", e.VictimName ?? "")
+  }
 }
 
 function readObjective(
@@ -1559,6 +1632,27 @@ async function applyPage(champion: string, patch: string, page: BuildPage): Prom
 }
 
 ipcMain.handle("profile:refresh", async () => { await readProfile() })
+
+/* ── the recording library ──────────────────────────────────────────────── */
+
+async function pushRecordings(): Promise<void> {
+  const [recordings, bytes] = await Promise.all([readIndex(), librarySize()])
+  push({ recordings, libraryBytes: bytes, recording: isRecording(), captureError: captureError() })
+}
+
+ipcMain.handle("capture:list", async () => { await pushRecordings() })
+
+ipcMain.handle("capture:keep", async (_e, id: string, keep: boolean) => {
+  await keepRecording(id, keep)
+  await pushRecordings()
+})
+
+ipcMain.handle("capture:delete", async (_e, id: string) => {
+  await deleteRecording(id)
+  await pushRecordings()
+})
+
+ipcMain.handle("capture:reveal", async (_e, id: string) => { await revealRecording(id) })
 
 /**
  * Ranks for the players in a finished game.
@@ -2289,6 +2383,10 @@ if (!gotLock) {
 
 app.on("before-quit", () => {
   stopGameClock()
+  // A recording in progress is closed properly rather than left as a truncated
+  // file the library would list as if it played.
+  void endRecording()
+  destroyRecorder()
   destroyOverlay()
   globalShortcut.unregisterAll()
 })

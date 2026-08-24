@@ -203,7 +203,7 @@ function Row({
   )
 }
 
-function Toggle({
+export function Toggle({
   on,
   onChange,
   label,

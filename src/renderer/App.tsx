@@ -8,6 +8,7 @@ import Patch from "./sections/Patch"
 import Builds from "./sections/Builds"
 import BuildEditor from "./sections/BuildEditor"
 import Preferences from "./sections/Preferences"
+import Capture from "./sections/Capture"
 import CyberBackdrop from "./CyberBackdrop"
 import Boundary from "./Boundary"
 import Recap, { isPostGame } from "./sections/Recap"
@@ -27,7 +28,7 @@ import logo from "../assets/logo.png"
  * the app, because a menu that mixes navigation with departure makes you read
  * every item before clicking.
  */
-type SectionId = "overview" | "builds" | "matches" | "champions" | "patch" | "ai" | "settings"
+type SectionId = "overview" | "builds" | "matches" | "champions" | "patch" | "ai" | "capture" | "settings"
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -36,6 +37,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "champions", label: "Champions" },
   { id: "patch", label: "Patch" },
   { id: "ai", label: "lolData AI" },
+  { id: "capture", label: "Capture" },
 ]
 
 const DISCORD = "https://discord.gg/loldata"
@@ -135,6 +137,8 @@ export default function App() {
             <Champions s={s} />
           ) : section === "patch" ? (
             <Patch s={s} />
+          ) : section === "capture" ? (
+            <Capture s={s} />
           ) : section === "settings" ? (
             <Preferences s={s} />
           ) : (
@@ -154,6 +158,7 @@ export default function App() {
           settingsOpen={showSettings}
           onSettings={() => setShowSettings((v) => !v)}
           premium={isPremium(s?.account?.tier)}
+          recording={s?.recording === true}
         />
       </div>
 
@@ -398,12 +403,14 @@ function Rail({
   settingsOpen,
   onSettings,
   premium,
+  recording,
 }: {
   section: SectionId
   onSection: (id: SectionId) => void
   settingsOpen: boolean
   onSettings: () => void
   premium: boolean
+  recording: boolean
 }) {
   return (
     <nav className="pointer-events-none absolute inset-y-0 left-0 z-20 flex w-[196px] flex-col gap-[3px] py-5 pl-3 pr-2">
@@ -415,6 +422,9 @@ function Rail({
           active={sec.id === section}
           onClick={() => onSection(sec.id)}
           badge={sec.id === "ai" && !premium ? "pro" : undefined}
+          /* A recording running is worth seeing from every section, not only
+             from the one that started it. */
+          live={sec.id === "capture" && recording}
         />
       ))}
 
@@ -452,6 +462,7 @@ function Plate({
   active,
   onClick,
   badge,
+  live,
   glyph,
   trailing,
   className = "",
@@ -461,6 +472,8 @@ function Plate({
   active?: boolean
   onClick: () => void
   badge?: string
+  /** A recording is running: a dot that beats, wherever you are in the app. */
+  live?: boolean
   glyph?: React.ReactNode
   trailing?: string
   className?: string
@@ -503,6 +516,7 @@ function Plate({
         {label}
       </span>
 
+      {live && <span className="beat ml-auto block h-[7px] w-[7px] rounded-full bg-jade" />}
       {badge && (
         <span className="ml-auto font-jetbrains text-[8px] uppercase tracking-[0.14em] text-citrine/50">
           {badge}

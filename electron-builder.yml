@@ -38,6 +38,10 @@ files:
   - shell/preload.mjs
   - build/icon.png
   - build/splash.html
+  # ⚠️ The recorder's page. Without it a packaged build starts, offers to
+  # record, and fails on the first game — the dev run works because the file is
+  # simply there on disk.
+  - capture/recorder.html
   - package.json
 
 win:
