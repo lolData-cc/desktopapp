@@ -18,10 +18,12 @@
  * hardware encoding everywhere, and a software-encoded recording competes with
  * the game it is recording.
  */
-import { app, BrowserWindow, ipcMain, shell } from "electron"
-import { createWriteStream, type WriteStream } from "node:fs"
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { app, BrowserWindow, ipcMain, protocol, shell } from "electron"
+import { createReadStream, createWriteStream, type WriteStream } from "node:fs"
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { Readable } from "node:stream"
 import { join } from "node:path"
+import { CLIP_SCHEME } from "../src/data/clip"
 
 export type Highlight = {
   /** Milliseconds from the start of the recording. */
@@ -58,6 +60,8 @@ let win: BrowserWindow | null = null
 let ready = false
 let out: WriteStream | null = null
 let current: Recording | null = null
+/** What the recorder actually chose, which decides the file's name. */
+let container: "mp4" | "webm" = "mp4"
 let onChange: (() => void) | null = null
 
 /** Warnings and failures, surfaced rather than swallowed: a recorder that
@@ -153,7 +157,16 @@ export async function beginRecording(
 
   await mkdir(dir(), { recursive: true })
   const id = `${Date.now()}`
-  const file = join(dir(), `${id}.webm`)
+  /**
+   * ⚠️ Written to `.part` and named at the end, once the recorder has said
+   * which container it actually used.
+   *
+   * MP4 is preferred and MP4 is what every machine tested gives us — but the
+   * fallback is real, and a file called .mp4 holding WebM is a file Windows
+   * offers to open and then refuses to play. A crash also leaves an obviously
+   * unfinished `.part` rather than a video that looks fine until you open it.
+   */
+  const file = join(dir(), `${id}.part`)
   out = createWriteStream(file)
 
   current = {
@@ -176,9 +189,15 @@ export async function beginRecording(
     sourceId: source.id,
     audio: settings.captureAudio,
     fps: 30,
-    // 8 Mbit is the point where 1080p gameplay stops showing compression on
-    // fast camera movement. Higher costs disk for something nobody can see.
-    bitrate: 8_000_000,
+    /**
+     * ⚠️ Ten of these live on disk at once, and that is what sets this number.
+     *
+     * 6 Mbit is about 1.3 GB for a half-hour game, so a full library is around
+     * thirteen — enough to notice on a laptop, which is why the Capture screen
+     * says so before anything is recorded. 8 Mbit is visibly no better on
+     * 1080p gameplay and would put another five gigabytes on the disk for it.
+     */
+    bitrate: 6_000_000,
   })
 
   return true
@@ -186,8 +205,18 @@ export async function beginRecording(
 
 ipcMain.on("capture:started", (_e, info: { width: number; height: number; audio: number; mimeType: string }) => {
   if (current) {
+    /**
+     * ⚠️ The clock starts HERE, not when we asked.
+     *
+     * Between the request and the first frame there is a screen to acquire, a
+     * pipeline to build and an encoder to open — half a second or so. Every
+     * kill is timestamped against this moment, so counting from the request
+     * puts every jump the same half-second late, for the whole game.
+     */
+    current.startedAt = Date.now()
     current.width = info.width
     current.height = info.height
+    container = info.mimeType.startsWith("video/mp4") ? "mp4" : "webm"
   }
   console.log("[capture] recording %dx%d, %d audio track(s), %s",
     info.width, info.height, info.audio, info.mimeType)
@@ -224,6 +253,17 @@ async function finish(): Promise<void> {
   if (!rec || !stream) return
 
   await new Promise<void>((resolve) => stream.end(resolve))
+
+  // Now, and only now, does the file get its real name — the recorder has
+  // told us what is actually inside it.
+  const named = rec.file.replace(/\.part$/, `.${container}`)
+  try {
+    await rename(rec.file, named)
+    rec.file = named
+  } catch {
+    // Keep the .part path rather than lose the recording: a file with an
+    // awkward name still plays, a forgotten one does not.
+  }
 
   rec.durationMs = Date.now() - rec.startedAt
   try {
@@ -272,9 +312,25 @@ async function prune(all: Recording[]): Promise<Recording[]> {
   return [...kept, ...automatic.slice(0, MAX_AUTOMATIC)].sort((a, b) => b.startedAt - a.startedAt)
 }
 
+/**
+ * Where each recording lives, by id.
+ *
+ * Kept in memory because the player asks through the protocol below and a
+ * single seek is a burst of range requests — re-reading and re-parsing a JSON
+ * file for every one of them would put disk I/O on the path of dragging a
+ * scrub bar.
+ */
+const located = new Map<string, string>()
+const remember = (all: Recording[]) => {
+  located.clear()
+  for (const r of all) located.set(r.id, r.file)
+}
+
 export async function readIndex(): Promise<Recording[]> {
   try {
-    return JSON.parse(await readFile(indexFile(), "utf8")) as Recording[]
+    const all = JSON.parse(await readFile(indexFile(), "utf8")) as Recording[]
+    remember(all)
+    return all
   } catch {
     return []
   }
@@ -283,6 +339,7 @@ export async function readIndex(): Promise<Recording[]> {
 async function writeIndex(all: Recording[]): Promise<void> {
   await mkdir(dir(), { recursive: true })
   await writeFile(indexFile(), JSON.stringify(all, null, 2), "utf8")
+  remember(all)
 }
 
 /** Keep it, so the ring buffer stops counting it. */
@@ -311,19 +368,143 @@ export async function revealRecording(id: string): Promise<void> {
   if (found) shell.showItemInFolder(found.file)
 }
 
+/**
+ * Files with no entry in the index, removed.
+ *
+ * A recording that was running when the machine went down leaves a `.part`
+ * behind that nothing will ever open — and it is a gigabyte. Swept once at
+ * startup rather than on a timer: this is tidying, not a background service.
+ *
+ * ⚠️ Only files the index does not know about. Anything listed is somebody's
+ * game, kept or not.
+ */
+export async function tidyLibrary(): Promise<void> {
+  try {
+    const known = new Set((await readIndex()).map((r) => r.file.toLowerCase()))
+    for (const f of await readdir(dir())) {
+      if (f.endsWith(".json")) continue
+      const full = join(dir(), f)
+      if (known.has(full.toLowerCase())) continue
+      await rm(full, { force: true }).catch(() => undefined)
+      console.log("[capture] swept an unfinished recording (%s)", f)
+    }
+  } catch {
+    // No library yet, which is the normal state until the first game.
+  }
+}
+
 /** What the library is costing, for a screen that should say so plainly. */
 export async function librarySize(): Promise<number> {
   try {
     const files = await readdir(dir())
     let total = 0
     for (const f of files) {
-      if (!f.endsWith(".webm")) continue
+      if (f.endsWith(".json")) continue
       total += (await stat(join(dir(), f))).size
     }
     return total
   } catch {
     return 0
   }
+}
+
+/* ── playing one back ───────────────────────────────────────────────────── */
+
+/**
+ * The scheme a recording is read through.
+ *
+ * ⚠️ It takes an ID, never a path. A handler that served whatever file the
+ * renderer named would be an arbitrary-file-read primitive wearing a video
+ * player's clothes — this one is handed a recording id, looks up where that
+ * recording lives, and nothing outside the library is reachable however the URL
+ * is spelled.
+ *
+ * ⚠️ Range requests are answered properly — 206, Content-Range, the lot. That
+ * is not politeness: without ranges a <video> cannot seek at all, and jumping
+ * to a kill is the entire reason any of this exists.
+ */
+// ⚠️ At import time, because Electron only accepts this BEFORE the app is
+// ready — and the shell imports this module on its first line.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: CLIP_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+])
+
+/**
+ * A slice of a file, as a body a Response can carry.
+ *
+ * ⚠️ Served WHOLE, however large the ask. Answering with less than was
+ * requested — a polite-looking cap to bound memory — was measured here and it
+ * does not work: Chromium takes the short answer as the end of the file and
+ * never comes back for the rest, so a nine-second clip played as four and
+ * reported itself that way. A recording that quietly loses its second half is
+ * worse than one that fails to open. The read is streamed, so "whole" costs
+ * one buffer, not one file.
+ *
+ * ⚠️ The error handler is not decoration. An unhandled `error` on a Node
+ * stream takes the process down, and a read cancelled mid-seek — which is what
+ * dragging a scrub bar does, repeatedly — arrives as exactly that.
+ */
+function bodyOf(file: string, range?: { start: number; end: number }): ReadableStream {
+  const read = createReadStream(file, range)
+  read.on("error", () => undefined)
+  // Node's web stream and the DOM's are the same object at runtime and two
+  // unrelated types to the compiler; Electron takes the one we have.
+  return Readable.toWeb(read) as unknown as ReadableStream
+}
+
+export function serveClips(): void {
+  protocol.handle(CLIP_SCHEME, async (request) => {
+    const id = new URL(request.url).pathname.replace(/^\//, "")
+    // A miss means the index has not been read in this run yet; reading it
+    // fills the map for every request after this one.
+    if (!located.has(id)) await readIndex()
+    const file = located.get(id)
+    if (!file) return new Response("no such recording", { status: 404 })
+
+    let size = 0
+    try {
+      size = (await stat(file)).size
+    } catch {
+      return new Response("the file is gone", { status: 404 })
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": file.endsWith(".mp4") ? "video/mp4" : "video/webm",
+      "Accept-Ranges": "bytes",
+      // Never cached: the ring buffer deletes these, and a cached copy would
+      // outlive the recording it came from.
+      "Cache-Control": "no-store",
+    }
+
+    const asked = /bytes=(\d*)-(\d*)/.exec(request.headers.get("Range") ?? "")
+    if (!asked) {
+      return new Response(bodyOf(file), {
+        status: 200,
+        headers: { ...headers, "Content-Length": String(size) },
+      })
+    }
+
+    const start = asked[1] ? Number(asked[1]) : 0
+    const end = asked[2] ? Math.min(Number(asked[2]), size - 1) : size - 1
+    if (!(start >= 0 && start <= end && end < size)) {
+      return new Response(null, {
+        status: 416,
+        headers: { ...headers, "Content-Range": `bytes */${size}` },
+      })
+    }
+
+    return new Response(bodyOf(file, { start, end }), {
+      status: 206,
+      headers: {
+        ...headers,
+        "Content-Length": String(end - start + 1),
+        "Content-Range": `bytes ${start}-${end}/${size}`,
+      },
+    })
+  })
 }
 
 export function destroyRecorder(): void {

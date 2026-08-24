@@ -449,18 +449,104 @@ const SCENES: Record<string, unknown> = {
   },
 }
 
+/**
+ * What every scene has unless it says otherwise.
+ *
+ * ⚠️ Here rather than copied into each scene. A field added to the app and
+ * forgotten in one of the scenes below is not a missing value — it is a screen
+ * that throws the moment somebody opens it in a browser, which is exactly the
+ * place this file exists to make safe. The Capture tab did that: it reads a
+ * list of recordings that no scene had.
+ */
+const BASE = {
+  recording: false,
+  captureError: null,
+  libraryBytes: 1_780_000_000,
+  recordings: [
+    {
+      id: "dev-1",
+      file: "dev-1.mp4",
+      startedAt: Date.now() - 920e3,
+      durationMs: 1_840_000,
+      bytes: 980_000_000,
+      championId: "Lillia",
+      championName: "Lillia",
+      queue: "Ranked Solo",
+      win: true,
+      kept: false,
+      width: 1920,
+      height: 1080,
+      highlights: [
+        { at: 214_000, kind: "kill", label: "Lillia → Zed" },
+        { at: 402_000, kind: "death", label: "Khazix → Lillia" },
+        { at: 617_000, kind: "kill", label: "Lillia → Nami" },
+        { at: 1_105_000, kind: "multi", label: "Double kill" },
+        { at: 1_402_000, kind: "assist", label: "Ashe → Zed" },
+        { at: 1_690_000, kind: "kill", label: "Lillia → Khazix" },
+      ],
+    },
+    /**
+     * Short on purpose.
+     *
+     * The first entry is what the library LOOKS like — a real game's length and
+     * a real spread of moments. This one is sized to the placeholder video, so
+     * that clicking a moment actually LANDS on it: against a thirty-minute
+     * timeline every seek clamps to the end of a ten-second file, and a jump
+     * that works cannot be told apart from one that does not.
+     */
+    {
+      id: "dev-2",
+      file: "dev-2.mp4",
+      startedAt: Date.now() - 5_500e3,
+      durationMs: 9_700,
+      bytes: 4_287_926,
+      championId: "Nami",
+      championName: "Nami",
+      queue: "Ranked Solo",
+      win: false,
+      kept: true,
+      width: 1920,
+      height: 1080,
+      highlights: [
+        { at: 2_000, kind: "kill", label: "Nami → Zed" },
+        { at: 4_000, kind: "death", label: "Zed → Nami" },
+        { at: 6_000, kind: "assist", label: "Ashe → Zed" },
+        { at: 8_000, kind: "multi", label: "Double kill" },
+      ],
+    },
+  ],
+  loading: null,
+  loadingNudge: { x: 0, y: 0, scale: 0 },
+  loadingCalibrating: false,
+  lastPlayed: null,
+  region: "euw1",
+  finalBoard: null,
+  scoreboard: null,
+  gold: null,
+  settings: {
+    launchAtLogin: false,
+    smartBuild: true,
+    goldReadout: true,
+    loadingBoard: true,
+    capture: true,
+    captureAudio: "system",
+    objectiveNotices: true,
+    buildNotices: true,
+  },
+}
+
 export function installDevShell(): void {
   if ((window as any).desktop) return // running inside Electron — nothing to do
 
   const params = new URLSearchParams(location.search)
   const scene = params.get("state") ?? "select"
-  let state = SCENES[scene] ?? SCENES.select
+  let state: Record<string, unknown> = { ...BASE, ...((SCENES[scene] ?? SCENES.select) as object) }
   // ?hint=Q lights the ability outline without needing a game or the shell.
   const hint = params.get("hint")
-  if (hint) state = { ...(state as object), levelHint: hint }
+  if (hint) state = { ...state, levelHint: hint }
   const listeners = new Set<Listener>()
 
-  ;(window as any).desktop = {
+  const bridge: Record<string, unknown> = {
     getState: async () => state,
     onState: (fn: Listener) => {
       listeners.add(fn)
@@ -468,11 +554,36 @@ export function installDevShell(): void {
     },
     minimise: () => console.info("[dev shell] minimise"),
     close: () => console.info("[dev shell] close"),
+    /**
+     * ⚠️ Not the real scheme — that only answers inside Electron.
+     *
+     * Put any video at public/dev-clip.mp4 to work on the player in a browser;
+     * without one the player shows its "could not be opened" state, which is
+     * also a thing worth being able to look at.
+     */
+    clipUrl: () => "/dev-clip.mp4",
   }
+
+  /**
+   * Anything the app asks for that this stand-in has not thought of.
+   *
+   * ⚠️ A miss must not be a crash. This file exists so the interface can be
+   * worked on in a browser, and a method added to the bridge months from now
+   * should make a screen inert, not take the window down.
+   */
+  ;(window as any).desktop = new Proxy(bridge, {
+    get: (target, key: string) =>
+      key in target
+        ? target[key]
+        : (...args: unknown[]) => {
+            console.info("[dev shell] %s", key, args)
+            return Promise.resolve()
+          },
+  })
 
   // Handy while designing: flip scenes from the console without a reload.
   ;(window as any).setScene = (name: keyof typeof SCENES) => {
-    state = SCENES[name] ?? state
+    if (SCENES[name]) state = { ...BASE, ...(SCENES[name] as object) }
     listeners.forEach((fn) => fn(state))
   }
 }

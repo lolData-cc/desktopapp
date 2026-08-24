@@ -24,17 +24,29 @@
        * essentially every GPU, which is the whole difference between "no FPS
        * lost" and a recorder that competes with the game it is recording. VP9
        * is software-encoded here and would do exactly that.
+       *
+       * ⚠️ MP4 FIRST, and that is about what happens AFTER the game.
+       *
+       * A MediaRecorder WebM carries no duration in its header — every player
+       * that opens one, ours included, has to read the whole file to find out
+       * how long it is, and a one-gigabyte game makes that a visible wait.
+       * Windows' own player shows such a file as broken. The MP4 our recorder
+       * writes states its length up front and opens anywhere, which for a clip
+       * somebody saves to keep is the difference between a video and a
+       * curiosity. Both were measured here; both seek correctly.
        */
       const { ipcRenderer } = require("electron")
 
       const CODECS = [
-        "video/webm;codecs=h264,opus",
         "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/webm;codecs=h264,opus",
         "video/webm;codecs=vp8,opus",
       ]
 
       let recorder = null
       let stream = null
+      /** Chunks read but not yet handed to the shell. */
+      let inflight = new Set()
 
       const pick = () => CODECS.find((t) => MediaRecorder.isTypeSupported(t)) ?? ""
 
@@ -54,6 +66,17 @@
             mandatory: {
               chromeMediaSource: "desktop",
               chromeMediaSourceId: sourceId,
+              // ⚠️ A MINIMUM as well as a maximum, and this is not a quality
+              // setting — it is what keeps the video's clock and the wall
+              // clock the same clock.
+              //
+              // The desktop capturer only emits a frame when the screen
+              // changes, so a recording of a still picture ends at its last
+              // frame: fifteen seconds of wall time came back as a ten-second
+              // video. Every kill we mark is timestamped against the wall
+              // clock, so any gap between the two is a jump that lands in the
+              // wrong place — and it grows for the rest of the game.
+              minFrameRate: fps,
               maxFrameRate: fps,
             },
           },
@@ -77,10 +100,23 @@
           videoBitsPerSecond: bitrate,
         })
 
-        recorder.ondataavailable = async (e) => {
+        /**
+         * ⚠️ Every chunk is tracked until it has actually been handed over.
+         *
+         * Reading a Blob is asynchronous, and the LAST chunk arrives on
+         * dataavailable just before onstop — so a "stopped" sent the moment
+         * the recorder stops overtakes it, the shell closes the file, and the
+         * final second of the game is dropped on the floor. stop() waits for
+         * these.
+         */
+        recorder.ondataavailable = (e) => {
           if (!e.data || e.data.size === 0) return
-          const buf = await e.data.arrayBuffer()
-          ipcRenderer.send("capture:chunk", buf)
+          const job = e.data
+            .arrayBuffer()
+            .then((buf) => ipcRenderer.send("capture:chunk", buf))
+            .catch(() => undefined)
+            .finally(() => inflight.delete(job))
+          inflight.add(job)
         }
 
         recorder.onerror = (e) => {
@@ -114,6 +150,9 @@
             recorder.stop()
           })
         }
+        // The last second is part of the recording, not an optional extra.
+        await Promise.all([...inflight])
+        inflight = new Set()
         recorder = null
         // Tracks are stopped by hand: a MediaRecorder that has finished does not
         // release the capture, and a live desktop track keeps the whole pipeline

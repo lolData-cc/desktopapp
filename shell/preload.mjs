@@ -1,5 +1,11 @@
 // shell/preload.ts
 import { contextBridge, ipcRenderer } from "electron";
+
+// src/data/clip.ts
+var CLIP_SCHEME = "loldata-clip";
+var clipUrl = (id) => `${CLIP_SCHEME}://recording/${id}`;
+
+// shell/preload.ts
 contextBridge.exposeInMainWorld("desktop", {
   getState: () => ipcRenderer.invoke("state:get"),
   onState: (fn) => {
@@ -24,6 +30,8 @@ contextBridge.exposeInMainWorld("desktop", {
   keepRecording: (id, keep) => ipcRenderer.invoke("capture:keep", id, keep),
   deleteRecording: (id) => ipcRenderer.invoke("capture:delete", id),
   revealRecording: (id) => ipcRenderer.invoke("capture:reveal", id),
+  demoCapture: () => ipcRenderer.invoke("capture:demo"),
+  clipUrl: (id) => clipUrl(id),
   ranks: (riotIds, region) => ipcRenderer.invoke("ranks:get", riotIds, region),
   signIn: () => ipcRenderer.send("account:signin"),
   signOut: () => ipcRenderer.invoke("account:signout"),

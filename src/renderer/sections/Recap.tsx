@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { CDN, type AppState } from "../types"
+import { CDN, mmss, recordingFor, type AppState } from "../types"
 import { championById } from "../../data/champions"
 import ChampionStage from "../ChampionStage"
+import Player, { RUNUP } from "../Player"
 import Verdict from "../Verdict"
-import type { LivePlayer, PlayerRank } from "../types"
+import type { Highlight, LivePlayer, PlayerRank, Recording } from "../types"
 
 /**
  * The game you just finished.
@@ -61,6 +62,10 @@ export default function Recap({
       ? newest
       : null
 
+  // The library lives on disk. It arrives on its own when a game finishes, but
+  // not after a restart and not when stepping through past games in preview.
+  useEffect(() => { void window.desktop.listRecordings() }, [])
+
   const [fallbackSlug, setFallbackSlug] = useState<string | null>(null)
   useEffect(() => {
     if (played || !newest) return   // played already carries the slug
@@ -88,6 +93,14 @@ export default function Recap({
    * before they alt-tab in. It waits for focus, which is the moment they are
    * here.
    */
+  /**
+   * The moment the player was opened at, in milliseconds, or null for closed.
+   *
+   * Zero is a real answer — "from the start" — so this cannot be a number that
+   * doubles as its own off switch.
+   */
+  const [watchFrom, setWatchFrom] = useState<number | null>(null)
+
   const [focused, setFocused] = useState(() => document.hasFocus())
   useEffect(() => {
     if (focused) return
@@ -108,6 +121,8 @@ export default function Recap({
    * the honest outcome; a coin flip dressed as a result is not.
    */
   const showVerdict = !verdictDone && focused && !!match
+
+  const clip = recordingFor(s.recordings, match)
 
   const slug = played?.championId ?? fallbackSlug
   const key = played?.championKey ?? newest?.championId ?? 0
@@ -220,6 +235,8 @@ export default function Recap({
             </div>
           )}
 
+          {clip && <Moments clip={clip} onOpen={setWatchFrom} />}
+
           </>
           )}
 
@@ -231,7 +248,97 @@ export default function Recap({
       </div>
 
       <Lobby s={s} onClose={onClose} />
+
+      {clip && watchFrom !== null && (
+        <Player
+          rec={clip}
+          startAt={watchFrom}
+          patch={s.patch ?? "16.16.1"}
+          onClose={() => setWatchFrom(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/* ── what happened, as places to jump to ─────────────────────────────────── */
+
+/**
+ * The kills and deaths of the game just played, each one a place in the
+ * recording.
+ *
+ * ⚠️ Only shown when there IS a recording of THIS game. The score above is
+ * from the client and is always right; these timestamps come from a file that
+ * may not exist, and a row of moments that opened nothing would make the whole
+ * screen feel unreliable.
+ *
+ * Deaths are here too, and deliberately. A recap that only replays your kills
+ * is a highlight reel; the deaths are the half you can do something about.
+ */
+function Moments({ clip, onOpen }: { clip: Recording; onOpen: (at: number) => void }) {
+  const marks = [...clip.highlights].sort((a, b) => a.at - b.at)
+
+  return (
+    <div className="mt-6">
+      <div className="mb-2 flex items-baseline gap-3">
+        <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">
+          the recording
+        </p>
+        <button
+          type="button"
+          onClick={() => onOpen(0)}
+          className="font-jetbrains text-[9.5px] uppercase tracking-[0.16em] text-jade/70 hover:text-jade"
+        >
+          watch from the start ▸
+        </button>
+      </div>
+
+      {marks.length === 0 ? (
+        <p className="max-w-[46ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
+          Nothing was marked in this game — the whole recording is there to watch.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {marks.map((m, i) => (
+            <Moment key={i} m={m} onOpen={onOpen} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const MOMENT: Record<Highlight["kind"], string> = {
+  kill: "#00d992",
+  multi: "#FFB615",
+  death: "#ff6286",
+  assist: "rgba(215,216,217,0.5)",
+}
+
+function Moment({ m, onOpen }: { m: Highlight; onOpen: (at: number) => void }) {
+  return (
+    <button
+      type="button"
+      // The same run-up the player uses everywhere else: a moment must land in
+      // the same place whichever screen you clicked it from.
+      onClick={() => onOpen(Math.max(0, m.at - RUNUP))}
+      title={m.label || undefined}
+      className="px-2.5 py-1.5 text-left transition hover:brightness-125"
+      style={{
+        background: "rgba(215,216,217,0.03)",
+        boxShadow: `inset 2px 0 0 0 ${MOMENT[m.kind]}`,
+      }}
+    >
+      <span
+        className="block font-jetbrains text-[8.5px] uppercase tracking-[0.16em]"
+        style={{ color: MOMENT[m.kind] }}
+      >
+        {m.kind}
+      </span>
+      <span className="block font-chakrapetch text-[12px] font-bold tabular-nums leading-tight text-flash/70">
+        {mmss(m.at / 1000)}
+      </span>
+    </button>
   )
 }
 

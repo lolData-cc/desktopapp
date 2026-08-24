@@ -281,6 +281,11 @@ declare global {
       keepRecording(id: string, keep: boolean): Promise<void>
       deleteRecording(id: string): Promise<void>
       revealRecording(id: string): Promise<void>
+      /** Record fifteen seconds now, marked, so the player has something to
+       *  open without playing a game first. */
+      demoCapture(): Promise<void>
+      /** Where to point a <video> at a recording. */
+      clipUrl(id: string): string
       /** Ranked standing per riotId, for the players in a finished game. */
       ranks(riotIds: string[], region: string | null): Promise<Record<string, PlayerRank | null>>
       signIn(): void
@@ -358,6 +363,38 @@ export function timeAgo(ms: number): string {
   const d = h / 24
   if (d < 7) return `${Math.round(d)}d ago`
   return `${Math.round(d / 7)}w ago`
+}
+
+/**
+ * The recording of a given game, if one exists.
+ *
+ * ⚠️ Matched on TIME OVERLAP, never on "the most recent file". The recorder
+ * starts on the loading screen and stops at the end screen, while the client
+ * dates a game from champion select — and someone can finish a game with
+ * recording off, turn it on, and play another. "The newest recording" is the
+ * wrong game often enough to matter, and showing last game's kills under this
+ * game's score is worse than showing none.
+ *
+ * The best overlap wins, and an overlap under a minute is not a match: two
+ * games back to back share their edges.
+ */
+export function recordingFor(recordings: Recording[], match: Match | null): Recording | null {
+  if (!match) return null
+  const start = match.playedAt
+  // Champion select to the end screen: the recording covers more than the
+  // game clock does, at both ends.
+  const end = start + (match.durationSeconds + 240) * 1000
+
+  let best: Recording | null = null
+  let bestOverlap = 60_000
+  for (const r of recordings) {
+    const overlap = Math.min(r.startedAt + r.durationMs, end) - Math.max(r.startedAt, start)
+    if (overlap > bestOverlap) {
+      best = r
+      bestOverlap = overlap
+    }
+  }
+  return best
 }
 
 export const mmss = (seconds: number): string =>

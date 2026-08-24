@@ -8,3 +8,7 @@ lockfile
 # Packaging output. It lives outside the project (OneDrive locks files mid-sync
 # and breaks the build's renames), but keep this in case anyone points it back.
 release/
+
+# A video dropped here to work on the player in a browser. Whatever it is,
+# it is somebody's screen recording and it is not ours to commit.
+public/dev-clip.*

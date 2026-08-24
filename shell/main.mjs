@@ -3016,7 +3016,7 @@ var require_polyfills = __commonJS((exports, module) => {
     }
     if (platform === "win32") {
       fs.rename = typeof fs.rename !== "function" ? fs.rename : function(fs$rename) {
-        function rename(from, to, cb) {
+        function rename2(from, to, cb) {
           var start = Date.now();
           var backoff = 0;
           fs$rename(from, to, function CB(er) {
@@ -3038,8 +3038,8 @@ var require_polyfills = __commonJS((exports, module) => {
           });
         }
         if (Object.setPrototypeOf)
-          Object.setPrototypeOf(rename, fs$rename);
-        return rename;
+          Object.setPrototypeOf(rename2, fs$rename);
+        return rename2;
       }(fs.rename);
     }
     fs.read = typeof fs.read !== "function" ? fs.read : function(fs$read) {
@@ -3451,7 +3451,7 @@ GFS4: `);
   function patch2(fs2) {
     polyfills(fs2);
     fs2.gracefulify = patch2;
-    fs2.createReadStream = createReadStream;
+    fs2.createReadStream = createReadStream2;
     fs2.createWriteStream = createWriteStream2;
     var fs$readFile = fs2.readFile;
     fs2.readFile = readFile3;
@@ -3651,7 +3651,7 @@ GFS4: `);
         }
       });
     }
-    function createReadStream(path, options) {
+    function createReadStream2(path, options) {
       return new fs2.ReadStream(path, options);
     }
     function createWriteStream2(path, options) {
@@ -5285,12 +5285,12 @@ var require_move = __commonJS((exports, module) => {
   }
   function doRename(src, dest, overwrite, isChangingCase, cb) {
     if (isChangingCase)
-      return rename(src, dest, overwrite, cb);
+      return rename2(src, dest, overwrite, cb);
     if (overwrite) {
       return remove(dest, (err) => {
         if (err)
           return cb(err);
-        return rename(src, dest, overwrite, cb);
+        return rename2(src, dest, overwrite, cb);
       });
     }
     pathExists(dest, (err, destExists) => {
@@ -5298,10 +5298,10 @@ var require_move = __commonJS((exports, module) => {
         return cb(err);
       if (destExists)
         return cb(new Error("dest already exists."));
-      return rename(src, dest, overwrite, cb);
+      return rename2(src, dest, overwrite, cb);
     });
   }
-  function rename(src, dest, overwrite, cb) {
+  function rename2(src, dest, overwrite, cb) {
     fs.rename(src, dest, (err) => {
       if (!err)
         return cb();
@@ -5348,16 +5348,16 @@ var require_move_sync = __commonJS((exports, module) => {
   }
   function doRename(src, dest, overwrite, isChangingCase) {
     if (isChangingCase)
-      return rename(src, dest, overwrite);
+      return rename2(src, dest, overwrite);
     if (overwrite) {
       removeSync(dest);
-      return rename(src, dest, overwrite);
+      return rename2(src, dest, overwrite);
     }
     if (fs.existsSync(dest))
       throw new Error("dest already exists.");
-    return rename(src, dest, overwrite);
+    return rename2(src, dest, overwrite);
   }
-  function rename(src, dest, overwrite) {
+  function rename2(src, dest, overwrite) {
     try {
       fs.renameSync(src, dest);
     } catch (err) {
@@ -6617,14 +6617,14 @@ Please double check that your authentication token is correct. Due to security r
       return newOptions;
     }
     static reconstructOriginalUrl(options) {
-      const protocol = options.protocol || "https:";
+      const protocol2 = options.protocol || "https:";
       if (!options.hostname) {
         throw new Error("Missing hostname in request options");
       }
       const hostname = options.hostname;
       const port = options.port ? `:${options.port}` : "";
       const path = options.path || "/";
-      return new url_1.URL(`${protocol}//${hostname}${port}${path}`);
+      return new url_1.URL(`${protocol2}//${hostname}${port}${path}`);
     }
     static isCrossOriginRedirect(originalUrl, redirectUrl) {
       if (originalUrl.hostname.toLowerCase() !== redirectUrl.hostname.toLowerCase()) {
@@ -6660,9 +6660,9 @@ Please double check that your authentication token is correct. Due to security r
       return new url_1.URL(url);
     } catch {
       const hostname = options.hostname;
-      const protocol = options.protocol || "https:";
+      const protocol2 = options.protocol || "https:";
       const port = options.port ? `:${options.port}` : "";
-      const baseUrl = `${protocol}//${hostname}${port}`;
+      const baseUrl = `${protocol2}//${hostname}${port}`;
       return new url_1.URL(url, baseUrl);
     }
   }
@@ -18851,10 +18851,16 @@ function dismissSplash(reveal) {
 }
 
 // shell/capture.ts
-import { app, BrowserWindow as BrowserWindow3, ipcMain, shell } from "electron";
-import { createWriteStream } from "node:fs";
-import { mkdir, readFile as readFile2, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { app, BrowserWindow as BrowserWindow3, ipcMain, protocol, shell } from "electron";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, readFile as readFile2, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { join as join3 } from "node:path";
+
+// src/data/clip.ts
+var CLIP_SCHEME = "loldata-clip";
+
+// shell/capture.ts
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
 var MAX_AUTOMATIC = 10;
 var dir = () => join3(app.getPath("userData"), "recordings");
@@ -18863,6 +18869,7 @@ var win = null;
 var ready = false;
 var out = null;
 var current = null;
+var container = "mp4";
 var onChange = null;
 var lastError = null;
 var captureError = () => lastError;
@@ -18918,7 +18925,7 @@ async function beginRecording(settings, about, changed) {
   }
   await mkdir(dir(), { recursive: true });
   const id = `${Date.now()}`;
-  const file = join3(dir(), `${id}.webm`);
+  const file = join3(dir(), `${id}.part`);
   out = createWriteStream(file);
   current = {
     id,
@@ -18945,8 +18952,10 @@ async function beginRecording(settings, about, changed) {
 }
 ipcMain.on("capture:started", (_e, info) => {
   if (current) {
+    current.startedAt = Date.now();
     current.width = info.width;
     current.height = info.height;
+    container = info.mimeType.startsWith("video/mp4") ? "mp4" : "webm";
   }
   console.log("[capture] recording %dx%d, %d audio track(s), %s", info.width, info.height, info.audio, info.mimeType);
   onChange?.();
@@ -18979,6 +18988,11 @@ async function finish() {
   if (!rec || !stream)
     return;
   await new Promise((resolve) => stream.end(resolve));
+  const named = rec.file.replace(/\.part$/, `.${container}`);
+  try {
+    await rename(rec.file, named);
+    rec.file = named;
+  } catch {}
   rec.durationMs = Date.now() - rec.startedAt;
   try {
     rec.bytes = (await stat(rec.file)).size;
@@ -19009,9 +19023,17 @@ async function prune(all) {
   }
   return [...kept, ...automatic.slice(0, MAX_AUTOMATIC)].sort((a, b) => b.startedAt - a.startedAt);
 }
+var located = new Map;
+var remember = (all) => {
+  located.clear();
+  for (const r of all)
+    located.set(r.id, r.file);
+};
 async function readIndex() {
   try {
-    return JSON.parse(await readFile2(indexFile(), "utf8"));
+    const all = JSON.parse(await readFile2(indexFile(), "utf8"));
+    remember(all);
+    return all;
   } catch {
     return [];
   }
@@ -19019,6 +19041,7 @@ async function readIndex() {
 async function writeIndex(all) {
   await mkdir(dir(), { recursive: true });
   await writeFile(indexFile(), JSON.stringify(all, null, 2), "utf8");
+  remember(all);
 }
 async function keepRecording(id, keep) {
   const all = await readIndex();
@@ -19046,12 +19069,28 @@ async function revealRecording(id) {
   if (found)
     shell.showItemInFolder(found.file);
 }
+async function tidyLibrary() {
+  try {
+    const known = new Set((await readIndex()).map((r) => r.file.toLowerCase()));
+    for (const f of await readdir(dir())) {
+      if (f.endsWith(".json"))
+        continue;
+      const full = join3(dir(), f);
+      if (known.has(full.toLowerCase()))
+        continue;
+      await rm(full, { force: true }).catch(() => {
+        return;
+      });
+      console.log("[capture] swept an unfinished recording (%s)", f);
+    }
+  } catch {}
+}
 async function librarySize() {
   try {
     const files = await readdir(dir());
     let total = 0;
     for (const f of files) {
-      if (!f.endsWith(".webm"))
+      if (f.endsWith(".json"))
         continue;
       total += (await stat(join3(dir(), f))).size;
     }
@@ -19059,6 +19098,63 @@ async function librarySize() {
   } catch {
     return 0;
   }
+}
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: CLIP_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+]);
+function bodyOf(file, range) {
+  const read = createReadStream(file, range);
+  read.on("error", () => {
+    return;
+  });
+  return Readable.toWeb(read);
+}
+function serveClips() {
+  protocol.handle(CLIP_SCHEME, async (request) => {
+    const id = new URL(request.url).pathname.replace(/^\//, "");
+    if (!located.has(id))
+      await readIndex();
+    const file = located.get(id);
+    if (!file)
+      return new Response("no such recording", { status: 404 });
+    let size = 0;
+    try {
+      size = (await stat(file)).size;
+    } catch {
+      return new Response("the file is gone", { status: 404 });
+    }
+    const headers = {
+      "Content-Type": file.endsWith(".mp4") ? "video/mp4" : "video/webm",
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "no-store"
+    };
+    const asked = /bytes=(\d*)-(\d*)/.exec(request.headers.get("Range") ?? "");
+    if (!asked) {
+      return new Response(bodyOf(file), {
+        status: 200,
+        headers: { ...headers, "Content-Length": String(size) }
+      });
+    }
+    const start = asked[1] ? Number(asked[1]) : 0;
+    const end = asked[2] ? Math.min(Number(asked[2]), size - 1) : size - 1;
+    if (!(start >= 0 && start <= end && end < size)) {
+      return new Response(null, {
+        status: 416,
+        headers: { ...headers, "Content-Range": `bytes */${size}` }
+      });
+    }
+    return new Response(bodyOf(file, { start, end }), {
+      status: 206,
+      headers: {
+        ...headers,
+        "Content-Length": String(end - start + 1),
+        "Content-Range": `bytes ${start}-${end}/${size}`
+      }
+    });
+  });
 }
 function destroyRecorder() {
   if (win && !win.isDestroyed())
@@ -21079,6 +21175,28 @@ ipcMain2.handle("capture:delete", async (_e, id) => {
 ipcMain2.handle("capture:reveal", async (_e, id) => {
   await revealRecording(id);
 });
+ipcMain2.handle("capture:demo", async () => {
+  if (state.recording)
+    return;
+  const started = await beginRecording({ capture: true, captureAudio: state.settings.captureAudio }, { championId: "Ahri", championName: "Ahri", queue: "Demo" }, () => void pushRecordings()).catch((e) => {
+    console.log("[capture] demo could not start: %s", e?.message);
+    return false;
+  });
+  if (!started) {
+    push({ captureError: captureError() ?? "the recorder would not start" });
+    return;
+  }
+  push({ recording: true, captureError: null });
+  raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS);
+  setTimeout(() => mark("kill", "Ahri → Zed"), 3000);
+  setTimeout(() => mark("death", "Khazix → Ahri"), 7000);
+  setTimeout(() => mark("multi", "Double kill"), 11000);
+  setTimeout(() => {
+    setResult(true);
+    endRecording();
+    push({ recording: false });
+  }, 15000);
+});
 var rankCache = new Map;
 async function lookupRanks(riotIds, region) {
   const out2 = {};
@@ -21492,6 +21610,8 @@ if (!gotLock) {
     const claimed = dev ? app4.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app4.setAsDefaultProtocolClient(PROTOCOL);
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
     console.log("[link] %s:// ok=%s via=%s named=%s%s", PROTOCOL, result.ok, result.via, result.named ?? false, result.command ? ` cmd=${result.command}` : "");
+    serveClips();
+    tidyLibrary();
     createWindow();
     createOverlay(join5(__dirname2, "preload.mjs"));
     const registered = globalShortcut.register(GOLD_HOTKEY, () => {

@@ -1,8 +1,9 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { CDN, type AppSettings, type AppState, type Recording } from "../types"
 // The same switch the Settings page uses: one control, one behaviour, one
 // place to change how a toggle looks in this app.
 import { Toggle } from "./Preferences"
+import Player from "../Player"
 
 /**
  * Recording, and the games it kept.
@@ -35,6 +36,16 @@ export default function Capture({ s }: { s: AppState }) {
   // The library lives on disk, so it is read when this screen opens rather
   // than pushed with every state change.
   useEffect(() => { void window.desktop.listRecordings() }, [])
+
+  /**
+   * Which recording is open, by ID rather than by value.
+   *
+   * The library re-arrives from the shell whenever anything is kept or
+   * deleted, and holding the object would leave the player showing a stale
+   * copy of a row that has since changed underneath it.
+   */
+  const [watching, setWatching] = useState<string | null>(null)
+  const open = s.recordings.find((r) => r.id === watching) ?? null
 
   const kept = s.recordings.filter((r) => r.kept).length
   const automatic = s.recordings.length - kept
@@ -69,7 +80,7 @@ export default function Capture({ s }: { s: AppState }) {
           on={v.capture}
           onChange={(on) => set({ capture: on })}
           label="Record my games"
-          note="Starts on the loading screen and stops when the game ends. The overlay says so at the start of every game — that notice cannot be switched off."
+          note="Starts on the loading screen and stops when the game ends. The overlay says so at the start of every game — that notice cannot be switched off. Around 1.3 GB per game at 1080p, so a full library of ten is roughly 13 GB."
         />
 
         {v.capture && (
@@ -136,17 +147,37 @@ export default function Capture({ s }: { s: AppState }) {
           ) : (
             <div className="space-y-1.5">
               {s.recordings.map((r, i) => (
-                <Row key={r.id} r={r} patch={s.patch ?? "16.16.1"} index={i} />
+                <Row
+                  key={r.id}
+                  r={r}
+                  patch={s.patch ?? "16.16.1"}
+                  index={i}
+                  onWatch={() => setWatching(r.id)}
+                />
               ))}
             </div>
           )}
         </section>
       </div>
+
+      {open && (
+        <Player rec={open} patch={s.patch ?? "16.16.1"} onClose={() => setWatching(null)} />
+      )}
     </div>
   )
 }
 
-function Row({ r, patch, index }: { r: Recording; patch: string; index: number }) {
+function Row({
+  r,
+  patch,
+  index,
+  onWatch,
+}: {
+  r: Recording
+  patch: string
+  index: number
+  onWatch: () => void
+}) {
   const kills = r.highlights.filter((h) => h.kind === "kill").length
   const deaths = r.highlights.filter((h) => h.kind === "death").length
 
@@ -159,24 +190,45 @@ function Row({ r, patch, index }: { r: Recording; patch: string; index: number }
         animationDelay: `${Math.min(index, 12) * 28}ms`,
       }}
     >
-      {r.championId ? (
-        <img
-          src={`${CDN}/${patch}/img/champion/${r.championId}.png`}
-          alt=""
-          className="h-9 w-9 shrink-0 rounded-[3px] ring-1 ring-jade/15"
-        />
-      ) : (
-        <div className="h-9 w-9 shrink-0 rounded-[3px] bg-flash/[0.05]" />
-      )}
+      {/* The champion and the name ARE the play button. A row you can only
+          open from a small control at the far right is a row people scroll
+          past. */}
+      <button
+        type="button"
+        onClick={onWatch}
+        className="watch group flex min-w-0 shrink-0 items-center gap-3 text-left"
+        title="Watch this game"
+      >
+        <span className="relative block h-9 w-9 shrink-0">
+          {r.championId ? (
+            <img
+              src={`${CDN}/${patch}/img/champion/${r.championId}.png`}
+              alt=""
+              className="h-9 w-9 rounded-[3px] ring-1 ring-jade/15"
+            />
+          ) : (
+            <span className="block h-9 w-9 rounded-[3px] bg-flash/[0.05]" />
+          )}
+          <span
+            aria-hidden
+            className="absolute inset-0 grid place-items-center rounded-[3px] opacity-0 transition-opacity group-hover:opacity-100"
+            style={{ background: "rgba(4,10,12,0.62)" }}
+          >
+            <svg width="10" height="11" viewBox="0 0 10 11" aria-hidden>
+              <path d="M1 0 L10 5.5 L1 11 Z" fill="#00d992" />
+            </svg>
+          </span>
+        </span>
 
-      <div className="w-[120px] shrink-0">
-        <p className="truncate font-chakrapetch text-[13px] font-bold leading-tight">
-          {r.championName ?? "Game"}
-        </p>
-        <p className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
-          {r.win === null ? "—" : r.win ? "win" : "loss"} · {mins(r.durationMs)}
-        </p>
-      </div>
+        <span className="block w-[120px]">
+          <span className="block truncate font-chakrapetch text-[13px] font-bold leading-tight">
+            {r.championName ?? "Game"}
+          </span>
+          <span className="block font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
+            {r.win === null ? "—" : r.win ? "win" : "loss"} · {mins(r.durationMs)}
+          </span>
+        </span>
+      </button>
 
       <div className="flex shrink-0 items-center gap-3">
         <Tally n={kills} label="kills" colour="#00d992" />
@@ -186,6 +238,14 @@ function Row({ r, patch, index }: { r: Recording; patch: string; index: number }
       <span className="ml-auto shrink-0 font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
         {gb(r.bytes)}
       </span>
+
+      <button
+        type="button"
+        onClick={onWatch}
+        className="win-btn h-6 shrink-0 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-jade/70"
+      >
+        watch
+      </button>
 
       <button
         type="button"

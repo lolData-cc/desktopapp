@@ -122,6 +122,20 @@ export default function Settings({
         gold {s.gold ? `· ${s.gold.ours > s.gold.theirs ? "ahead" : s.gold.ours < s.gold.theirs ? "behind" : "even"}` : "· off"}
       </button>
 
+      {/* Fifteen seconds of the screen, marked as if a fight had happened —
+          because the only other way to get a recording into the library is to
+          play a whole game, and the player and the recap both read from it. */}
+      <button
+        type="button"
+        onClick={() => void window.desktop.demoCapture()}
+        title="Record fifteen seconds now, with marks, so the player has something to open"
+        className={`win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
+          s.recording ? "bg-jade/15 text-jade" : "text-flash/30"
+        }`}
+      >
+        {s.recording ? "recording…" : "record 15s"}
+      </button>
+
       {/* Restarts the process — nothing is replaced and nothing is installed.
           It exists because the boot animation is otherwise only watchable by
           closing the app and starting it from a terminal. */}

@@ -4,6 +4,7 @@
  * client, no credential, no arbitrary IPC channel.
  */
 import { contextBridge, ipcRenderer } from "electron"
+import { clipUrl } from "../src/data/clip"
 
 contextBridge.exposeInMainWorld("desktop", {
   getState: () => ipcRenderer.invoke("state:get"),
@@ -29,6 +30,11 @@ contextBridge.exposeInMainWorld("desktop", {
   keepRecording: (id: string, keep: boolean) => ipcRenderer.invoke("capture:keep", id, keep),
   deleteRecording: (id: string) => ipcRenderer.invoke("capture:delete", id),
   revealRecording: (id: string) => ipcRenderer.invoke("capture:reveal", id),
+  demoCapture: () => ipcRenderer.invoke("capture:demo"),
+  // Synchronous, and deliberately the SHELL's answer: how a recording is
+  // addressed is the shell's business, and a renderer that spelled the scheme
+  // itself would be a second place for it to drift.
+  clipUrl: (id: string) => clipUrl(id),
   ranks: (riotIds: string[], region: string | null) => ipcRenderer.invoke("ranks:get", riotIds, region),
   // Signing in opens a BROWSER. This surface deliberately has no way to send a
   // password anywhere — the site hands a session back over loldata://auth.

@@ -18,7 +18,7 @@ import { ensureProtocol } from "./protocol"
 import { createSplash, dismissSplash } from "./splash"
 import { beginRecording, endRecording, mark, setResult, isRecording, captureError,
          readIndex, keepRecording, deleteRecording, revealRecording, librarySize,
-         destroyRecorder, type Recording } from "./capture"
+         destroyRecorder, serveClips, tidyLibrary, type Recording } from "./capture"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -1655,6 +1655,48 @@ ipcMain.handle("capture:delete", async (_e, id: string) => {
 ipcMain.handle("capture:reveal", async (_e, id: string) => { await revealRecording(id) })
 
 /**
+ * Record fifteen seconds, right now, marked as if things had happened.
+ *
+ * ⚠️ A development affordance, and the reason it exists is the loop: the only
+ * other way to get a recording into the library is to play a full game, and
+ * every change to the player or the recap would cost twenty minutes of League
+ * to look at. It records the same way a game does, through the same code —
+ * a fixture that took a different path would prove nothing.
+ *
+ * It still ANNOUNCES itself, exactly as a game does. There is no path through
+ * this app that records a screen quietly.
+ */
+ipcMain.handle("capture:demo", async () => {
+  if (state.recording) return
+  const started = await beginRecording(
+    { capture: true, captureAudio: state.settings.captureAudio },
+    { championId: "Ahri", championName: "Ahri", queue: "Demo" },
+    () => void pushRecordings()
+  ).catch((e) => {
+    console.log("[capture] demo could not start: %s", (e as Error)?.message)
+    return false
+  })
+
+  if (!started) {
+    push({ captureError: captureError() ?? "the recorder would not start" })
+    return
+  }
+
+  push({ recording: true, captureError: null })
+  raiseNotice("capture", 0, null, { ours: [], theirs: [] }, CAPTURE_MS)
+
+  // Spread across the clip so the timeline has something to navigate.
+  setTimeout(() => mark("kill", "Ahri → Zed"), 3000)
+  setTimeout(() => mark("death", "Khazix → Ahri"), 7000)
+  setTimeout(() => mark("multi", "Double kill"), 11000)
+  setTimeout(() => {
+    setResult(true)
+    void endRecording()
+    push({ recording: false })
+  }, 15000)
+})
+
+/**
  * Ranks for the players in a finished game.
  *
  * ⚠️ Ten lookups, so: cached for the session, and asked for ONCE per recap
@@ -2332,6 +2374,14 @@ if (!gotLock) {
       PROTOCOL, result.ok, result.via, result.named ?? false,
       result.command ? ` cmd=${result.command}` : ""
     )
+
+    // ⚠️ Before the window, not after: the player asks for a recording the
+    // moment it is opened, and a handler registered later would answer the
+    // first request with a network error the renderer reads as a dead file.
+    serveClips()
+    // A game interrupted by a crash or a power cut leaves a gigabyte behind
+    // that nothing will ever open.
+    void tidyLibrary()
 
     createWindow()
     createOverlay(join(__dirname, "preload.mjs"))
