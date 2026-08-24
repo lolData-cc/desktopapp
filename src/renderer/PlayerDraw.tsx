@@ -92,7 +92,9 @@ export default function PlayerDraw({
     <canvas
       ref={canvas}
       className="absolute inset-0 z-10 h-full w-full"
-      style={{ pointerEvents: active ? "auto" : "none", cursor: active ? "crosshair" : undefined }}
+      // The cursor is set on the whole panel by the mode; a second one here
+      // would be a second answer to the same question.
+      style={{ pointerEvents: active ? "auto" : "none" }}
       onPointerDown={(e) => {
         if (!active) return
         e.currentTarget.setPointerCapture(e.pointerId)

@@ -36,7 +36,15 @@ export const KIND: Record<Highlight["kind"], { colour: string; label: string }> 
  */
 const CLUSTER_MS = 10_000
 
-export type Pin = { at: number; kind: Highlight["kind"]; count: number; label: string }
+/**
+ * ⚠️ `labels` is a LIST, and that is the whole point of it.
+ *
+ * A pin that swallowed three kills used to carry the first one's name, so
+ * hovering a triple showed a single victim and looked like a mistake — the
+ * count said three and the card named one. Everyone who was in the fight is in
+ * the fight.
+ */
+export type Pin = { at: number; kind: Highlight["kind"]; count: number; labels: string[] }
 
 export function pinsFrom(marks: Highlight[]): Pin[] {
   const out: Pin[] = []
@@ -47,9 +55,10 @@ export function pinsFrom(marks: Highlight[]): Pin[] {
     const open = [...out].reverse().find((p) => p.kind === m.kind)
     if (open && m.at - open.at < CLUSTER_MS) {
       open.count++
+      if (m.label) open.labels.push(m.label)
       continue
     }
-    out.push({ at: m.at, kind: m.kind, count: 1, label: m.label })
+    out.push({ at: m.at, kind: m.kind, count: 1, labels: m.label ? [m.label] : [] })
   }
   return out
 }
@@ -134,11 +143,11 @@ export function Timeline({
           <span className="ml-2 font-jetbrains text-[9px] tabular-nums text-flash/35">
             {mmss(over.at / 1000)}
           </span>
-          {over.label && (
-            <span className="ml-2.5 font-chakrapetch text-[12px] font-bold text-flash/80">
-              {over.label}
+          {over.labels.map((l, i) => (
+            <span key={i} className="ml-2.5 font-chakrapetch text-[12px] font-bold text-flash/80">
+              {l}
             </span>
-          )}
+          ))}
         </div>
       )}
 

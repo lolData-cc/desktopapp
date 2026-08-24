@@ -72,6 +72,14 @@ export default function Player({
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
   const [drawing, setDrawing] = useState(false)
+  /**
+   * Whether playback has ever been started.
+   *
+   * ⚠️ The smaller controls do not exist before it. On opening there is one
+   * thing to do and one control that does it; a row of five is a decision
+   * nobody has been given a reason to make yet.
+   */
+  const [started, setStarted] = useState(false)
   const [strokes, setStrokes] = useState<Stroke[]>([])
   /** Bumped every time the chrome comes back, so the assembly replays. */
   const [build, setBuild] = useState(0)
@@ -294,6 +302,13 @@ export default function Player({
       ref={panel}
       onMouseMove={wake}
       className="clip-player fixed bottom-0 left-[196px] right-0 top-11 z-50 overflow-hidden bg-black"
+      /* ⚠️ The cursor belongs to the MODE, not to the canvas.
+         Set on the canvas alone it changed back to an arrow over every control
+         that overlapped it — which, with the strip across the bottom, was most
+         of the lower third — so it flickered as the pointer crossed edges that
+         were invisible. Drawing is a mode: the pointer means one thing until
+         the mode ends. */
+      style={drawing ? { cursor: "crosshair" } : undefined}
     >
       <video
         ref={video}
@@ -302,7 +317,10 @@ export default function Player({
         style={{ opacity: ready ? 1 : 0, transition: "opacity 240ms ease" }}
         onClick={onVideoClick}
         onDoubleClick={onVideoDouble}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true)
+          setStarted(true)
+        }}
         onPause={() => setPlaying(false)}
         onSeeked={() => setSeeking(false)}
         onTimeUpdate={(e) => setAt(e.currentTarget.currentTime)}
@@ -364,7 +382,7 @@ export default function Player({
       <header
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-3.5 px-5 py-4 transition-opacity duration-300"
         style={{
-          opacity: veil ? 1 : 0,
+          opacity: veil && !drawing ? 1 : 0,
           background: "linear-gradient(rgba(4,10,12,0.88), rgba(4,10,12,0))",
         }}
       >
@@ -385,7 +403,12 @@ export default function Player({
           </p>
         </div>
 
+        {/* ⚠️ Not in fullscreen. Keeping a recording and finding it on disk are
+            things you do to a FILE, in a library — they have no business on a
+            screen somebody has made as big as it goes in order to watch it. */}
         <div className="pointer-events-auto ml-auto flex items-center gap-1.5">
+          {!full && (
+          <>
           <Minimal
             label={rec.kept ? "kept" : "keep"}
             title={
@@ -397,6 +420,8 @@ export default function Player({
             onClick={() => void window.desktop.keepRecording(rec.id, !rec.kept)}
           />
           <Minimal label="file" title="Show the file on disk" onClick={() => void window.desktop.revealRecording(rec.id)} />
+          </>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -412,15 +437,19 @@ export default function Player({
 
       <div
         className="absolute inset-x-0 bottom-0 z-20 px-5 pb-4 pt-16 transition-opacity duration-300"
+        /* ⚠️ Gone while drawing, not merely faded. The strip covers the bottom
+           third of the frame and takes the pointer with it, so the part of the
+           picture nearest the action was the part that could not be drawn on. */
         style={{
-          opacity: veil ? 1 : 0,
-          pointerEvents: veil ? "auto" : "none",
+          opacity: veil && !drawing ? 1 : 0,
+          pointerEvents: veil && !drawing ? "auto" : "none",
           background: "linear-gradient(rgba(4,10,12,0), rgba(4,10,12,0.9))",
         }}
       >
         {/* ⚠️ The cluster sits ABOVE the bar and centred, floating, rather than
             in a row beside the clock. It is the thing you reach for; the bar is
             the thing you read. Putting them on one line made both worse. */}
+        {started && (
         <Cluster
           key={build}
           playing={playing}
@@ -439,6 +468,7 @@ export default function Player({
             setMuted(x === 0)
           }}
         />
+        )}
 
         <Timeline at={at} total={total} buffered={buffered} pins={pins} onSeek={seek} runup={RUNUP} />
 
@@ -571,6 +601,10 @@ function Plate({
       disabled={disabled}
       className="ds-build group relative grid shrink-0 place-items-center transition-colors disabled:pointer-events-none disabled:opacity-25"
       style={{
+        // ⚠️ Stated, not inherited. Buttons default to an arrow and the slider
+        // inside the volume panel asks for a pointer, so crossing between them
+        // flipped the cursor back and forth over invisible edges.
+        cursor: "pointer",
         width: size,
         height: size,
         animationDelay: `${delay}ms`,
@@ -596,7 +630,20 @@ function Plate({
   )
 }
 
-/** The speaker, with its slider folded away until it is pointed at. */
+/**
+ * The speaker, with its slider folded away until it is pointed at.
+ *
+ * ⚠️ There is no GAP between the button and the panel it opens. There was —
+ * eight pixels of it — and moving the pointer towards the slider crossed that
+ * gap, left the hover region and closed the thing being reached for. The panel
+ * hangs off a wrapper whose padding IS the bridge, so the two are one
+ * continuous surface however it looks.
+ *
+ * ⚠️ And it closes on a short delay rather than instantly. Cutting a corner on
+ * the way to the slider leaves the wrapper for a frame or two, and a menu that
+ * cannot survive that is a menu you have to approach carefully — which is not
+ * something anyone should have to do to a volume control.
+ */
 function Volume({
   delay,
   muted,
@@ -611,29 +658,42 @@ function Volume({
   onVolume: (v: number) => void
 }) {
   const [open, setOpen] = useState(false)
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
   const level = muted ? 0 : volume
 
+  const hold = () => {
+    if (closing.current) clearTimeout(closing.current)
+    setOpen(true)
+  }
+  const release = () => {
+    if (closing.current) clearTimeout(closing.current)
+    closing.current = setTimeout(() => setOpen(false), 220)
+  }
+  useEffect(() => () => { if (closing.current) clearTimeout(closing.current) }, [])
+
   return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div className="relative" onMouseEnter={hold} onMouseLeave={release}>
       {open && (
-        <div
-          className="absolute bottom-[calc(100%+8px)] left-1/2 flex h-[104px] w-[38px] -translate-x-1/2 items-center justify-center"
-          style={{ background: "rgba(4,10,12,0.9)", clipPath: PLATE, boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.14)" }}
-        >
-          {/* ⚠️ Rotated rather than a bespoke vertical control: a range input
-              keeps the keyboard and the pointer behaviour the platform already
-              knows, which a div with a drag handler would have to reinvent
-              badly. */}
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.02}
-            value={level}
-            aria-label="Volume"
-            onChange={(e) => onVolume(Number(e.target.value))}
-            className="clip-volume"
-          />
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2">
+          <div
+            className="ds-build flex h-[104px] w-[42px] items-center justify-center"
+            style={{ background: "rgba(4,10,12,0.92)", clipPath: PLATE, boxShadow: "inset 0 0 0 1px rgba(215,216,217,0.14)" }}
+          >
+            {/* ⚠️ Rotated rather than a bespoke vertical control: a range input
+                keeps the keyboard and the pointer behaviour the platform
+                already implements correctly, which a div with a drag handler
+                would have to reinvent badly, and only for the mouse. */}
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.02}
+              value={level}
+              aria-label="Volume"
+              onChange={(e) => onVolume(Number(e.target.value))}
+              className="clip-volume"
+            />
+          </div>
         </div>
       )}
 
