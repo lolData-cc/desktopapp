@@ -152,6 +152,26 @@ const BUDGETS: { value: number | null; label: string; note: string }[] = [
 ]
 
 /**
+ * How smooth, and what it costs.
+ *
+ * ⚠️ Every rate here was measured on this machine before it was offered — the
+ * capture pipeline hands back exactly what is asked for at 30, 60 and 120. A
+ * chooser whose third option quietly produced the second would be worse than
+ * having no chooser.
+ *
+ * 120 comes with a warning rather than being withheld. It really does ask more
+ * of the GPU's encoder, which is the one budget this feature promised not to
+ * spend — the point of hardware H264 was that recording must not cost the game
+ * any frames. But that is a fact to state, not a reason to decide for somebody
+ * who asked to choose.
+ */
+const RATES: { value: number; label: string; note: string }[] = [
+  { value: 30, label: "30 fps", note: "Smooth enough to read a fight, and the smallest files." },
+  { value: 60, label: "60 fps", note: "Matches most monitors. Twice the file." },
+  { value: 120, label: "120 fps", note: "Four times the file, and the only setting here that can cost you frames in game." },
+]
+
+/**
  * Recording, and the library behind it.
  *
  * ⚠️ The switch is OFF until the player turns it on, and the app says so in
@@ -240,6 +260,48 @@ function CaptureTab({
           <p className="mt-2.5 max-w-[70ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
             Game and Discord audio cannot be separated — Windows hands out one mixed
             track, and splitting it is not something this app can do today.
+          </p>
+        </section>
+      )}
+
+      {v.capture && (
+        <section>
+          <p className="mb-2 font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">
+            frame rate
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {RATES.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => set({ captureFps: r.value })}
+                className="rounded-[3px] px-3.5 py-2.5 text-left transition"
+                style={{
+                  background: v.captureFps === r.value ? "rgba(0,217,146,0.06)" : "rgba(215,216,217,0.022)",
+                  boxShadow: v.captureFps === r.value ? "inset 2px 0 0 0 rgba(0,217,146,0.5)" : undefined,
+                }}
+              >
+                <span
+                  className={`block font-chakrapetch text-[13px] font-bold ${
+                    v.captureFps === r.value ? "text-flash" : "text-flash/55"
+                  }`}
+                >
+                  {r.label}
+                </span>
+                <span className="mt-0.5 block font-chakrapetch text-[11px] leading-snug text-flash/30">
+                  {r.note}
+                </span>
+              </button>
+            ))}
+          </div>
+          {/* ⚠️ The bitrate follows the frame rate. The same bits spread over
+              twice as many frames is half the detail in each one, so 60 at a 30
+              bitrate would look WORSE than 30 did — the opposite of what
+              choosing it asks for. */}
+          <p className="mt-2.5 max-w-[70ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
+            The quality follows the rate, so 60 fps really is about twice the file —
+            roughly 2.6 GB for a half-hour game instead of 1.3. Each recording says
+            what it actually captured at, below, rather than what was asked for.
           </p>
         </section>
       )}
@@ -354,6 +416,7 @@ function Row({ r, patch, index }: { r: Recording; patch: string; index: number }
         </p>
         <p className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
           {r.win === null ? "—" : r.win ? "win" : "loss"} · {mins(r.durationMs)}
+          {r.fps > 0 && ` · ${r.fps}fps`}
         </p>
       </div>
 

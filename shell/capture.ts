@@ -52,6 +52,12 @@ export type Recording = {
   kept: boolean
   width: number
   height: number
+  /**
+   * ⚠️ What the capture ACTUALLY ran at, read back off the track — not what was
+   * asked for. A machine can refuse a rate, and a library that printed the
+   * request would be answering a question about the file with a setting.
+   */
+  fps: number
 }
 
 /**
@@ -195,6 +201,7 @@ export async function beginRecording(
     capture: boolean
     captureAudio: "none" | "system" | "mic" | "both"
     captureBudgetGb?: number | null
+    captureFps?: number
   },
   about: { championId: string | null; championName: string | null; queue: string | null },
   changed: () => void,
@@ -208,6 +215,8 @@ export async function beginRecording(
   onChange = changed
   marked = new Set()
   if (settings.captureBudgetGb !== undefined) setCaptureBudget(settings.captureBudgetGb)
+
+  const fps = settings.captureFps && settings.captureFps > 0 ? settings.captureFps : 30
 
   const source = await leagueWindow(anyWindow)
   if (!source) return false
@@ -248,27 +257,29 @@ export async function beginRecording(
     kept: false,
     width: 0,
     height: 0,
+    fps: 0,
   }
 
   w.webContents.send("capture:start", {
     sourceId: source.id,
     audio: settings.captureAudio,
-    fps: 30,
+    fps,
     /**
-     * ⚠️ Ten of these live on disk at once, and that is what sets this number.
+     * ⚠️ Scaled with the frame rate, not fixed.
      *
-     * 6 Mbit is about 1.3 GB for a half-hour game, so a full library is around
-     * thirteen — enough to notice on a laptop, which is why the Capture screen
-     * says so before anything is recorded. 8 Mbit is visibly no better on
-     * 1080p gameplay and would put another five gigabytes on the disk for it.
+     * 6 Mbit is about 1.3 GB for a half-hour game at 30fps, and 8 Mbit is
+     * visibly no better at that rate. But the same 6 Mbit spread over twice as
+     * many frames is half the bits in each one — 60fps at a 30fps bitrate looks
+     * WORSE than 30fps did, which is the opposite of what somebody choosing it
+     * is asking for. The rate follows the frames.
      */
-    bitrate: 6_000_000,
+    bitrate: Math.round(6_000_000 * (fps / 30)),
   })
 
   return true
 }
 
-ipcMain.on("capture:started", (_e, info: { width: number; height: number; audio: number; mimeType: string }) => {
+ipcMain.on("capture:started", (_e, info: { width: number; height: number; fps: number; audio: number; mimeType: string }) => {
   if (current) {
     /**
      * ⚠️ The clock starts HERE, not when we asked.
@@ -281,10 +292,11 @@ ipcMain.on("capture:started", (_e, info: { width: number; height: number; audio:
     current.startedAt = Date.now()
     current.width = info.width
     current.height = info.height
+    current.fps = info.fps
     container = info.mimeType.startsWith("video/mp4") ? "mp4" : "webm"
   }
-  console.log("[capture] recording %dx%d, %d audio track(s), %s",
-    info.width, info.height, info.audio, info.mimeType)
+  console.log("[capture] recording %dx%d @%dfps, %d audio track(s), %s",
+    info.width, info.height, info.fps, info.audio, info.mimeType)
   onChange?.()
 })
 

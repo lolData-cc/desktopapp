@@ -118,6 +118,15 @@ export type AppSettings = {
    * not.
    */
   captureBudgetGb: number | null
+  /**
+   * Frames per second to record at.
+   *
+   * ⚠️ Costs disk in direct proportion, and asks proportionally more of the
+   * GPU's encoder — which is the one budget this feature promised not to spend,
+   * since the whole point of hardware H264 was that recording must not cost the
+   * game any frames.
+   */
+  captureFps: number
   /** Dragon and Baron warnings. */
   objectiveNotices: boolean
   /** "X is purchasable", boots advice, the opening build. */
@@ -133,6 +142,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   captureAudio: "system",
   // ~19 games at 1080p — close to what the old ten-game rule cost, with room.
   captureBudgetGb: 25,
+  captureFps: 30,
   objectiveNotices: true,
   buildNotices: true,
 }

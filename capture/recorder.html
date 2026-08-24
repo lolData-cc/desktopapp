@@ -94,6 +94,28 @@
           }
         }
 
+        /**
+         * ⚠️ The rate has to be asked for TWICE.
+         *
+         * The legacy `mandatory` block is the only way to name a capture source
+         * — `chromeMediaSourceId` exists nowhere else — but Chromium hands back
+         * 30fps from it whatever minFrameRate says. Measured: asking for 60
+         * produced a track reporting 30. So the modern constraint is applied to
+         * the track afterwards, which is the form that is actually honoured.
+         *
+         * Non-fatal if it fails: 30fps is a working recording, and the shell
+         * records what the track ACTUALLY reports rather than what was asked,
+         * so a machine that refuses says so in the library instead of lying.
+         */
+        const track0 = stream.getVideoTracks()[0]
+        if (fps > 30 && track0) {
+          try {
+            await track0.applyConstraints({ frameRate: { ideal: fps, min: Math.min(fps, 50) } })
+          } catch (e) {
+            ipcRenderer.send("capture:warn", "could not raise the frame rate: " + String(e).slice(0, 120))
+          }
+        }
+
         const mimeType = pick()
         recorder = new MediaRecorder(stream, {
           mimeType,

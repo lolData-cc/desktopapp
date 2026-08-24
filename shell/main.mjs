@@ -18928,6 +18928,7 @@ async function beginRecording(settings, about, changed, anyWindow = false) {
   marked = new Set;
   if (settings.captureBudgetGb !== undefined)
     setCaptureBudget(settings.captureBudgetGb);
+  const fps = settings.captureFps && settings.captureFps > 0 ? settings.captureFps : 30;
   const source = await leagueWindow(anyWindow);
   if (!source)
     return false;
@@ -18955,13 +18956,14 @@ async function beginRecording(settings, about, changed, anyWindow = false) {
     highlights: [],
     kept: false,
     width: 0,
-    height: 0
+    height: 0,
+    fps: 0
   };
   w.webContents.send("capture:start", {
     sourceId: source.id,
     audio: settings.captureAudio,
-    fps: 30,
-    bitrate: 6000000
+    fps,
+    bitrate: Math.round(6000000 * (fps / 30))
   });
   return true;
 }
@@ -18970,9 +18972,10 @@ ipcMain.on("capture:started", (_e, info) => {
     current.startedAt = Date.now();
     current.width = info.width;
     current.height = info.height;
+    current.fps = info.fps;
     container = info.mimeType.startsWith("video/mp4") ? "mp4" : "webm";
   }
-  console.log("[capture] recording %dx%d, %d audio track(s), %s", info.width, info.height, info.audio, info.mimeType);
+  console.log("[capture] recording %dx%d @%dfps, %d audio track(s), %s", info.width, info.height, info.fps, info.audio, info.mimeType);
   onChange?.();
 });
 function mark(kind, label, at, key) {
@@ -19359,6 +19362,7 @@ var DEFAULT_SETTINGS = {
   capture: false,
   captureAudio: "system",
   captureBudgetGb: 25,
+  captureFps: 30,
   objectiveNotices: true,
   buildNotices: true
 };
@@ -21257,7 +21261,7 @@ ipcMain2.handle("capture:reveal", async (_e, id) => {
 ipcMain2.handle("capture:demo", async () => {
   if (state.recording)
     return;
-  const started = await beginRecording({ capture: true, captureAudio: state.settings.captureAudio }, { championId: "Ahri", championName: "Ahri", queue: "Demo" }, () => void pushRecordings(), true).catch((e) => {
+  const started = await beginRecording({ ...state.settings, capture: true }, { championId: "Ahri", championName: "Ahri", queue: "Demo" }, () => void pushRecordings(), true).catch((e) => {
     console.log("[capture] demo could not start: %s", e?.message);
     return false;
   });

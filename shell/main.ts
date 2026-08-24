@@ -1802,7 +1802,17 @@ ipcMain.handle("capture:reveal", async (_e, id: string) => { await revealRecordi
 ipcMain.handle("capture:demo", async () => {
   if (state.recording) return
   const started = await beginRecording(
-    { capture: true, captureAudio: state.settings.captureAudio },
+    /**
+     * ⚠️ The real settings with ONE override, not a hand-built object.
+     *
+     * It was `{ capture: true, captureAudio }`, which silently dropped every
+     * setting added afterwards — the frame rate and the disk budget both
+     * arrived and both were lost here. A recording made by this button then
+     * behaved differently from a recording made by a game, which is exactly
+     * what a debug affordance must never do: it made the test lie about the
+     * thing it existed to test, and 60fps looked broken when it was not.
+     */
+    { ...state.settings, capture: true },
     { championId: "Ahri", championName: "Ahri", queue: "Demo" },
     () => void pushRecordings(),
     // No game to record here — this button exists precisely so the recorder

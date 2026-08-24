@@ -476,6 +476,7 @@ const BASE = {
       kept: false,
       width: 1920,
       height: 1080,
+      fps: 30,
       highlights: [
         { at: 214_000, kind: "kill", label: "Lillia → Zed" },
         { at: 402_000, kind: "death", label: "Khazix → Lillia" },
@@ -512,6 +513,7 @@ const BASE = {
       kept: true,
       width: 1920,
       height: 1080,
+      fps: 30,
       highlights: [
         { at: 2_000, kind: "kill", label: "Nami → Zed" },
         { at: 4_000, kind: "death", label: "Zed → Nami" },
@@ -536,6 +538,7 @@ const BASE = {
     capture: true,
     captureAudio: "system",
     captureBudgetGb: 25,
+    captureFps: 30,
     objectiveNotices: true,
     buildNotices: true,
   },

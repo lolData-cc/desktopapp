@@ -54,6 +54,8 @@ export type Recording = {
   kept: boolean
   width: number
   height: number
+  /** What the capture actually ran at, read off the track. */
+  fps: number
 }
 
 /** One card on the loading screen. */
@@ -102,6 +104,8 @@ export type AppSettings = {
   captureAudio: "none" | "system" | "mic" | "both"
   /** Gigabytes of automatic recordings to keep, or null for no limit. */
   captureBudgetGb: number | null
+  /** Frames per second to record at. */
+  captureFps: number
   objectiveNotices: boolean
   buildNotices: boolean
 }
