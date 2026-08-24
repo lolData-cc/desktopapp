@@ -218,7 +218,11 @@ export function Timeline({
         <span
           aria-hidden
           className="absolute bottom-[-8px] h-[19px] w-[5px] -translate-x-1/2"
-          style={{ left: `${(at / total) * 100}%`, background: "#ffffff", boxShadow: "0 0 12px rgba(0,217,146,0.75)" }}
+          style={{
+            left: `${(at / total) * 100}%`,
+            background: "#ffffff",
+            boxShadow: "0 0 12px rgba(0,217,146,0.75), 0 0 3px 1px rgba(0,0,0,0.8)",
+          }}
         />
 
         {hover !== null && !over && (
@@ -313,10 +317,13 @@ function Mark({
         viewBox="0 0 14 14"
         aria-hidden
         className="transition-transform duration-150 group-hover:-translate-y-[2px] group-hover:scale-125"
+        // ⚠️ A dark shadow UNDER the coloured bloom. The glow alone is light on
+        // light over a bright frame, and a jade triangle on a lit lane is the
+        // same problem the white icons had.
         style={{
           filter: live
-            ? `drop-shadow(0 0 7px ${colour})`
-            : `drop-shadow(0 0 3px ${colour}${assist ? "44" : "88"})`,
+            ? `drop-shadow(0 0 7px ${colour}) drop-shadow(0 1px 2px rgba(0,0,0,0.9))`
+            : `drop-shadow(0 0 3px ${colour}${assist ? "44" : "88"}) drop-shadow(0 1px 2px rgba(0,0,0,0.85))`,
         }}
       >
         {glyph}

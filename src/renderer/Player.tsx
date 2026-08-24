@@ -501,7 +501,17 @@ export default function Player({
         style={{
           opacity: veil && !drawing ? 1 : 0,
           pointerEvents: veil && !drawing ? "auto" : "none",
-          background: "linear-gradient(rgba(4,10,12,0), rgba(4,10,12,0.9))",
+          /**
+           * ⚠️ Weighted UP the strip, not just at its foot.
+           *
+           * The controls sit at the TOP of this band, which under a plain
+           * two-stop gradient is its most transparent part — so the one row
+           * that had to stay readable was standing in the thinnest scrim there
+           * was. Four stops put real cover where the buttons are and still let
+           * it reach nothing at the top edge.
+           */
+          background:
+            "linear-gradient(to top, rgba(1,11,13,0.95) 0%, rgba(1,11,13,0.86) 38%, rgba(1,11,13,0.5) 66%, rgba(1,11,13,0) 100%)",
         }}
       >
         {/* ⚠️ The cluster sits ABOVE the bar and centred, floating, rather than
@@ -530,7 +540,7 @@ export default function Player({
 
         <Timeline at={at} total={total} buffered={buffered} pins={pins} onSeek={seek} runup={RUNUP} />
 
-        <div className="mt-1.5 flex items-center gap-3">
+        <div className="mt-1.5 flex items-center gap-3" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>
           <Clock at={at} total={total} />
           {seeking && (
             <span className="font-jetbrains text-[9px] tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.45)" }}>
@@ -699,6 +709,24 @@ function Glyph({
       className="clip-arrive group relative grid shrink-0 place-items-center disabled:pointer-events-none disabled:opacity-20"
       style={{ width: big ? 66 : 52, height: 52, animationDelay: `${delay}ms`, cursor: "pointer" }}
     >
+      {/**
+        * ⚠️ Ground, not a container.
+        *
+        * A white line icon over a bright frame is nearly invisible, and the
+        * obvious fix — a plate behind it — is the thing this design took OUT.
+        * So the glyph gets DARKNESS instead of a surface: a radial fade with no
+        * edge anywhere, which reads as the picture being quieter here rather
+        * than as a box sitting on it. Death Stranding's icons are bare because
+        * they sit on dark ground; over a video that ground has to be made.
+        */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(1,11,13,0.72) 0%, rgba(1,11,13,0.5) 48%, rgba(1,11,13,0) 100%)",
+        }}
+      />
       <span className={hit ? "clip-spike" : undefined} style={{ display: "grid", placeItems: "center" }}>
         <svg
           width={size}
@@ -713,9 +741,19 @@ function Glyph({
           style={{
             color: on ? JADE : "#ffffff",
             opacity: on ? 1 : 0.82,
-            // ⚠️ Bloom on the GLYPH, never on a plate edge. DS2's glow is inset
-            // on surfaces and outward on light — text and icons are light.
-            filter: on ? `drop-shadow(0 0 7px ${JADE}aa)` : "drop-shadow(0 0 5px rgba(255,255,255,0.28))",
+            /**
+             * ⚠️ A WHITE glyph gets a DARK shadow. It had a white bloom, which
+             * on a dark frame looked like light and on a bright one — a
+             * teamfight, a lit lane — was white spreading into white, so the
+             * icon dissolved exactly when the picture was busiest.
+             *
+             * The lit bloom is kept only for the ON state, where the glyph is
+             * jade and reads as something switched on rather than as a shape
+             * that needs to be legible against anything.
+             */
+            filter: on
+              ? `drop-shadow(0 0 8px ${JADE}bb) drop-shadow(0 1px 2px rgba(0,0,0,0.85))`
+              : "drop-shadow(0 1px 2px rgba(0,0,0,0.9)) drop-shadow(0 0 7px rgba(0,0,0,0.75))",
             transition: "opacity 140ms linear, color 140ms linear",
           }}
           className="group-hover:!opacity-100"
