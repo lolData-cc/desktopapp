@@ -195,18 +195,75 @@ export default function Player({
     }
   }, [wake])
 
+  /**
+   * Going fullscreen, animated by us rather than by the operating system.
+   *
+   * ⚠️ There is no transition to hook. The browser relays the element at the
+   * size of the screen between one frame and the next — it does not tween, and
+   * no amount of CSS on the element will make it, because the geometry change
+   * is not a style change.
+   *
+   * So it is measured and inverted: take the rectangle it occupied BEFORE,
+   * let the jump happen, then transform the now-huge element back down onto
+   * that old rectangle and animate the transform away. The eye sees the panel
+   * grow out of where it was. Non-uniform scale on purpose — the two axes
+   * really do change by different amounts, and matching that is what makes it
+   * read as the same object rather than a new one fading in.
+   */
+  const grow = useCallback((from: DOMRect, to: DOMRect) => {
+    const el = panel.current
+    if (!el) return
+    const sx = Math.max(0.01, from.width / to.width)
+    const sy = Math.max(0.01, from.height / to.height)
+    const dx = from.left - to.left
+    const dy = from.top - to.top
+
+    el.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, opacity: 0.72 },
+        { transform: "none", opacity: 1 },
+      ],
+      // Slower than the interface's own 320ms: this is a whole screen moving,
+      // and a large object that travels at the speed of a small one looks
+      // weightless.
+      { duration: 420, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    )
+  }, [])
+
+  /** The rectangle we were at before the jump, kept across the event. */
+  const before = useRef<DOMRect | null>(null)
+
   const fullscreen = useCallback(() => {
     const el = panel.current
     if (!el) return
+    before.current = el.getBoundingClientRect()
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
     else void el.requestFullscreen().catch(() => undefined)
   }, [])
 
   useEffect(() => {
-    const on = () => setFull(!!document.fullscreenElement)
+    const on = () => {
+      setFull(!!document.fullscreenElement)
+      const el = panel.current
+      const from = before.current
+      before.current = null
+      if (!el || !from) return
+      /**
+       * ⚠️ Measured on THIS tick, not after a frame.
+       *
+       * The element has already been resized by the time this event fires —
+       * that is what the event is for — and getBoundingClientRect forces the
+       * layout it needs, so the new rectangle is available now. Waiting for a
+       * frame first also made the whole effect conditional on the window being
+       * on screen: requestAnimationFrame does not run for a page that is not
+       * compositing, so the animation would simply not happen and nothing would
+       * say why.
+       */
+      grow(from, el.getBoundingClientRect())
+    }
     document.addEventListener("fullscreenchange", on)
     return () => document.removeEventListener("fullscreenchange", on)
-  }, [])
+  }, [grow])
 
   // Volume lives on the element; this keeps the two in step.
   useEffect(() => {
