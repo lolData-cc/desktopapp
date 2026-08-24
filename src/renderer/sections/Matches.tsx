@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react"
 import { championById } from "../../data/champions"
-import { CDN, mmss, queueName, timeAgo, type AppState, type Match } from "../types"
+import Player from "../Player"
+import {
+  CDN,
+  mmss,
+  queueName,
+  recordingFor,
+  timeAgo,
+  type AppState,
+  type Match,
+  type Recording,
+} from "../types"
 
 /**
  * Recent games, read from the client.
@@ -18,6 +28,21 @@ import { CDN, mmss, queueName, timeAgo, type AppState, type Match } from "../typ
 export default function Matches({ s }: { s: AppState }) {
   const [busy, setBusy] = useState(false)
   const matches = s.matches
+
+  /**
+   * ⚠️ The recordings belong HERE, not on a tab of their own.
+   *
+   * A capture is not a separate kind of object you go and browse — it is this
+   * game, with a video attached. Filed apart, you had to remember which of ten
+   * "Lillia, 26 min" rows in one list was the row you were reading in the
+   * other. Attached, the question never comes up.
+   */
+  useEffect(() => { void window.desktop.listRecordings() }, [])
+
+  /** Which recording is open, by ID: the library re-arrives from the shell on
+   *  every change, and holding the object would show a stale copy. */
+  const [watching, setWatching] = useState<string | null>(null)
+  const open = s.recordings.find((r) => r.id === watching) ?? null
 
   const refresh = async () => {
     setBusy(true)
@@ -62,9 +87,20 @@ export default function Matches({ s }: { s: AppState }) {
 
       <div className="mt-4 flex-1 space-y-1.5 overflow-y-auto pr-1">
         {matches.map((m, i) => (
-          <Row key={m.gameId} m={m} patch={s.patch} index={i} />
+          <Row
+            key={m.gameId}
+            m={m}
+            patch={s.patch}
+            index={i}
+            clip={recordingFor(s.recordings, m)}
+            onWatch={setWatching}
+          />
         ))}
       </div>
+
+      {open && (
+        <Player rec={open} patch={s.patch ?? "16.16.1"} onClose={() => setWatching(null)} />
+      )}
     </div>
   )
 }
@@ -77,7 +113,20 @@ function Empty({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Row({ m, patch, index }: { m: Match; patch: string | null; index: number }) {
+function Row({
+  m,
+  patch,
+  index,
+  clip,
+  onWatch,
+}: {
+  m: Match
+  patch: string | null
+  index: number
+  /** The recording of this game, when there is one. */
+  clip: Recording | null
+  onWatch: (id: string) => void
+}) {
   const [slug, setSlug] = useState<string | null>(null)
   const v = patch ?? "16.16.1"
 
@@ -170,6 +219,33 @@ function Row({ m, patch, index }: { m: Match; patch: string | null; index: numbe
           />
         ))}
       </div>
+
+      {/* ⚠️ The slot is always there, filled or empty. Rows that grow a button
+          only when they have a recording shuffle the whole column sideways as
+          you scroll past the game where capture was switched on. */}
+      <span className="ml-2.5 grid w-[30px] shrink-0 place-items-center">
+        {clip ? (
+          <button
+            type="button"
+            onClick={() => onWatch(clip.id)}
+            aria-label={`Watch ${queueName(m.queueId, m.gameMode)}`}
+            title={`Watch this game — ${clip.highlights.length} moment${clip.highlights.length === 1 ? "" : "s"} marked`}
+            className="grid h-[26px] w-[26px] place-items-center transition-transform hover:scale-110"
+            style={{ cursor: "pointer" }}
+          >
+            <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
+              <path d="M13 2 L24 13 L13 24 L2 13 Z" fill="rgba(0,217,146,0.10)" stroke="#00d992" strokeWidth="1.2" />
+              <path d="M10.5 8.5 L17.5 13 L10.5 17.5 Z" fill="#00d992" />
+            </svg>
+          </button>
+        ) : (
+          <span
+            aria-hidden
+            className="block h-[4px] w-[4px] rotate-45"
+            style={{ background: "rgba(215,216,217,0.10)" }}
+          />
+        )}
+      </span>
     </div>
   )
 }

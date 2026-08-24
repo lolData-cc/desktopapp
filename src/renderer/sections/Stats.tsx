@@ -44,7 +44,7 @@ function tally(matches: Match[]): Tally[] {
   return [...by.values()].sort((a, b) => b.games - a.games || b.wins / b.games - a.wins / a.games)
 }
 
-export default function Champions({ s }: { s: AppState }) {
+export default function Stats({ s }: { s: AppState }) {
   const rows = useMemo(() => tally(s.matches ?? []), [s.matches])
 
   if (!s.matches) {
@@ -59,7 +59,7 @@ export default function Champions({ s }: { s: AppState }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-baseline gap-3">
-        <h2 className="font-chakrapetch text-[22px] font-bold leading-none">Champions</h2>
+        <h2 className="font-chakrapetch text-[22px] font-bold leading-none">Stats</h2>
         <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.18em] text-flash/30">
           from your last {games} completed {games === 1 ? "game" : "games"}
         </p>

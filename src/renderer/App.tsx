@@ -2,13 +2,11 @@ import { useEffect, useState } from "react"
 import { CDN, CDRAGON, isPremium, planBadge, type AppState } from "./types"
 import { Attached, Waiting } from "./sections/Overview"
 import Matches from "./sections/Matches"
-import Champions from "./sections/Champions"
+import Stats from "./sections/Stats"
 import AiChat from "./sections/AiChat"
-import Patch from "./sections/Patch"
 import Builds from "./sections/Builds"
 import BuildEditor from "./sections/BuildEditor"
 import Preferences from "./sections/Preferences"
-import Capture from "./sections/Capture"
 import CyberBackdrop from "./CyberBackdrop"
 import Boundary from "./Boundary"
 import Recap, { isPostGame } from "./sections/Recap"
@@ -28,16 +26,29 @@ import logo from "../assets/logo.png"
  * the app, because a menu that mixes navigation with departure makes you read
  * every item before clicking.
  */
-type SectionId = "overview" | "builds" | "matches" | "champions" | "patch" | "ai" | "capture" | "settings"
+type SectionId = "overview" | "build" | "matches" | "stats" | "ai" | "settings"
 
+/**
+ * The rail, and what is no longer on it.
+ *
+ * ⚠️ Four entries, because four is what there is. It had seven, and two of
+ * them were not places:
+ *
+ * - **Capture** was a tab for a feature, not for a thing you go and look at.
+ *   Its recordings ARE your games, so they live on the games — a row in
+ *   Matches with a way to watch it. Its switches live in Settings, where every
+ *   other switch already lives.
+ * - **Patch** is gone entirely.
+ *
+ * lolData AI is deliberately NOT in this list. It sits apart, below, marked as
+ * the paid thing it is — a rail where the one item behind a subscription looks
+ * identical to the four that are not is a rail that sells by ambush.
+ */
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "builds", label: "Builds" },
+  { id: "build", label: "Build" },
   { id: "matches", label: "Matches" },
-  { id: "champions", label: "Champions" },
-  { id: "patch", label: "Patch" },
-  { id: "ai", label: "lolData AI" },
-  { id: "capture", label: "Capture" },
+  { id: "stats", label: "Stats" },
 ]
 
 const DISCORD = "https://discord.gg/loldata"
@@ -170,7 +181,7 @@ export default function App() {
             ) : (
               <Waiting />
             )
-          ) : !s ? null : section === "builds" ? (
+          ) : !s ? null : section === "build" ? (
             editing ? (
               <BuildEditor s={s} championId={editing} onBack={() => setEditing(null)} />
             ) : (
@@ -178,12 +189,8 @@ export default function App() {
             )
           ) : section === "matches" ? (
             <Matches s={s} />
-          ) : section === "champions" ? (
-            <Champions s={s} />
-          ) : section === "patch" ? (
-            <Patch s={s} />
-          ) : section === "capture" ? (
-            <Capture s={s} />
+          ) : section === "stats" ? (
+            <Stats s={s} />
           ) : section === "settings" ? (
             <Preferences s={s} />
           ) : (
@@ -466,20 +473,18 @@ function Rail({
           label={sec.label}
           active={sec.id === section}
           onClick={() => onSection(sec.id)}
-          badge={sec.id === "ai" && !premium ? "pro" : undefined}
           /* A recording running is worth seeing from every section, not only
-             from the one that started it. */
-          live={sec.id === "capture" && recording}
+             from the one it belongs to. Matches is where it will land. */
+          live={sec.id === "matches" && recording}
         />
       ))}
 
-      <Plate
-        className="mt-6"
-        label="Discord"
-        onClick={() => window.desktop.openExternal(DISCORD)}
-        glyph={<DiscordMark />}
-        trailing="↗"
-      />
+      {/* ⚠️ Apart, and marked. This is the one thing on the rail behind a
+          subscription, and a paid item dressed identically to four free ones
+          is a rail that sells by ambush — you find out what it costs after
+          reaching for it. The separation is the honesty; the crest is the
+          shorthand. */}
+      <AiPlate active={section === "ai"} premium={premium} onClick={() => onSection("ai")} />
 
       <Plate
         className="mt-auto"
@@ -497,7 +502,84 @@ function Rail({
           <span className={`block h-[7px] w-[7px] rotate-45 ${settingsOpen ? "bg-jade" : "bg-flash/25"}`} />
         }
       />
+
+      {/* ⚠️ Not a plate. Discord LEAVES the app, and giving it the same shape
+          as the places you stay makes you read every item before clicking. A
+          departure should look like one. */}
+      <button
+        type="button"
+        onClick={() => window.desktop.openExternal(DISCORD)}
+        className="pointer-events-auto mt-2 flex items-center gap-2 pl-3 pr-2 py-1.5 text-left opacity-40 transition-opacity hover:opacity-90"
+      >
+        <DiscordMark />
+        <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/70">
+          discord
+        </span>
+        <span className="font-jetbrains text-[9px] text-flash/40">↗</span>
+      </button>
     </nav>
+  )
+}
+
+/**
+ * lolData AI, set apart from the rail proper.
+ *
+ * A rule above it rather than a gap alone: the gap says "later in the list",
+ * the rule says "a different kind of thing". Which it is — everything above is
+ * reading what already happened, and this is asking a question of it, on a
+ * plan.
+ */
+function AiPlate({
+  active,
+  premium,
+  onClick,
+}: {
+  active: boolean
+  premium: boolean
+  onClick: () => void
+}) {
+  return (
+    <div className="mt-5 pt-4">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-3 right-2 -mt-4 block h-px"
+        style={{ background: "linear-gradient(90deg, rgba(0,217,146,0.35), rgba(0,217,146,0))" }}
+      />
+      <button
+        type="button"
+        onClick={onClick}
+        className={`plate group pointer-events-auto relative flex w-full items-center gap-2.5 py-2 pl-3 pr-2.5 text-left ${
+          active ? "plate-on" : ""
+        }`}
+        style={{
+          clipPath: PLATE,
+          background: active ? "rgba(0,217,146,0.10)" : "rgba(0,217,146,0.045)",
+        }}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-[2px] transition-colors"
+          style={{ background: active ? "#00d992" : "rgba(0,217,146,0.45)" }}
+        />
+        <span className="grid w-[13px] shrink-0 place-items-center">
+          <span className="block h-[7px] w-[7px] rotate-45" style={{ background: active ? "#00d992" : "rgba(0,217,146,0.6)" }} />
+        </span>
+        <span
+          className={`font-chakrapetch text-[13px] font-bold tracking-wide transition-colors ${
+            active ? "text-flash" : "text-flash/70 group-hover:text-flash"
+          }`}
+        >
+          lolData AI
+        </span>
+        {/* What it costs, before you press it — not after. */}
+        <span
+          className="ml-auto font-jetbrains text-[8px] uppercase tracking-[0.16em]"
+          style={{ color: premium ? "rgba(0,217,146,0.75)" : "rgba(255,182,21,0.75)" }}
+        >
+          {premium ? "on" : "premium"}
+        </span>
+      </button>
+    </div>
   )
 }
 
