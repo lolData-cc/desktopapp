@@ -391,3 +391,26 @@ body {
     animation-delay: 0ms;
   }
 }
+
+/* ── the overview totem ───────────────────────────────────────────────────
+   A slow float, so the card reads as suspended rather than pinned. Transform
+   only: this runs whenever the app is open and idle, and anything touching
+   layout would be recomputing it forever for a decoration. */
+@keyframes totem-float {
+  0%, 100% { transform: translateY(-6px); }
+  50%      { transform: translateY(6px); }
+}
+.totem { animation: totem-float 7s ease-in-out infinite; }
+
+/* The word behind it changes with the client's state, so it ARRIVES rather
+   than swapping — keyed on the text, which restarts this each time. */
+@keyframes wm-in {
+  from { opacity: 0; transform: translateY(-56%) scale(1.06); letter-spacing: 0.14em; }
+  to   { opacity: 1; transform: translateY(-56%) scale(1); letter-spacing: 0.06em; }
+}
+.wm { animation: wm-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .totem { animation: none; }
+  .wm { animation-duration: 1ms; }
+}
