@@ -229,16 +229,7 @@ export default function Player({
       // bounces.
       { duration: 420, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
     )
-
-    // ⚠️ And a ribbon travels across it, which is what makes this DS2 rather
-    // than a zoom. The interface there does not announce a change by moving
-    // faster; it runs a band of light over the thing that changed.
-    setSweep((n) => n + 1)
   }, [])
-
-  /** Bumped to re-arm the sweep: an animation that merely exists has already
-   *  played, and a second fullscreen would get nothing. */
-  const [sweep, setSweep] = useState(0)
 
   /** The rectangle we were at before the jump, kept across the event. */
   const before = useRef<DOMRect | null>(null)
@@ -401,19 +392,6 @@ export default function Player({
       />
 
       <PlayerDraw active={drawing} strokes={strokes} onChange={setStrokes} />
-
-      {/* the sweep that answers a change of size */}
-      {sweep > 0 && (
-        <span
-          key={sweep}
-          aria-hidden
-          className="clip-ribbon pointer-events-none absolute inset-y-0 z-30 w-[38%]"
-          style={{
-            background:
-              "linear-gradient(90deg, transparent, rgba(0,217,146,0.10) 40%, rgba(255,255,255,0.14) 50%, rgba(0,217,146,0.10) 60%, transparent)",
-          }}
-        />
-      )}
 
       {!ready && !failed && (
         <div className="absolute inset-0 grid place-items-center">
@@ -645,15 +623,6 @@ function Cluster({
 }) {
   return (
     <div className="relative mb-4 flex items-center justify-center gap-1">
-      {/* the ribbon that builds the row */}
-      <span
-        aria-hidden
-        className="clip-ribbon pointer-events-none absolute inset-y-0 w-[42%]"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${JADE}22 35%, ${JADE}3a 50%, ${JADE}22 65%, transparent)`,
-        }}
-      />
-
       <Glyph delay={140} label={drawing ? "Stop drawing" : "Draw on the frame"} on={drawing} onClick={onDraw}>
         <path d="M3 21 L4 16 L16.5 3.5 L20.5 7.5 L8 20 Z" />
         <path d="M15 5 L19 9" />
@@ -858,23 +827,23 @@ function Volume({
 /* ── the one control before anything has been pressed ────────────────────── */
 
 /**
- * DS2's primary call to action is an **arrow-tag plate**: a rectangle that
- * terminates in a chevron point, with a gradient running towards it. It is the
- * one place its interface allows a shape to be anything other than a plain
- * rectangle, and it is exactly right here — the plate itself points forward,
- * so the button is the arrow rather than containing one.
+ * A rhombus with a play mark in it, and nothing else.
  *
- * ⚠️ No corner brackets. Those are Death Stranding 1, they were the thing that
- * looked approximate, and in DS2 the only brackets left are pale grey hairlines
- * around INSPECTED CONTENT — never around a button.
+ * ⚠️ Everything else went. It had a chevron-tag silhouette, a gradient, a
+ * hairline rule, a morse run, a word and a timestamp — six devices arguing on
+ * one button, when a button that exists to be pressed once has one thing to
+ * say. The aria-label still carries what the label used to.
  *
- * ⚠️ Pressing it flashes rather than shrinking. See the note on Cluster: DS2
- * answers input with light.
+ * ⚠️ Drawn as SVG rather than a rotated box. A box turned 45° takes its
+ * children with it, so the play mark would need counter-rotating, and an inset
+ * shadow on a clipped box still follows the BOX's edges rather than the
+ * diamond's — the glow would sit in the corners of a shape with no corners.
+ * Two paths and a gradient are simpler than either workaround, and they stay
+ * crisp at any size.
  */
 function BigPlay({ onClick, at }: { onClick: () => void; at: number }) {
   const [hit, setHit] = useState(0)
   const started = at > 0.6
-  const POINT = 30
 
   return (
     <button
@@ -884,45 +853,42 @@ function BigPlay({ onClick, at }: { onClick: () => void; at: number }) {
         // Let the flash be seen before the frame starts moving under it.
         setTimeout(onClick, 90)
       }}
-      aria-label="Play"
+      aria-label={started ? `Resume at ${mmss(at)}` : "Play from the start"}
+      title={started ? `Resume at ${mmss(at)}` : "Play from the start"}
       className="absolute inset-0 z-20 grid place-items-center"
       style={{ cursor: "pointer" }}
     >
-      <span
-        key={hit}
-        className={`clip-arrive group relative flex items-center ${hit ? "clip-spike" : ""}`}
-        style={{
-          height: 62,
-          paddingLeft: 26,
-          paddingRight: POINT + 16,
-          background: `linear-gradient(90deg, rgba(1,11,13,0.82) 0%, ${JADE}1f 55%, ${JADE}42 100%)`,
-          clipPath: `polygon(0 0, calc(100% - ${POINT}px) 0, 100% 50%, calc(100% - ${POINT}px) 100%, 0 100%)`,
-        }}
-      >
-        {/* the rule along the top, and the morse run leading into it — DS2 puts
-            this at the edge of everything and it is the cheapest tell there is */}
-        <span aria-hidden className="absolute left-0 right-0 top-0 h-px" style={{ background: `${JADE}88` }} />
-        <span aria-hidden className="absolute left-0 top-[5px] flex items-center gap-[3px]">
-          <i className="block h-[2px] w-[2px]" style={{ background: `${JADE}cc` }} />
-          <i className="block h-[2px] w-[8px]" style={{ background: `${JADE}88` }} />
-          <i className="block h-[2px] w-[2px]" style={{ background: `${JADE}cc` }} />
-        </span>
+      <span key={hit} className={`clip-arrive group ${hit ? "clip-spike" : ""}`}>
+        <svg width="132" height="132" viewBox="0 0 132 132" aria-hidden className="transition-opacity duration-150">
+          <defs>
+            {/* The lit rim: DS2's surfaces glow from the INSIDE EDGE inwards,
+                never outwards. Transparent at the centre so the picture behind
+                still reads through the button. */}
+            <radialGradient id="clip-rim" cx="50%" cy="50%" r="50%">
+              <stop offset="55%" stopColor="#00d992" stopOpacity="0" />
+              <stop offset="100%" stopColor="#00d992" stopOpacity="0.22" />
+            </radialGradient>
+          </defs>
 
-        <svg width="19" height="22" viewBox="0 0 19 22" aria-hidden className="mr-3.5 shrink-0">
-          <path d="M2 1 L18 11 L2 21 Z" fill="#ffffff" style={{ filter: "drop-shadow(0 0 8px rgba(255,255,255,0.45))" }} />
+          <path d="M66 5 L127 66 L66 127 L5 66 Z" fill="rgba(1,11,13,0.72)" />
+          <path d="M66 5 L127 66 L66 127 L5 66 Z" fill="url(#clip-rim)" />
+          <path
+            d="M66 5 L127 66 L66 127 L5 66 Z"
+            fill="none"
+            stroke="#00d992"
+            strokeWidth="1.5"
+            className="transition-[stroke-width] duration-150 group-hover:[stroke-width:2.5]"
+          />
+
+          {/* ⚠️ Nudged right of the geometric centre. A triangle balanced on its
+              bounding box reads as sitting too far left, because the eye
+              centres on its mass and the mass is behind the point. */}
+          <path
+            d="M56 47 L88 66 L56 85 Z"
+            fill="#ffffff"
+            style={{ filter: "drop-shadow(0 0 9px rgba(255,255,255,0.5))" }}
+          />
         </svg>
-
-        <span className="flex flex-col items-start leading-none">
-          <span
-            className="font-chakrapetch text-[17px] font-bold tracking-[0.2em] text-white"
-            style={{ filter: `drop-shadow(0 0 10px ${JADE}77)` }}
-          >
-            {started ? "RESUME" : "PLAY"}
-          </span>
-          <span className="mt-[5px] font-jetbrains text-[8.5px] tracking-[0.28em]" style={{ color: DIM }}>
-            {started ? mmss(at) : "from the start"}
-          </span>
-        </span>
       </span>
     </button>
   )

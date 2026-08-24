@@ -566,15 +566,6 @@ body {
 }
 .clip-arrive { animation: clip-arrive 170ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-/* The ribbon: DS2's one unmistakable device. A luminous streak that travels
-   across the thing being pointed at, opaque nowhere and brightest in the
-   middle. It builds the row on arrival and answers a press. */
-@keyframes clip-ribbon {
-  from { transform: translateX(-115%); }
-  to   { transform: translateX(115%); }
-}
-.clip-ribbon { animation: clip-ribbon 620ms cubic-bezier(0.3, 0, 0.2, 1) both; }
-
 /* A press: light, not motion. */
 @keyframes clip-spike {
   0%   { filter: brightness(1); }
@@ -584,7 +575,7 @@ body {
 .clip-spike { animation: clip-spike 260ms ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
-  .clip-arrive, .clip-ribbon, .clip-spike { animation: none; }
+  .clip-arrive, .clip-spike { animation: none; }
 }
 
 /* The recording player, in fullscreen.
