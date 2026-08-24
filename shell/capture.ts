@@ -580,6 +580,33 @@ export async function tidyLibrary(): Promise<void> {
   }
 }
 
+/**
+ * Throw the recordings away.
+ *
+ * ⚠️ KEPT ones survive unless explicitly included, and the caller has to ask
+ * for that separately. "Keep" is a promise this app made — the size limit is
+ * told not to count them — and an "empty" button that quietly broke it would
+ * make the promise worthless everywhere else it appears.
+ *
+ * ⚠️ Refuses while a recording is running. Deleting the file that is being
+ * written to would leave a live stream pointed at nothing.
+ */
+export async function emptyRecordings(includeKept: boolean): Promise<number> {
+  if (current) return 0
+  const all = await readIndex()
+  const doomed = includeKept ? all : all.filter((r) => !r.kept)
+  const survivors = includeKept ? [] : all.filter((r) => r.kept)
+
+  let freed = 0
+  for (const r of doomed) {
+    freed += r.bytes
+    await rm(r.file, { force: true }).catch(() => undefined)
+  }
+  await writeIndex(survivors)
+  console.log("[capture] emptied %d recording(s), %s GB", doomed.length, (freed / 1024 ** 3).toFixed(2))
+  return freed
+}
+
 /** What the library is costing, for a screen that should say so plainly. */
 export async function librarySize(): Promise<number> {
   try {

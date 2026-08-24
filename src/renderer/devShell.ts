@@ -460,6 +460,7 @@ const SCENES: Record<string, unknown> = {
  */
 const BASE = {
   clip: { state: "idle" },
+  storage: { recordings: 11_600_000_000, kept: 1_900_000_000, clips: 42_000_000, clipCount: 6 },
   recording: false,
   captureError: null,
   libraryBytes: 1_780_000_000,

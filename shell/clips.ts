@@ -14,7 +14,7 @@
  * and no moderation policy for video somebody else hosts.
  */
 import { app, BrowserWindow, ipcMain, shell } from "electron"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { CLIP_SCHEME, clipUrl } from "../src/data/clip"
 
@@ -158,8 +158,43 @@ export async function makeClip(
   return { ok: true, file, bytes: bytes.byteLength, seconds }
 }
 
+/** What the shared clips are costing, and how many there are. */
+export async function clipsOnDisk(): Promise<{ bytes: number; count: number }> {
+  try {
+    const files = await readdir(dir())
+    let bytes = 0
+    let count = 0
+    for (const f of files) {
+      bytes += (await stat(join(dir(), f))).size
+      count++
+    }
+    return { bytes, count }
+  } catch {
+    return { bytes: 0, count: 0 }
+  }
+}
+
+/** Throw the shared clips away. They are cuts of recordings that still exist,
+ *  so this loses nothing that cannot be cut again. */
+export async function emptyClips(): Promise<number> {
+  const { bytes } = await clipsOnDisk()
+  try {
+    for (const f of await readdir(dir())) await rm(join(dir(), f), { force: true }).catch(() => undefined)
+  } catch {
+    return 0
+  }
+  console.log("[clip] emptied the clips, %s MB", (bytes / 1048576).toFixed(0))
+  return bytes
+}
+
 export function revealClip(file: string): void {
   shell.showItemInFolder(file)
+}
+
+/** Where the clips live, for a "show me" button that does not make anybody
+ *  hunt through AppData. */
+export function revealClipFolder(): void {
+  void mkdir(dir(), { recursive: true }).then(() => shell.openPath(dir()))
 }
 
 export function destroyClipper(): void {

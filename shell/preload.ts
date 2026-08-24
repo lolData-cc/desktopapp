@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld("desktop", {
   revealClip: (file: string) => ipcRenderer.invoke("clip:reveal", file),
   forgetClip: () => ipcRenderer.invoke("clip:forget"),
   dragClip: (file: string) => ipcRenderer.send("clip:drag", file),
+  revealClipFolder: () => ipcRenderer.invoke("clip:folder"),
+  emptyRecordings: (includeKept: boolean) => ipcRenderer.invoke("storage:empty-recordings", includeKept),
+  emptyClips: () => ipcRenderer.invoke("storage:empty-clips"),
+  uninstall: () => ipcRenderer.invoke("app:uninstall"),
   ranks: (riotIds: string[], region: string | null) => ipcRenderer.invoke("ranks:get", riotIds, region),
   // Signing in opens a BROWSER. This surface deliberately has no way to send a
   // password anywhere — the site hands a session back over loldata://auth.

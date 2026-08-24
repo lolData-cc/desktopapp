@@ -3526,9 +3526,9 @@ GFS4: `);
       }
     }
     var fs$readdir = fs2.readdir;
-    fs2.readdir = readdir2;
+    fs2.readdir = readdir3;
     var noReaddirOptionVersions = /^v[0-5]\./;
-    function readdir2(path, options, cb) {
+    function readdir3(path, options, cb) {
       if (typeof options === "function")
         cb = options, options = null;
       var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir(path2, options2, cb2, startTime) {
@@ -4064,7 +4064,7 @@ var require_copy = __commonJS((exports, module) => {
   var mkdirs = require_mkdirs().mkdirs;
   var pathExists = require_path_exists().pathExists;
   var utimesMillis = require_utimes().utimesMillis;
-  var stat2 = require_stat();
+  var stat3 = require_stat();
   function copy(src, dest, opts, cb) {
     if (typeof opts === "function" && !cb) {
       cb = opts;
@@ -4081,11 +4081,11 @@ var require_copy = __commonJS((exports, module) => {
 
 ` + "\tsee https://github.com/jprichardson/node-fs-extra/issues/269", "Warning", "fs-extra-WARN0001");
     }
-    stat2.checkPaths(src, dest, "copy", opts, (err, stats) => {
+    stat3.checkPaths(src, dest, "copy", opts, (err, stats) => {
       if (err)
         return cb(err);
       const { srcStat, destStat } = stats;
-      stat2.checkParentPaths(src, srcStat, dest, "copy", (err2) => {
+      stat3.checkParentPaths(src, srcStat, dest, "copy", (err2) => {
         if (err2)
           return cb(err2);
         if (opts.filter)
@@ -4121,8 +4121,8 @@ var require_copy = __commonJS((exports, module) => {
     return getStats(destStat, src, dest, opts, cb);
   }
   function getStats(destStat, src, dest, opts, cb) {
-    const stat3 = opts.dereference ? fs.stat : fs.lstat;
-    stat3(src, (err, srcStat) => {
+    const stat4 = opts.dereference ? fs.stat : fs.lstat;
+    stat4(src, (err, srcStat) => {
       if (err)
         return cb(err);
       if (srcStat.isDirectory())
@@ -4229,7 +4229,7 @@ var require_copy = __commonJS((exports, module) => {
   function copyDirItem(items, item, src, dest, opts, cb) {
     const srcItem = path.join(src, item);
     const destItem = path.join(dest, item);
-    stat2.checkPaths(srcItem, destItem, "copy", opts, (err, stats) => {
+    stat3.checkPaths(srcItem, destItem, "copy", opts, (err, stats) => {
       if (err)
         return cb(err);
       const { destStat } = stats;
@@ -4259,10 +4259,10 @@ var require_copy = __commonJS((exports, module) => {
           if (opts.dereference) {
             resolvedDest = path.resolve(process.cwd(), resolvedDest);
           }
-          if (stat2.isSrcSubdir(resolvedSrc, resolvedDest)) {
+          if (stat3.isSrcSubdir(resolvedSrc, resolvedDest)) {
             return cb(new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`));
           }
-          if (destStat.isDirectory() && stat2.isSrcSubdir(resolvedDest, resolvedSrc)) {
+          if (destStat.isDirectory() && stat3.isSrcSubdir(resolvedDest, resolvedSrc)) {
             return cb(new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`));
           }
           return copyLink(resolvedSrc, dest, cb);
@@ -4286,7 +4286,7 @@ var require_copy_sync = __commonJS((exports, module) => {
   var path = __require("path");
   var mkdirsSync = require_mkdirs().mkdirsSync;
   var utimesMillisSync = require_utimes().utimesMillisSync;
-  var stat2 = require_stat();
+  var stat3 = require_stat();
   function copySync(src, dest, opts) {
     if (typeof opts === "function") {
       opts = { filter: opts };
@@ -4299,8 +4299,8 @@ var require_copy_sync = __commonJS((exports, module) => {
 
 ` + "\tsee https://github.com/jprichardson/node-fs-extra/issues/269", "Warning", "fs-extra-WARN0002");
     }
-    const { srcStat, destStat } = stat2.checkPathsSync(src, dest, "copy", opts);
-    stat2.checkParentPathsSync(src, srcStat, dest, "copy");
+    const { srcStat, destStat } = stat3.checkPathsSync(src, dest, "copy", opts);
+    stat3.checkParentPathsSync(src, srcStat, dest, "copy");
     return handleFilterAndCopy(destStat, src, dest, opts);
   }
   function handleFilterAndCopy(destStat, src, dest, opts) {
@@ -4384,7 +4384,7 @@ var require_copy_sync = __commonJS((exports, module) => {
   function copyDirItem(item, src, dest, opts) {
     const srcItem = path.join(src, item);
     const destItem = path.join(dest, item);
-    const { destStat } = stat2.checkPathsSync(srcItem, destItem, "copy", opts);
+    const { destStat } = stat3.checkPathsSync(srcItem, destItem, "copy", opts);
     return startCopy(destStat, srcItem, destItem, opts);
   }
   function onLink(destStat, src, dest, opts) {
@@ -4406,10 +4406,10 @@ var require_copy_sync = __commonJS((exports, module) => {
       if (opts.dereference) {
         resolvedDest = path.resolve(process.cwd(), resolvedDest);
       }
-      if (stat2.isSrcSubdir(resolvedSrc, resolvedDest)) {
+      if (stat3.isSrcSubdir(resolvedSrc, resolvedDest)) {
         throw new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`);
       }
-      if (fs.statSync(dest).isDirectory() && stat2.isSrcSubdir(resolvedDest, resolvedSrc)) {
+      if (fs.statSync(dest).isDirectory() && stat3.isSrcSubdir(resolvedDest, resolvedSrc)) {
         throw new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`);
       }
       return copyLink(resolvedSrc, dest);
@@ -5253,7 +5253,7 @@ var require_move = __commonJS((exports, module) => {
   var remove = require_remove().remove;
   var mkdirp = require_mkdirs().mkdirp;
   var pathExists = require_path_exists().pathExists;
-  var stat2 = require_stat();
+  var stat3 = require_stat();
   function move(src, dest, opts, cb) {
     if (typeof opts === "function") {
       cb = opts;
@@ -5261,11 +5261,11 @@ var require_move = __commonJS((exports, module) => {
     }
     opts = opts || {};
     const overwrite = opts.overwrite || opts.clobber || false;
-    stat2.checkPaths(src, dest, "move", opts, (err, stats) => {
+    stat3.checkPaths(src, dest, "move", opts, (err, stats) => {
       if (err)
         return cb(err);
       const { srcStat, isChangingCase = false } = stats;
-      stat2.checkParentPaths(src, srcStat, dest, "move", (err2) => {
+      stat3.checkParentPaths(src, srcStat, dest, "move", (err2) => {
         if (err2)
           return cb(err2);
         if (isParentRoot(dest))
@@ -5331,12 +5331,12 @@ var require_move_sync = __commonJS((exports, module) => {
   var copySync = require_copy2().copySync;
   var removeSync = require_remove().removeSync;
   var mkdirpSync = require_mkdirs().mkdirpSync;
-  var stat2 = require_stat();
+  var stat3 = require_stat();
   function moveSync(src, dest, opts) {
     opts = opts || {};
     const overwrite = opts.overwrite || opts.clobber || false;
-    const { srcStat, isChangingCase = false } = stat2.checkPathsSync(src, dest, "move", opts);
-    stat2.checkParentPathsSync(src, srcStat, dest, "move");
+    const { srcStat, isChangingCase = false } = stat3.checkPathsSync(src, dest, "move", opts);
+    stat3.checkParentPathsSync(src, srcStat, dest, "move");
     if (!isParentRoot(dest))
       mkdirpSync(path.dirname(dest));
     return doRename(src, dest, overwrite, isChangingCase);
@@ -18345,7 +18345,8 @@ var require_main2 = __commonJS((exports) => {
 });
 
 // shell/main.ts
-import { app as app5, BrowserWindow as BrowserWindow5, globalShortcut, ipcMain as ipcMain3, screen as screen2, shell as shell3 } from "electron";
+import { app as app5, BrowserWindow as BrowserWindow5, dialog, globalShortcut, ipcMain as ipcMain3, screen as screen2, shell as shell3 } from "electron";
+import { execFile as execFile2, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname as dirname2, join as join6, resolve } from "node:path";
 import { readFile as readFile5, writeFile as writeFile4, mkdir as mkdir4 } from "node:fs/promises";
@@ -19164,6 +19165,23 @@ async function tidyLibrary() {
     }
   } catch {}
 }
+async function emptyRecordings(includeKept) {
+  if (current)
+    return 0;
+  const all = await readIndex();
+  const doomed = includeKept ? all : all.filter((r) => !r.kept);
+  const survivors = includeKept ? [] : all.filter((r) => r.kept);
+  let freed = 0;
+  for (const r of doomed) {
+    freed += r.bytes;
+    await rm(r.file, { force: true }).catch(() => {
+      return;
+    });
+  }
+  await writeIndex(survivors);
+  console.log("[capture] emptied %d recording(s), %s GB", doomed.length, (freed / 1073741824).toFixed(2));
+  return freed;
+}
 async function librarySize() {
   try {
     const files = await readdir(dir());
@@ -19264,7 +19282,7 @@ function destroyRecorder() {
 
 // shell/clips.ts
 import { app as app2, BrowserWindow as BrowserWindow4, ipcMain as ipcMain2, shell as shell2 } from "electron";
-import { mkdir as mkdir2, writeFile as writeFile2 } from "node:fs/promises";
+import { mkdir as mkdir2, readdir as readdir2, rm as rm2, stat as stat2, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
 var dir2 = () => join4(app2.getPath("userData"), "clips");
@@ -19344,8 +19362,38 @@ async function makeClip(req, progress) {
   console.log("[clip] %s — %ds, %s MB", file, seconds, (bytes.byteLength / 1048576).toFixed(1));
   return { ok: true, file, bytes: bytes.byteLength, seconds };
 }
+async function clipsOnDisk() {
+  try {
+    const files = await readdir2(dir2());
+    let bytes = 0;
+    let count = 0;
+    for (const f of files) {
+      bytes += (await stat2(join4(dir2(), f))).size;
+      count++;
+    }
+    return { bytes, count };
+  } catch {
+    return { bytes: 0, count: 0 };
+  }
+}
+async function emptyClips() {
+  const { bytes } = await clipsOnDisk();
+  try {
+    for (const f of await readdir2(dir2()))
+      await rm2(join4(dir2(), f), { force: true }).catch(() => {
+        return;
+      });
+  } catch {
+    return 0;
+  }
+  console.log("[clip] emptied the clips, %s MB", (bytes / 1048576).toFixed(0));
+  return bytes;
+}
 function revealClip(file) {
   shell2.showItemInFolder(file);
+}
+function revealClipFolder() {
+  mkdir2(dir2(), { recursive: true }).then(() => shell2.openPath(dir2()));
 }
 function destroyClipper() {
   if (win2 && !win2.isDestroyed())
@@ -19665,13 +19713,13 @@ function honours(g) {
   const all = g.participants ?? [];
   if (all.length < 2)
     return { mvp: null, ace: null };
-  const stat2 = (p, k) => num((p.stats ?? {})[k]);
+  const stat3 = (p, k) => num((p.stats ?? {})[k]);
   const peak = {
-    kda: Math.max(...all.map((p) => (stat2(p, "kills") + stat2(p, "assists") * 0.6) / Math.max(1, stat2(p, "deaths")))),
-    dmg: Math.max(...all.map((p) => stat2(p, "totalDamageDealtToChampions"))),
-    gold: Math.max(...all.map((p) => stat2(p, "goldEarned"))),
-    cs: Math.max(...all.map((p) => stat2(p, "totalMinionsKilled") + stat2(p, "neutralMinionsKilled"))),
-    vision: Math.max(...all.map((p) => stat2(p, "visionScore")))
+    kda: Math.max(...all.map((p) => (stat3(p, "kills") + stat3(p, "assists") * 0.6) / Math.max(1, stat3(p, "deaths")))),
+    dmg: Math.max(...all.map((p) => stat3(p, "totalDamageDealtToChampions"))),
+    gold: Math.max(...all.map((p) => stat3(p, "goldEarned"))),
+    cs: Math.max(...all.map((p) => stat3(p, "totalMinionsKilled") + stat3(p, "neutralMinionsKilled"))),
+    vision: Math.max(...all.map((p) => stat3(p, "visionScore")))
   };
   const best = (won) => {
     const side = all.filter((p) => p.stats?.win === true === won);
@@ -20654,6 +20702,7 @@ var state = {
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
   clip: { state: "idle" },
+  storage: { recordings: 0, kept: 0, clips: 0, clipCount: 0 },
   recording: false,
   recordings: [],
   libraryBytes: 0,
@@ -21503,8 +21552,16 @@ ipcMain3.handle("profile:refresh", async () => {
   await readProfile();
 });
 async function pushRecordings() {
-  const [recordings, bytes] = await Promise.all([readIndex(), librarySize()]);
-  push({ recordings, libraryBytes: bytes, recording: isRecording(), captureError: captureError() });
+  const [recordings, bytes, clips] = await Promise.all([readIndex(), librarySize(), clipsOnDisk()]);
+  const kept = recordings.filter((r) => r.kept).reduce((n, r) => n + r.bytes, 0);
+  const auto = recordings.filter((r) => !r.kept).reduce((n, r) => n + r.bytes, 0);
+  push({
+    recordings,
+    libraryBytes: bytes,
+    storage: { recordings: auto, kept, clips: clips.bytes, clipCount: clips.count },
+    recording: isRecording(),
+    captureError: captureError()
+  });
 }
 ipcMain3.handle("capture:list", async () => {
   await pushRecordings();
@@ -21535,6 +21592,85 @@ ipcMain3.handle("clip:make", async (_e, req) => {
 ipcMain3.handle("clip:reveal", (_e, file2) => {
   revealClip(file2);
 });
+ipcMain3.handle("clip:folder", () => {
+  revealClipFolder();
+});
+async function confirmDelete(what, detail) {
+  if (!win3)
+    return false;
+  const { response } = await dialog.showMessageBox(win3, {
+    type: "warning",
+    buttons: ["Delete", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+    title: "lolData",
+    message: what,
+    detail,
+    noLink: true
+  });
+  return response === 0;
+}
+ipcMain3.handle("storage:empty-recordings", async (_e, includeKept) => {
+  if (state.recording)
+    return;
+  const all = await readIndex();
+  const doomed = includeKept ? all : all.filter((r) => !r.kept);
+  if (!doomed.length)
+    return;
+  const bytes = doomed.reduce((n, r) => n + r.bytes, 0);
+  const keptCount = doomed.filter((r) => r.kept).length;
+  const ok = await confirmDelete(`Delete ${doomed.length} recording${doomed.length === 1 ? "" : "s"}?`, `${(bytes / 1024 ** 3).toFixed(2)} GB will be removed from your disk. This cannot be undone — the files are deleted, not moved to the recycle bin.` + (keptCount ? `
+
+${keptCount} of them you had marked as kept.` : ""));
+  if (!ok)
+    return;
+  await emptyRecordings(includeKept);
+  await pushRecordings();
+});
+ipcMain3.handle("storage:empty-clips", async () => {
+  const { bytes, count } = await clipsOnDisk();
+  if (!count)
+    return;
+  const ok = await confirmDelete(`Delete ${count} clip${count === 1 ? "" : "s"}?`, `${(bytes / 1048576).toFixed(0)} MB will be removed. The recordings they were cut from are not touched, so any of them can be cut again.`);
+  if (!ok)
+    return;
+  await emptyClips();
+  await pushRecordings();
+});
+ipcMain3.handle("app:uninstall", async () => {
+  const registry = await uninstallCommand();
+  const ok = await confirmDelete(registry ? "Uninstall lolData?" : "Open Windows' uninstall page?", (registry ? "The uninstaller will open and this app will close." : "This build has no installer registered — in development the program is Electron itself. Windows' own list of installed apps will open instead.") + `
+
+Your recordings and clips are NOT removed by uninstalling: they live in your AppData folder, and Settings → Capture can empty them first.`);
+  if (!ok)
+    return;
+  if (!registry) {
+    shell3.openExternal("ms-settings:appsfeatures");
+    return;
+  }
+  try {
+    const child = spawn("cmd", ["/c", "start", "", registry], {
+      windowsHide: true,
+      detached: true,
+      stdio: "ignore"
+    });
+    child.unref();
+  } catch (e) {
+    console.log("[app] could not start the uninstaller: %s", e?.message);
+    shell3.openExternal("ms-settings:appsfeatures");
+  }
+});
+function uninstallCommand() {
+  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${app5.getName()}`;
+  return new Promise((resolve2) => {
+    execFile2("reg", ["query", key, "/v", "UninstallString"], { windowsHide: true }, (err, out2) => {
+      if (err || !out2)
+        return resolve2(null);
+      const m = /UninstallString\s+REG_\w+\s+(.+)/.exec(out2);
+      resolve2(m?.[1]?.trim().replace(/^"|"$/g, "") ?? null);
+    });
+  });
+}
 ipcMain3.handle("clip:forget", () => {
   push({ clip: { state: "idle" } });
 });

@@ -349,6 +349,60 @@ function CaptureTab({
         </section>
       )}
 
+      {/**
+        * ⚠️ Three numbers, not one, because they obey three different rules.
+        * The automatic recordings are what the size limit governs; the kept
+        * ones are deliberately outside it; the clips are cuts that can always
+        * be made again. A single "storage used" would hide the only one you can
+        * act on.
+        */}
+      <section>
+        <p className="mb-2 font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">
+          disk used
+        </p>
+        <div className="space-y-1.5">
+          <Line
+            label="Recordings"
+            note={`${automatic} game${automatic === 1 ? "" : "s"} under the size limit`}
+            bytes={s.storage.recordings}
+            action={automatic > 0 ? "empty" : null}
+            disabled={s.recording}
+            onAction={() => void window.desktop.emptyRecordings(false)}
+          />
+          {kept > 0 && (
+            <Line
+              label="Kept recordings"
+              note="Outside the limit — never discarded on their own"
+              bytes={s.storage.kept}
+              action="delete these too"
+              disabled={s.recording}
+              onAction={() => void window.desktop.emptyRecordings(true)}
+            />
+          )}
+          <Line
+            label="Shared clips"
+            note={`${s.storage.clipCount} cut to send · the recordings they came from are untouched`}
+            bytes={s.storage.clips}
+            action={s.storage.clipCount > 0 ? "empty" : null}
+            onAction={() => void window.desktop.emptyClips()}
+            onShow={() => void window.desktop.revealClipFolder()}
+          />
+          <div className="flex items-center gap-3 px-3.5 pt-1">
+            <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.16em] text-flash/30">
+              total on disk
+            </p>
+            <p className="ml-auto font-chakrapetch text-[14px] font-bold tabular-nums text-flash/80">
+              {gb(s.storage.recordings + s.storage.kept + s.storage.clips)}
+            </p>
+          </div>
+        </div>
+        {s.recording && (
+          <p className="mt-2 font-chakrapetch text-[11.5px] text-citrine/60">
+            A game is being recorded — nothing can be deleted until it finishes.
+          </p>
+        )}
+      </section>
+
       <section>
         <div className="mb-2 flex items-baseline gap-3">
           <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.2em] text-flash/30">library</p>
@@ -463,6 +517,61 @@ function Row({ r, patch, index }: { r: Recording; patch: string; index: number }
   )
 }
 
+/**
+ * One thing taking up disk, with what it costs and how to be rid of it.
+ *
+ * ⚠️ The button says what it does — "empty", "delete these too" — and the
+ * confirmation is a native dialog raised by the shell, naming the exact count
+ * and size. Deleting video has no undo and no recycle bin; a button that only
+ * says "clear" is a button people press without reading.
+ */
+function Line({
+  label,
+  note,
+  bytes,
+  action,
+  disabled,
+  onAction,
+  onShow,
+}: {
+  label: string
+  note: string
+  bytes: number
+  action: string | null
+  disabled?: boolean
+  onAction: () => void
+  onShow?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-4 rounded-[3px] px-3.5 py-2.5" style={{ background: "rgba(215,216,217,0.022)" }}>
+      <div className="min-w-0 flex-1">
+        <p className="font-chakrapetch text-[13px] font-bold leading-tight">{label}</p>
+        <p className="mt-0.5 font-chakrapetch text-[11.5px] leading-snug text-flash/30">{note}</p>
+      </div>
+      <p className="shrink-0 font-chakrapetch text-[14px] font-bold tabular-nums text-flash/75">{gb(bytes)}</p>
+      {onShow && (
+        <button
+          type="button"
+          onClick={onShow}
+          className="win-btn h-6 shrink-0 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/35"
+        >
+          show
+        </button>
+      )}
+      {action && (
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={disabled}
+          className="win-btn danger h-6 shrink-0 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/40 disabled:opacity-30"
+        >
+          {action}
+        </button>
+      )}
+    </div>
+  )
+}
+
 const Tally = ({ n, label, colour }: { n: number; label: string; colour: string }) => (
   <div className="w-[38px] text-right">
     <p
@@ -550,6 +659,23 @@ function Application({ s }: { s: AppState }) {
           className="win-btn h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/40"
         >
           show file
+        </button>
+      </SettingRow>
+
+      {/* ⚠️ Says what STAYS. An uninstaller removes the program; the
+          recordings live in your own AppData and are not its business, so
+          anybody uninstalling to reclaim disk has to be told they will still
+          be there — and pointed at the tab that empties them. */}
+      <SettingRow
+        label="Uninstall"
+        note="Opens the uninstaller. Your recordings and clips are not removed with it — they live in your own folder, and the Capture tab above can empty them first."
+      >
+        <button
+          type="button"
+          onClick={() => void window.desktop.uninstall()}
+          className="win-btn danger h-6 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/40"
+        >
+          uninstall
         </button>
       </SettingRow>
 

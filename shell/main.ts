@@ -7,7 +7,8 @@
  * swappable. If this becomes Tauri later, this file is what gets rewritten;
  * everything under src/renderer keeps working untouched.
  */
-import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from "electron"
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen, shell } from "electron"
+import { execFile, spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
@@ -20,8 +21,9 @@ import { createSplash, dismissSplash } from "./splash"
 import { beginRecording, endRecording, mark, setResult, isRecording, captureError,
          readIndex, keepRecording, deleteRecording, revealRecording, librarySize,
          destroyRecorder, serveClips, tidyLibrary, recordingClock, setCaptureBudget,
-         reprune, type Recording } from "./capture"
-import { makeClip, revealClip, destroyClipper, type ClipRequest } from "./clips"
+         reprune, emptyRecordings, type Recording } from "./capture"
+import { makeClip, revealClip, revealClipFolder, clipsOnDisk, emptyClips, destroyClipper,
+         type ClipRequest } from "./clips"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -188,6 +190,8 @@ export type AppState = {
     | { state: "working"; fraction: number }
     | { state: "done"; file: string; bytes: number; seconds: number }
     | { state: "failed"; message: string }
+  /** What the recordings and the clips are costing on disk. */
+  storage: { recordings: number; kept: number; clips: number; clipCount: number }
   /** Whether a recording is running, and the library behind it. */
   recording: boolean
   recordings: Recording[]
@@ -251,6 +255,7 @@ let state: AppState = {
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
   clip: { state: "idle" },
+  storage: { recordings: 0, kept: 0, clips: 0, clipCount: 0 },
   recording: false,
   recordings: [],
   libraryBytes: 0,
@@ -1793,8 +1798,19 @@ ipcMain.handle("profile:refresh", async () => { await readProfile() })
 /* ── the recording library ──────────────────────────────────────────────── */
 
 async function pushRecordings(): Promise<void> {
-  const [recordings, bytes] = await Promise.all([readIndex(), librarySize()])
-  push({ recordings, libraryBytes: bytes, recording: isRecording(), captureError: captureError() })
+  const [recordings, bytes, clips] = await Promise.all([readIndex(), librarySize(), clipsOnDisk()])
+  // ⚠️ Kept counted apart from the rest. They obey a different rule — the size
+  // limit does not touch them — so a screen that showed one total would make
+  // the number that governs the ring buffer impossible to read off it.
+  const kept = recordings.filter((r) => r.kept).reduce((n, r) => n + r.bytes, 0)
+  const auto = recordings.filter((r) => !r.kept).reduce((n, r) => n + r.bytes, 0)
+  push({
+    recordings,
+    libraryBytes: bytes,
+    storage: { recordings: auto, kept, clips: clips.bytes, clipCount: clips.count },
+    recording: isRecording(),
+    captureError: captureError(),
+  })
 }
 
 ipcMain.handle("capture:list", async () => { await pushRecordings() })
@@ -1831,6 +1847,121 @@ ipcMain.handle("clip:make", async (_e, req: ClipRequest) => {
 })
 
 ipcMain.handle("clip:reveal", (_e, file: string) => { revealClip(file) })
+ipcMain.handle("clip:folder", () => { revealClipFolder() })
+
+/* ── clearing the disk ──────────────────────────────────────────────────── */
+
+/**
+ * ⚠️ Confirmed by the OPERATING SYSTEM, not by a second button of ours.
+ *
+ * This deletes video that cannot be recovered — no recycle bin, no undo — and
+ * a native dialog is the one confirmation nobody clicks through by muscle
+ * memory. It also states the exact number and size, because "are you sure?" is
+ * not a question anybody can answer.
+ */
+async function confirmDelete(what: string, detail: string): Promise<boolean> {
+  if (!win) return false
+  const { response } = await dialog.showMessageBox(win, {
+    type: "warning",
+    buttons: ["Delete", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+    title: "lolData",
+    message: what,
+    detail,
+    noLink: true,
+  })
+  return response === 0
+}
+
+ipcMain.handle("storage:empty-recordings", async (_e, includeKept: boolean) => {
+  if (state.recording) return
+  const all = await readIndex()
+  const doomed = includeKept ? all : all.filter((r) => !r.kept)
+  if (!doomed.length) return
+
+  const bytes = doomed.reduce((n, r) => n + r.bytes, 0)
+  const keptCount = doomed.filter((r) => r.kept).length
+  const ok = await confirmDelete(
+    `Delete ${doomed.length} recording${doomed.length === 1 ? "" : "s"}?`,
+    `${(bytes / 1024 ** 3).toFixed(2)} GB will be removed from your disk. This cannot be undone — the files are deleted, not moved to the recycle bin.` +
+      (keptCount ? `\n\n${keptCount} of them you had marked as kept.` : "")
+  )
+  if (!ok) return
+
+  await emptyRecordings(includeKept)
+  await pushRecordings()
+})
+
+ipcMain.handle("storage:empty-clips", async () => {
+  const { bytes, count } = await clipsOnDisk()
+  if (!count) return
+  const ok = await confirmDelete(
+    `Delete ${count} clip${count === 1 ? "" : "s"}?`,
+    `${(bytes / 1048576).toFixed(0)} MB will be removed. The recordings they were cut from are not touched, so any of them can be cut again.`
+  )
+  if (!ok) return
+  await emptyClips()
+  await pushRecordings()
+})
+
+/* ── leaving ────────────────────────────────────────────────────────────── */
+
+/**
+ * Uninstalling, made one button instead of a hunt through Windows settings.
+ *
+ * ⚠️ It says what STAYS. An uninstaller removes the program; the recordings
+ * live in your own AppData and are not its business, so somebody who wants the
+ * disk back has to be told they are still there — and given the folder.
+ *
+ * The registered uninstaller is preferred and the Windows settings page is the
+ * fallback, because in development there is no uninstaller at all: the
+ * executable is Electron's own.
+ */
+ipcMain.handle("app:uninstall", async () => {
+  const registry = await uninstallCommand()
+
+  const ok = await confirmDelete(
+    registry ? "Uninstall lolData?" : "Open Windows' uninstall page?",
+    (registry
+      ? "The uninstaller will open and this app will close."
+      : "This build has no installer registered — in development the program is Electron itself. Windows' own list of installed apps will open instead.") +
+      "\n\nYour recordings and clips are NOT removed by uninstalling: they live in your AppData folder, and Settings → Capture can empty them first."
+  )
+  if (!ok) return
+
+  if (!registry) {
+    void shell.openExternal("ms-settings:appsfeatures")
+    return
+  }
+
+  // Detached, because the uninstaller outlives the process it was started from.
+  try {
+    // ⚠️ Detached and unref'd: the uninstaller has to outlive the process that
+    // started it, since the first thing it does is close this app.
+    const child = spawn("cmd", ["/c", "start", "", registry], {
+      windowsHide: true,
+      detached: true,
+      stdio: "ignore",
+    })
+    child.unref()
+  } catch (e) {
+    console.log("[app] could not start the uninstaller: %s", (e as Error)?.message)
+    void shell.openExternal("ms-settings:appsfeatures")
+  }
+})
+
+/** What Windows recorded when the app was installed, if anything did. */
+function uninstallCommand(): Promise<string | null> {
+  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${app.getName()}`
+  return new Promise((resolve) => {
+    execFile("reg", ["query", key, "/v", "UninstallString"], { windowsHide: true }, (err, out) => {
+      if (err || !out) return resolve(null)
+      const m = /UninstallString\s+REG_\w+\s+(.+)/.exec(out)
+      resolve(m?.[1]?.trim().replace(/^"|"$/g, "") ?? null)
+    })
+  })
+}
 ipcMain.handle("clip:forget", () => { push({ clip: { state: "idle" } }) })
 
 /**

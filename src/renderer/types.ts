@@ -301,6 +301,8 @@ export type AppState = {
     | { state: "working"; fraction: number }
     | { state: "done"; file: string; bytes: number; seconds: number }
     | { state: "failed"; message: string }
+  /** What the recordings and the clips are costing on disk. */
+  storage: { recordings: number; kept: number; clips: number; clipCount: number }
   /** A recording is running right now. */
   recording: boolean
   recordings: Recording[]
@@ -363,6 +365,11 @@ declare global {
       forgetClip(): Promise<void>
       /** Hand the file to whatever the pointer drags it onto. */
       dragClip(file: string): void
+      revealClipFolder(): Promise<void>
+      /** Both of these confirm in a native dialog before deleting anything. */
+      emptyRecordings(includeKept: boolean): Promise<void>
+      emptyClips(): Promise<void>
+      uninstall(): Promise<void>
       /** Ranked standing per riotId, for the players in a finished game. */
       ranks(riotIds: string[], region: string | null): Promise<Record<string, PlayerRank | null>>
       signIn(): void
