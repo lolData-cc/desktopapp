@@ -156,7 +156,14 @@ export default function App() {
           }}
         />
       )}
-      <StatusStrip s={s} />
+      {/* ⚠️ The status strip is gone. It reported the client state and the
+          patch on a permanent bar — two facts the player either already knows
+          or does not need, holding a full row of the window for the whole
+          session. The client state is now the WATERMARK on the Overview, at
+          the size of the screen, which is a better home for it than a
+          footnote. What is left is the version, because it is the one thing
+          someone reads out when something is wrong. */}
+      <Version s={s} />
     </div>
   )
 }
@@ -357,6 +364,20 @@ const Gear = ({ active }: { active: boolean }) => (
   </svg>
 )
 
+/**
+ * The navigation, as game UI rather than as a sidebar.
+ *
+ * ⚠️ No panel, no border, no divider. A sidesheet is a CONTAINER — it says
+ * "these live in a box on the left", which is the vocabulary of every
+ * dashboard ever built. Death Stranding's menus are not boxes: they are
+ * plates floating against the scene, cut at one corner, that take focus by
+ * lighting an edge rather than by filling in.
+ *
+ * The sections are separated by SPACE, never by a rule. A divider would put
+ * the box straight back.
+ */
+const PLATE = "polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%)"
+
 function Rail({
   section,
   onSection,
@@ -371,94 +392,110 @@ function Rail({
   premium: boolean
 }) {
   return (
-    <nav className="flex w-[188px] shrink-0 flex-col border-r border-jade/[0.10] px-3 py-5">
-      {SECTIONS.map((sec, i) => {
-        const active = sec.id === section
-        return (
-          <button
-            key={sec.id}
-            type="button"
-            onClick={() => onSection(sec.id)}
-            className="group relative flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left transition-colors"
-            style={{
-              background: active ? "rgba(0,217,146,0.08)" : undefined,
-              boxShadow: active ? "inset 2px 0 0 0 #00d992" : undefined,
-            }}
-          >
-            <span
-              className={`font-jetbrains text-[9px] tabular-nums tracking-[0.1em] ${
-                active ? "text-jade/70" : "text-flash/20"
-              }`}
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <span
-              className={`font-chakrapetch text-[13px] font-bold tracking-wide ${
-                active ? "text-flash" : "text-flash/45 group-hover:text-flash/70"
-              }`}
-            >
-              {sec.label}
-            </span>
-            {sec.id === "ai" && !premium && (
-              <span className="ml-auto font-jetbrains text-[8px] uppercase tracking-[0.14em] text-citrine/50">
-                pro
-              </span>
-            )}
-          </button>
-        )
-      })}
+    <nav className="flex w-[196px] shrink-0 flex-col gap-[3px] py-5 pl-3 pr-2">
+      {SECTIONS.map((sec, i) => (
+        <Plate
+          key={sec.id}
+          index={i + 1}
+          label={sec.label}
+          active={sec.id === section}
+          onClick={() => onSection(sec.id)}
+          badge={sec.id === "ai" && !premium ? "pro" : undefined}
+        />
+      ))}
 
-      <span aria-hidden className="my-4 h-px bg-jade/[0.10]" />
-
-      {/* Leaving the app, kept apart from moving within it. */}
-      <button
-        type="button"
+      <Plate
+        className="mt-6"
+        label="Discord"
         onClick={() => window.desktop.openExternal(DISCORD)}
-        className="group flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left"
-      >
-        <DiscordMark />
-        <span className="font-chakrapetch text-[13px] font-bold tracking-wide text-flash/45 group-hover:text-flash/70">
-          Discord
-        </span>
-        <span className="ml-auto font-jetbrains text-[10px] text-flash/20">↗</span>
-      </button>
+        glyph={<DiscordMark />}
+        trailing="↗"
+      />
 
-      {/* Settings sits at the BOTTOM, apart from the numbered sections: those
-          are the app, this is where you go to change how it behaves. */}
-      <button
-        type="button"
+      <Plate
+        className="mt-auto"
+        label="Settings"
+        active={section === "settings"}
         onClick={() => onSection("settings")}
-        className="group mt-auto flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left transition-colors"
-        style={{
-          background: section === "settings" ? "rgba(0,217,146,0.08)" : undefined,
-          boxShadow: section === "settings" ? "inset 2px 0 0 0 #00d992" : undefined,
-        }}
-      >
-        <Gear active={section === "settings"} />
-        <span
-          className={`font-chakrapetch text-[13px] font-bold tracking-wide ${
-            section === "settings" ? "text-flash" : "text-flash/45 group-hover:text-flash/70"
-          }`}
-        >
-          Settings
-        </span>
-      </button>
+        glyph={<Gear active={section === "settings"} />}
+      />
 
-      <button
-        type="button"
+      <Plate
+        label="Overlay"
+        active={settingsOpen}
         onClick={onSettings}
-        className="group flex items-center gap-2.5 rounded-[3px] px-2.5 py-2 text-left"
-      >
-        <span className={`h-[7px] w-[7px] rotate-45 ${settingsOpen ? "bg-jade" : "bg-flash/25"}`} />
+        glyph={
+          <span className={`block h-[7px] w-[7px] rotate-45 ${settingsOpen ? "bg-jade" : "bg-flash/25"}`} />
+        }
+      />
+    </nav>
+  )
+}
+
+function Plate({
+  index,
+  label,
+  active,
+  onClick,
+  badge,
+  glyph,
+  trailing,
+  className = "",
+}: {
+  index?: number
+  label: string
+  active?: boolean
+  onClick: () => void
+  badge?: string
+  glyph?: React.ReactNode
+  trailing?: string
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`plate group relative flex items-center gap-2.5 py-2 pl-3 pr-2.5 text-left ${
+        active ? "plate-on" : ""
+      } ${className}`}
+      style={{ clipPath: PLATE }}
+    >
+      {/* The leading edge carries the state on its own. One lit line beats a
+          filled plate: it marks the choice without turning the item into a
+          block of colour the eye has to read past. */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-[2px] transition-colors"
+        style={{ background: active ? "#00d992" : "rgba(215,216,217,0.10)" }}
+      />
+
+      {glyph ? (
+        <span className="grid w-[13px] shrink-0 place-items-center">{glyph}</span>
+      ) : (
         <span
-          className={`font-chakrapetch text-[13px] font-bold tracking-wide ${
-            settingsOpen ? "text-flash" : "text-flash/45 group-hover:text-flash/70"
+          className={`w-[13px] shrink-0 font-jetbrains text-[9px] tabular-nums tracking-[0.1em] ${
+            active ? "text-jade/70" : "text-flash/20"
           }`}
         >
-          Overlay
+          {String(index).padStart(2, "0")}
         </span>
-      </button>
-    </nav>
+      )}
+
+      <span
+        className={`font-chakrapetch text-[13px] font-bold tracking-wide transition-colors ${
+          active ? "text-flash" : "text-flash/45 group-hover:text-flash/75"
+        }`}
+      >
+        {label}
+      </span>
+
+      {badge && (
+        <span className="ml-auto font-jetbrains text-[8px] uppercase tracking-[0.14em] text-citrine/50">
+          {badge}
+        </span>
+      )}
+      {trailing && <span className="ml-auto font-jetbrains text-[10px] text-flash/20">{trailing}</span>}
+    </button>
   )
 }
 
@@ -470,18 +507,19 @@ function DiscordMark() {
   )
 }
 
-function StatusStrip({ s }: { s: AppState | null }) {
-  const attached = s?.client === "attached"
+/**
+ * The app's version, floating in a corner.
+ *
+ * Not a bar: a bar claims a row of the window for the whole session, and this
+ * earns a corner.
+ */
+function Version({ s }: { s: AppState | null }) {
+  const v = s?.update?.version
+  if (!v) return null
+
   return (
-    <footer className="relative z-10 flex h-8 shrink-0 items-center gap-3 border-t border-jade/[0.10] px-3.5 font-jetbrains text-[9.5px] uppercase tracking-[0.16em]">
-      <span className={`h-[6px] w-[6px] rounded-full ${attached ? "bg-jade beat" : "bg-flash/25"}`} />
-      <span className={attached ? "text-jade/80" : "text-flash/30"}>
-        {attached ? "client attached" : "waiting for client"}
-      </span>
-
-      {s?.phase && <span className="text-flash/25">{s.phase}</span>}
-
-      <span className="ml-auto text-flash/20">{s?.patch ? `patch ${s.patch}` : ""}</span>
-    </footer>
+    <span className="pointer-events-none absolute bottom-3 right-4 z-20 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/[0.18]">
+      v{v}
+    </span>
   )
 }
