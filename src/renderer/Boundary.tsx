@@ -16,6 +16,14 @@ import { Component, type ErrorInfo, type ReactNode } from "react"
  * It resets on `resetKey`, so moving to another section clears a fault rather
  * than leaving it stuck — a boundary that latches is a boundary that turns one
  * bad render into a dead app until restart.
+ *
+ * ⚠️ One fault it cannot clear by itself: a section that FAILS TO LOAD. The
+ * sections are fetched on first use, by a filename carrying a hash of their
+ * contents, and an index page that has outlived its chunks will ask for files
+ * that are no longer there — every time, in every section, until the page is
+ * read again. Switching away and back does nothing, which is exactly the
+ * advice the message above gives. So that case is named and given the one
+ * thing that fixes it.
  */
 type Props = { children: ReactNode; resetKey?: string | number }
 type State = { error: Error | null }
@@ -41,6 +49,38 @@ export default class Boundary extends Component<Props, State> {
 
   render() {
     if (!this.state.error) return this.props.children
+
+    // A chunk that would not load. The message differs by engine, so this
+    // matches on what they all say rather than on one wording.
+    const stale = /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(
+      this.state.error.message
+    )
+
+    if (stale) {
+      return (
+        <div className="grid h-full place-items-center px-8">
+          <div className="max-w-[48ch] text-center">
+            <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.28em] text-citrine/60">
+              this section could not be loaded
+            </p>
+            <p className="mt-2 font-chakrapetch text-[13px] leading-relaxed text-flash/40">
+              The app was updated underneath itself, so the window is asking for files
+              that have been replaced. Reloading reads the new ones — nothing is lost.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="act-btn mt-4 h-9 rounded-[3px] px-6 font-chakrapetch text-[12px] font-bold uppercase tracking-[0.16em]"
+            >
+              reload
+            </button>
+            <p className="mt-3 break-words font-jetbrains text-[9px] leading-relaxed text-flash/20">
+              {this.state.error.message}
+            </p>
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="grid h-full place-items-center px-8">

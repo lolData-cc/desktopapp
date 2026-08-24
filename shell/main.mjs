@@ -21206,6 +21206,7 @@ async function enrich2(allies, allyEntries, enemies, enemyEntries) {
     rankOf[r.riotId] = bad ? null : {
       label: r.rank,
       tier: r.rank.split(/\s+/)[0].toLowerCase(),
+      lp: Number(r.lp ?? 0),
       wins: Number(r.wins ?? 0),
       losses: Number(r.losses ?? 0)
     };
@@ -21598,6 +21599,7 @@ async function lookupRanks(riotIds, region) {
       const clean = label && !/unranked/i.test(label) ? {
         label,
         tier: label.split(/\s+/)[0].toLowerCase(),
+        lp: Number(json?.summoner?.lp ?? 0),
         wins: Number(json?.summoner?.wins ?? 0),
         losses: Number(json?.summoner?.losses ?? 0)
       } : null;
@@ -21922,7 +21924,7 @@ var demo = (name, championId, championKey, label, wins = 0, losses = 0, extra = 
   name,
   championId,
   championKey,
-  rank: label ? { label, tier: label.split(/\s+/)[0].toLowerCase(), wins, losses } : null,
+  rank: label ? { label, tier: label.split(/\s+/)[0].toLowerCase(), lp: 0, wins, losses } : null,
   hidden: false,
   otp: false,
   filled: false,

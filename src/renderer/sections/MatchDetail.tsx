@@ -8,6 +8,7 @@ import {
   CDRAGON,
   mmss,
   queueName,
+  rankLabel,
   recordingFor,
   timeAgo,
   type AppState,
@@ -305,13 +306,33 @@ function Row({
         ))}
       </div>
 
-      <div className="w-[132px] shrink-0">
-        <p className="truncate font-chakrapetch text-[12.5px] font-bold leading-tight" style={{ color: p.isMe ? "#d7d8d9" : "rgba(215,216,217,0.7)" }}>
-          {p.name}
-        </p>
-        <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.12em] text-flash/25">
-          {rank ? rank.label.toLowerCase() : "—"}
-        </p>
+      {/* ⚠️ The crest sits to the LEFT of the name, not under it. A rank is
+          how you place somebody before you have read their name — a shape and
+          a colour do that in the time it takes to scan ten rows, where a word
+          has to be read. The same emblem the account menu uses. */}
+      <div className="flex w-[164px] shrink-0 items-center gap-2">
+        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center">
+          {rank?.tier ? (
+            <img
+              src={`${CDRAGON}/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-mini-crests/${rank.tier}.svg`}
+              alt=""
+              className="h-[26px] w-[26px]"
+            />
+          ) : (
+            // Drawn empty rather than absent: ten rows whose names start at
+            // different places because one player is unranked is a list that
+            // cannot be scanned down.
+            <span className="block h-[7px] w-[7px] rotate-45" style={{ background: "rgba(215,216,217,0.10)" }} />
+          )}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate font-chakrapetch text-[12.5px] font-bold leading-tight" style={{ color: p.isMe ? "#d7d8d9" : "rgba(215,216,217,0.7)" }}>
+            {p.name}
+          </p>
+          <p className="truncate font-jetbrains text-[8.5px] uppercase tracking-[0.12em] text-flash/30">
+            {rank ? rankLabel(rank) : "unranked"}
+          </p>
+        </div>
       </div>
 
       <div className="w-[86px] shrink-0 whitespace-nowrap">
@@ -421,7 +442,7 @@ function Card({
               `capitalize` turned "EMERALD III" into "Emerald Iii", because the
               rule capitalises every word and a roman numeral is a word. */}
           <p className="font-jetbrains text-[11px] font-bold uppercase tracking-[0.1em] leading-tight text-flash/85">
-            {rank ? rank.label : "unranked"}
+            {rank ? rankLabel(rank) : "unranked"}
           </p>
           {games > 0 && (
             <p className="font-jetbrains text-[9px] tabular-nums text-flash/25">

@@ -1208,6 +1208,9 @@ async function enrich(
       : {
           label: r.rank,
           tier: r.rank.split(/\s+/)[0]!.toLowerCase(),
+          // The multirank endpoint does not carry LP; the loading board shows
+          // the tier, which is what there is room for on a card anyway.
+          lp: Number((r as { lp?: number }).lp ?? 0),
           wins: Number(r.wins ?? 0),
           losses: Number(r.losses ?? 0),
         }
@@ -1295,6 +1298,9 @@ export type PlayerRank = {
   label: string
   /** "diamond", lowercased, for the emblem file. */
   tier: string
+  /** League points — the only ranking there is at Master and above, where
+   *  there are no divisions. */
+  lp: number
   wins: number
   losses: number
 }
@@ -1942,7 +1948,7 @@ async function lookupRanks(
         })
         if (!res.ok) throw new Error(String(res.status))
         const json = (await res.json()) as {
-          summoner?: { rank?: string; wins?: number; losses?: number }
+          summoner?: { rank?: string; lp?: number; wins?: number; losses?: number }
         }
         const label = json?.summoner?.rank ?? null
 
@@ -1955,6 +1961,7 @@ async function lookupRanks(
                 // The tier is the first word: "DIAMOND II" and a bare "MASTER"
                 // both give the right emblem name this way.
                 tier: label.split(/\s+/)[0]!.toLowerCase(),
+                lp: Number(json?.summoner?.lp ?? 0),
                 wins: Number(json?.summoner?.wins ?? 0),
                 losses: Number(json?.summoner?.losses ?? 0),
               }
@@ -2472,7 +2479,7 @@ const demo = (
   championId,
   championKey,
   rank: label
-    ? { label, tier: label.split(/\s+/)[0]!.toLowerCase(), wins, losses }
+    ? { label, tier: label.split(/\s+/)[0]!.toLowerCase(), lp: 0, wins, losses }
     : null,
   hidden: false,
   otp: false,

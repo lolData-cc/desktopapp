@@ -31,8 +31,35 @@ import type { Ability, HudNudge } from "../data/hud"
 export type PlayerRank = {
   label: string
   tier: string
+  /**
+   * League points.
+   *
+   * ⚠️ The only number that means anything at MASTER and above, where there
+   * are no divisions — "Master" alone covers everyone from the promotion to
+   * the top of the ladder.
+   */
+  lp: number
   wins: number
   losses: number
+}
+
+/** The tiers with no divisions, where the LP is the whole ranking. */
+export const APEX = new Set(["master", "grandmaster", "challenger"])
+
+/**
+ * How to print a rank.
+ *
+ * ⚠️ Apex tiers get their LP and everybody else does not. Below Master the LP
+ * is a position inside a division that already appears in the label, and
+ * printing both says the same thing twice; at Master it IS the position.
+ */
+export function rankLabel(rank: PlayerRank): string {
+  if (!APEX.has(rank.tier)) return rank.label
+  // ⚠️ The division is DROPPED, not kept. The API answers "MASTER I" for a
+  // tier that has no divisions — every Master player is Master I — so printing
+  // it gave "MASTER I 96 LP", which reads as a rank one place above Master II.
+  // The tier and the LP are the whole of it up here.
+  return `${rank.label.split(/\s+/)[0]} ${rank.lp} LP`
 }
 
 /** One moment worth jumping to, timestamped against its recording. */
