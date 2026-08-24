@@ -107,12 +107,41 @@ export function Attached({ s }: { s: AppState }) {
       <div
         className="totem relative flex w-[186px] flex-col items-center rounded-[5px] px-5 py-10"
         style={{
-          // Opaque enough to read against, translucent enough that the word
-          // behind still passes through it — which is the whole reason the
-          // card is floating over it rather than beside it.
-          background: "rgba(6,13,16,0.72)",
-          boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.14), 0 18px 50px rgba(0,0,0,0.55)",
-          backdropFilter: "blur(3px)",
+          /**
+           * Brushed metal, still translucent.
+           *
+           * Metal reads from three things, none of them colour: a DIRECTIONAL
+           * grain, a highlight on the top edge only — light comes from
+           * somewhere — and an oblique sheen. Layered over a dark plate that
+           * stays partly transparent, so the word behind still passes through,
+           * which is the whole reason the card floats over it.
+           *
+           * ⚠️ The grain is a repeating gradient rather than a texture image:
+           * it costs nothing to ship, scales with the card, and cannot 404.
+           * Kept at 2% — at any strength you can actually SEE as stripes it
+           * stops being metal and becomes corduroy.
+           */
+          background: [
+            // the sheen, catching across the top-left corner
+            "linear-gradient(146deg, rgba(255,255,255,0.055) 0%," +
+              " rgba(255,255,255,0.014) 24%, rgba(255,255,255,0) 52%)",
+            // the brushed grain, off-axis so it never lines up with the edges
+            "repeating-linear-gradient(102deg," +
+              " rgba(255,255,255,0.020) 0px, rgba(255,255,255,0.020) 1px," +
+              " rgba(255,255,255,0) 1px, rgba(255,255,255,0) 3px)",
+            // and the plate itself, cool at the top and colder at the bottom
+            "linear-gradient(180deg, rgba(11,22,26,0.74) 0%, rgba(4,10,12,0.82) 100%)",
+          ].join(","),
+          backdropFilter: "blur(7px) saturate(115%)",
+          boxShadow: [
+            // ⚠️ A specular EDGE, not an outline: one hairline on the top rim
+            // where light would land, and a dark one under the bottom. A full
+            // light border would just be a white box.
+            "inset 0 1px 0 rgba(255,255,255,0.10)",
+            "inset 0 -1px 0 rgba(0,0,0,0.55)",
+            "inset 0 0 0 1px rgba(0,217,146,0.10)",
+            "0 20px 55px rgba(0,0,0,0.6)",
+          ].join(","),
         }}
       >
         {/* A short rule above and below the contents. A totem is a vertical
