@@ -435,7 +435,7 @@ function Row({ r, patch, index }: { r: Recording; patch: string; index: number }
         title={
           r.kept
             ? "Let this one age out with the rest"
-            : "Keep this one — the ten-game limit stops counting it"
+            : "Keep this one — the size limit stops counting it, so it is never discarded"
         }
         className={`win-btn h-6 shrink-0 rounded-[3px] px-2.5 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
           r.kept ? "bg-jade/15 text-jade" : "text-flash/30"

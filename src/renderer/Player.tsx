@@ -472,7 +472,7 @@ export default function Player({
             title={
               rec.kept
                 ? "Let this one age out with the rest"
-                : "Keep this one — the ten-game limit stops counting it"
+                : "Keep this one — the size limit stops counting it, so it is never discarded"
             }
             on={rec.kept}
             onClick={() => void window.desktop.keepRecording(rec.id, !rec.kept)}
