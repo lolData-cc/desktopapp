@@ -84,20 +84,22 @@ export default function App() {
 
       <TitleBar s={s} />
 
-      <div className="relative z-10 flex min-h-0 flex-1">
-        <Rail
-          section={section}
-          onSection={(id) => {
-            setEditing(null)
-            setSection(id)
-          }}
-          settingsOpen={showSettings}
-          onSettings={() => setShowSettings((v) => !v)}
-          premium={isPremium(s?.account?.tier)}
-        />
-
-        {/* Keyed on the section so each one ASSEMBLES rather than swapping. */}
-        <main key={`${section}:${editing ?? ""}`} className="ds-enter relative min-h-0 flex-1 overflow-hidden px-7 py-6">
+      {/* ⚠️ The nav OVERLAYS the scene; it does not take a column from it.
+          As a flex sibling it stole 196px from every screen and the Overview
+          composed itself in what was left — so the totem sat off-centre in the
+          window and the watermark was cropped by a menu. The scene now owns
+          the full width and the plates float on top of it, which is what
+          makes them read as UI over a scene rather than as a sidebar. */}
+      <div className="relative z-10 min-h-0 flex-1">
+        {/* Keyed on the section so each one ASSEMBLES rather than swapping.
+            Only the sections that are DOCUMENTS are inset past the nav; the
+            Overview is a scene and is composed against the whole window. */}
+        <main
+          key={`${section}:${editing ?? ""}`}
+          className={`ds-enter absolute inset-0 overflow-hidden py-6 ${
+            section === "overview" ? "px-7" : "pl-[210px] pr-7"
+          }`}
+        >
           {/* Only on the Overview, and only when there is no live board: over
               ten rows of numbers this would be noise, and the board is the one
               screen already full. */}
@@ -141,6 +143,18 @@ export default function App() {
           </div>
           </Boundary>
         </main>
+
+        {/* Above the scene, and last in the DOM so it takes the clicks. */}
+        <Rail
+          section={section}
+          onSection={(id) => {
+            setEditing(null)
+            setSection(id)
+          }}
+          settingsOpen={showSettings}
+          onSettings={() => setShowSettings((v) => !v)}
+          premium={isPremium(s?.account?.tier)}
+        />
       </div>
 
       {s && <UpdateBar s={s} />}
@@ -392,7 +406,7 @@ function Rail({
   premium: boolean
 }) {
   return (
-    <nav className="flex w-[196px] shrink-0 flex-col gap-[3px] py-5 pl-3 pr-2">
+    <nav className="pointer-events-none absolute inset-y-0 left-0 z-20 flex w-[196px] flex-col gap-[3px] py-5 pl-3 pr-2">
       {SECTIONS.map((sec, i) => (
         <Plate
           key={sec.id}
@@ -455,7 +469,7 @@ function Plate({
     <button
       type="button"
       onClick={onClick}
-      className={`plate group relative flex items-center gap-2.5 py-2 pl-3 pr-2.5 text-left ${
+      className={`plate group pointer-events-auto relative flex items-center gap-2.5 py-2 pl-3 pr-2.5 text-left ${
         active ? "plate-on" : ""
       } ${className}`}
       style={{ clipPath: PLATE }}
