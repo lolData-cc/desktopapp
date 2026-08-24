@@ -644,7 +644,41 @@ function bodyOf(file: string, range?: { start: number; end: number }): ReadableS
 
 export function serveClips(): void {
   protocol.handle(CLIP_SCHEME, async (request) => {
-    const id = new URL(request.url).pathname.replace(/^\//, "")
+    const url = new URL(request.url)
+
+    /**
+     * ⚠️ The clipper's own page is served from this scheme too, and that is the
+     * whole reason it exists here.
+     *
+     * The clipper draws a recording into a canvas, and a canvas that has been
+     * drawn from another origin is TAINTED — captureStream() then throws at the
+     * very last step, after the segment has already been played. The obvious
+     * fix, crossOrigin plus the CORS headers, was tried and measured: the media
+     * stack rejected the partial responses with "Format error" whatever was
+     * exposed. Serving the page from the same origin as the video removes the
+     * question rather than answering it.
+     *
+     * ⚠️ Under the SAME HOST as the recordings, on a path, not on a host of its
+     * own. This scheme is registered as `standard`, so the host is part of the
+     * origin — `//app/clipper.html` and `//recording/123` are two origins, and
+     * the canvas was tainted exactly as before. Measured, after assuming
+     * otherwise.
+     */
+    if (url.pathname.startsWith("/_page/")) {
+      const name = url.pathname.slice("/_page/".length)
+      if (!/^[\w.-]+$/.test(name)) return new Response("no", { status: 404 })
+      try {
+        const body = await readFile(join(__dirname, "..", "capture", name))
+        return new Response(body as unknown as BodyInit, {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        })
+      } catch {
+        return new Response("no such page", { status: 404 })
+      }
+    }
+
+    const id = url.pathname.replace(/^\//, "")
     // A miss means the index has not been read in this run yet; reading it
     // fills the map for every request after this one.
     if (!located.has(id)) await readIndex()
@@ -664,7 +698,36 @@ export function serveClips(): void {
       // Never cached: the ring buffer deletes these, and a cached copy would
       // outlive the recording it came from.
       "Cache-Control": "no-store",
+      /**
+       * ⚠️ Required by the clipper, not politeness.
+       *
+       * A recording is served from this scheme and the clipper's page is not
+       * on it, so drawing the video into a canvas TAINTS that canvas and
+       * captureStream() then throws — at the very last step, after the whole
+       * segment has already been played. With this header and crossOrigin on
+       * the element, the canvas stays clean.
+       *
+       * Safe here in a way it is not on a CDN: this handler answers every
+       * request itself, so there is no cached copy without the header waiting
+       * to be served instead.
+       */
+      "Access-Control-Allow-Origin": "*",
+      /**
+       * ⚠️ And the RANGE headers have to be allowed and exposed, or the media
+       * stack rejects the partial response as a format error — measured, with
+       * exactly that message and nothing about CORS in it.
+       *
+       * A cross-origin media load is served in pieces like any other, but with
+       * CORS on, a header the response does not expose might as well not be
+       * there: without Content-Range the player is handed a chunk of a file
+       * with no way to know where in the file it came from.
+       */
+      "Access-Control-Allow-Headers": "Range",
+      "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
     }
+
+    // The preflight some cross-origin range requests send first.
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers })
 
     const asked = /bytes=(\d*)-(\d*)/.exec(request.headers.get("Range") ?? "")
     if (!asked) {

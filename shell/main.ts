@@ -21,6 +21,7 @@ import { beginRecording, endRecording, mark, setResult, isRecording, captureErro
          readIndex, keepRecording, deleteRecording, revealRecording, librarySize,
          destroyRecorder, serveClips, tidyLibrary, recordingClock, setCaptureBudget,
          reprune, type Recording } from "./capture"
+import { makeClip, revealClip, destroyClipper, type ClipRequest } from "./clips"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
 import { championRunes, type RuneVariant } from "../src/data/runeSource"
@@ -176,6 +177,17 @@ export type AppState = {
    * loading the only roster available comes from the client's own session.
    */
   loading: { allies: LoadingPlayer[]; enemies: LoadingPlayer[] } | null
+  /**
+   * Cutting a moment out to send somebody.
+   *
+   * In the state rather than a promise's return value because it takes about
+   * as long as the clip does — a progress bar needs somewhere to live.
+   */
+  clip:
+    | { state: "idle" }
+    | { state: "working"; fraction: number }
+    | { state: "done"; file: string; bytes: number; seconds: number }
+    | { state: "failed"; message: string }
   /** Whether a recording is running, and the library behind it. */
   recording: boolean
   recordings: Recording[]
@@ -238,6 +250,7 @@ let state: AppState = {
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
+  clip: { state: "idle" },
   recording: false,
   recordings: [],
   libraryBytes: 0,
@@ -1792,6 +1805,44 @@ ipcMain.handle("capture:delete", async (_e, id: string) => {
 
 ipcMain.handle("capture:reveal", async (_e, id: string) => { await revealRecording(id) })
 
+/* ── sharing a moment ───────────────────────────────────────────────────── */
+
+ipcMain.handle("clip:make", async (_e, req: ClipRequest) => {
+  if (state.clip.state === "working") return
+  push({ clip: { state: "working", fraction: 0 } })
+
+  const out = await makeClip(req, (fraction) => {
+    // Only while this one is still the clip being made: a stale progress tick
+    // arriving after a failure would put the bar back.
+    if (state.clip.state === "working") push({ clip: { state: "working", fraction } })
+  }).catch((e) => ({ ok: false as const, message: (e as Error)?.message ?? "the clip failed" }))
+
+  push({
+    clip: out.ok
+      ? { state: "done", file: out.file, bytes: out.bytes, seconds: out.seconds }
+      : { state: "failed", message: out.message },
+  })
+})
+
+ipcMain.handle("clip:reveal", (_e, file: string) => { revealClip(file) })
+ipcMain.handle("clip:forget", () => { push({ clip: { state: "idle" } }) })
+
+/**
+ * Drag the finished clip straight out of the window and into Discord.
+ *
+ * ⚠️ The one interaction that makes this feature feel finished. Everything
+ * else — reveal it, find it, attach it — is four steps through Explorer for
+ * something that is one gesture if the app simply hands the file to whatever
+ * is underneath the pointer.
+ */
+ipcMain.on("clip:drag", (e, file: string) => {
+  try {
+    e.sender.startDrag({ file, icon: join(__dirname, "../build/icon.png") })
+  } catch (err) {
+    console.log("[clip] drag failed: %s", (err as Error)?.message)
+  }
+})
+
 /**
  * Record fifteen seconds, right now, marked as if things had happened.
  *
@@ -2599,6 +2650,7 @@ if (!gotLock) {
 
 app.on("before-quit", () => {
   stopGameClock()
+  destroyClipper()
   // A recording in progress is closed properly rather than left as a truncated
   // file the library would list as if it played.
   void endRecording()

@@ -236,6 +236,12 @@ export type AppState = {
     allies: LoadingPlayer[]
     enemies: LoadingPlayer[]
   } | null
+  /** Cutting a moment out to send somebody. */
+  clip:
+    | { state: "idle" }
+    | { state: "working"; fraction: number }
+    | { state: "done"; file: string; bytes: number; seconds: number }
+    | { state: "failed"; message: string }
   /** A recording is running right now. */
   recording: boolean
   recordings: Recording[]
@@ -292,6 +298,12 @@ declare global {
       demoCapture(): Promise<void>
       /** Where to point a <video> at a recording. */
       clipUrl(id: string): string
+      /** Cut a moment out of a recording and write it to disk. */
+      makeClip(req: { recordingId: string; fromMs: number; toMs: number; label: string }): Promise<void>
+      revealClip(file: string): Promise<void>
+      forgetClip(): Promise<void>
+      /** Hand the file to whatever the pointer drags it onto. */
+      dragClip(file: string): void
       /** Ranked standing per riotId, for the players in a finished game. */
       ranks(riotIds: string[], region: string | null): Promise<Record<string, PlayerRank | null>>
       signIn(): void

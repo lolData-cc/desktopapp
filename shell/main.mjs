@@ -3471,8 +3471,8 @@ GFS4: `);
       }
     }
     var fs$writeFile = fs2.writeFile;
-    fs2.writeFile = writeFile2;
-    function writeFile2(path, data, options, cb) {
+    fs2.writeFile = writeFile3;
+    function writeFile3(path, data, options, cb) {
       if (typeof options === "function")
         cb = options, options = null;
       return go$writeFile(path, data, options, cb);
@@ -3852,16 +3852,16 @@ var require_make_dir = __commonJS((exports, module) => {
       return options;
     return { ...defaults, ...options }.mode;
   };
-  exports.makeDir = async (dir2, options) => {
-    checkPath(dir2);
-    return fs.mkdir(dir2, {
+  exports.makeDir = async (dir3, options) => {
+    checkPath(dir3);
+    return fs.mkdir(dir3, {
       mode: getMode(options),
       recursive: true
     });
   };
-  exports.makeDirSync = (dir2, options) => {
-    checkPath(dir2);
-    return fs.mkdirSync(dir2, {
+  exports.makeDirSync = (dir3, options) => {
+    checkPath(dir3);
+    return fs.mkdirSync(dir3, {
       mode: getMode(options),
       recursive: true
     });
@@ -4692,26 +4692,26 @@ var require_empty = __commonJS((exports, module) => {
   var u = require_universalify().fromPromise;
   var fs = require_fs();
   var path = __require("path");
-  var mkdir2 = require_mkdirs();
+  var mkdir3 = require_mkdirs();
   var remove = require_remove();
-  var emptyDir = u(async function emptyDir(dir2) {
+  var emptyDir = u(async function emptyDir(dir3) {
     let items;
     try {
-      items = await fs.readdir(dir2);
+      items = await fs.readdir(dir3);
     } catch {
-      return mkdir2.mkdirs(dir2);
+      return mkdir3.mkdirs(dir3);
     }
-    return Promise.all(items.map((item) => remove.remove(path.join(dir2, item))));
+    return Promise.all(items.map((item) => remove.remove(path.join(dir3, item))));
   });
-  function emptyDirSync(dir2) {
+  function emptyDirSync(dir3) {
     let items;
     try {
-      items = fs.readdirSync(dir2);
+      items = fs.readdirSync(dir3);
     } catch {
-      return mkdir2.mkdirsSync(dir2);
+      return mkdir3.mkdirsSync(dir3);
     }
     items.forEach((item) => {
-      item = path.join(dir2, item);
+      item = path.join(dir3, item);
       remove.removeSync(item);
     });
   }
@@ -4728,7 +4728,7 @@ var require_file = __commonJS((exports, module) => {
   var u = require_universalify().fromCallback;
   var path = __require("path");
   var fs = require_graceful_fs();
-  var mkdir2 = require_mkdirs();
+  var mkdir3 = require_mkdirs();
   function createFile(file, callback) {
     function makeFile() {
       fs.writeFile(file, "", (err) => {
@@ -4740,11 +4740,11 @@ var require_file = __commonJS((exports, module) => {
     fs.stat(file, (err, stats) => {
       if (!err && stats.isFile())
         return callback();
-      const dir2 = path.dirname(file);
-      fs.stat(dir2, (err2, stats2) => {
+      const dir3 = path.dirname(file);
+      fs.stat(dir3, (err2, stats2) => {
         if (err2) {
           if (err2.code === "ENOENT") {
-            return mkdir2.mkdirs(dir2, (err3) => {
+            return mkdir3.mkdirs(dir3, (err3) => {
               if (err3)
                 return callback(err3);
               makeFile();
@@ -4755,7 +4755,7 @@ var require_file = __commonJS((exports, module) => {
         if (stats2.isDirectory())
           makeFile();
         else {
-          fs.readdir(dir2, (err3) => {
+          fs.readdir(dir3, (err3) => {
             if (err3)
               return callback(err3);
           });
@@ -4770,14 +4770,14 @@ var require_file = __commonJS((exports, module) => {
     } catch {}
     if (stats && stats.isFile())
       return;
-    const dir2 = path.dirname(file);
+    const dir3 = path.dirname(file);
     try {
-      if (!fs.statSync(dir2).isDirectory()) {
-        fs.readdirSync(dir2);
+      if (!fs.statSync(dir3).isDirectory()) {
+        fs.readdirSync(dir3);
       }
     } catch (err) {
       if (err && err.code === "ENOENT")
-        mkdir2.mkdirsSync(dir2);
+        mkdir3.mkdirsSync(dir3);
       else
         throw err;
     }
@@ -4794,7 +4794,7 @@ var require_link = __commonJS((exports, module) => {
   var u = require_universalify().fromCallback;
   var path = __require("path");
   var fs = require_graceful_fs();
-  var mkdir2 = require_mkdirs();
+  var mkdir3 = require_mkdirs();
   var pathExists = require_path_exists().pathExists;
   var { areIdentical } = require_stat();
   function createLink(srcpath, dstpath, callback) {
@@ -4813,13 +4813,13 @@ var require_link = __commonJS((exports, module) => {
         }
         if (dstStat && areIdentical(srcStat, dstStat))
           return callback(null);
-        const dir2 = path.dirname(dstpath);
-        pathExists(dir2, (err2, dirExists) => {
+        const dir3 = path.dirname(dstpath);
+        pathExists(dir3, (err2, dirExists) => {
           if (err2)
             return callback(err2);
           if (dirExists)
             return makeLink(srcpath, dstpath);
-          mkdir2.mkdirs(dir2, (err3) => {
+          mkdir3.mkdirs(dir3, (err3) => {
             if (err3)
               return callback(err3);
             makeLink(srcpath, dstpath);
@@ -4841,11 +4841,11 @@ var require_link = __commonJS((exports, module) => {
       err.message = err.message.replace("lstat", "ensureLink");
       throw err;
     }
-    const dir2 = path.dirname(dstpath);
-    const dirExists = fs.existsSync(dir2);
+    const dir3 = path.dirname(dstpath);
+    const dirExists = fs.existsSync(dir3);
     if (dirExists)
       return fs.linkSync(srcpath, dstpath);
-    mkdir2.mkdirsSync(dir2);
+    mkdir3.mkdirsSync(dir3);
     return fs.linkSync(srcpath, dstpath);
   }
   module.exports = {
@@ -5006,13 +5006,13 @@ var require_symlink = __commonJS((exports, module) => {
       symlinkType(relative.toCwd, type, (err2, type2) => {
         if (err2)
           return callback(err2);
-        const dir2 = path.dirname(dstpath);
-        pathExists(dir2, (err3, dirExists) => {
+        const dir3 = path.dirname(dstpath);
+        pathExists(dir3, (err3, dirExists) => {
           if (err3)
             return callback(err3);
           if (dirExists)
             return fs.symlink(srcpath, dstpath, type2, callback);
-          mkdirs(dir2, (err4) => {
+          mkdirs(dir3, (err4) => {
             if (err4)
               return callback(err4);
             fs.symlink(srcpath, dstpath, type2, callback);
@@ -5035,11 +5035,11 @@ var require_symlink = __commonJS((exports, module) => {
     const relative = symlinkPathsSync(srcpath, dstpath);
     srcpath = relative.toDst;
     type = symlinkTypeSync(relative.toCwd, type);
-    const dir2 = path.dirname(dstpath);
-    const exists = fs.existsSync(dir2);
+    const dir3 = path.dirname(dstpath);
+    const exists = fs.existsSync(dir3);
     if (exists)
       return fs.symlinkSync(srcpath, dstpath, type);
-    mkdirsSync(dir2);
+    mkdirsSync(dir3);
     return fs.symlinkSync(srcpath, dstpath, type);
   }
   module.exports = {
@@ -5144,7 +5144,7 @@ var require_jsonfile = __commonJS((exports, module) => {
     const str = stringify(obj, options);
     await universalify.fromCallback(fs.writeFile)(file, str, options);
   }
-  var writeFile2 = universalify.fromPromise(_writeFile);
+  var writeFile3 = universalify.fromPromise(_writeFile);
   function writeFileSync(file, obj, options = {}) {
     const fs = options.fs || _fs;
     const str = stringify(obj, options);
@@ -5153,7 +5153,7 @@ var require_jsonfile = __commonJS((exports, module) => {
   module.exports = {
     readFile: readFile3,
     readFileSync,
-    writeFile: writeFile2,
+    writeFile: writeFile3,
     writeFileSync
   };
 });
@@ -5174,20 +5174,20 @@ var require_output_file = __commonJS((exports, module) => {
   var u = require_universalify().fromCallback;
   var fs = require_graceful_fs();
   var path = __require("path");
-  var mkdir2 = require_mkdirs();
+  var mkdir3 = require_mkdirs();
   var pathExists = require_path_exists().pathExists;
   function outputFile(file, data, encoding, callback) {
     if (typeof encoding === "function") {
       callback = encoding;
       encoding = "utf8";
     }
-    const dir2 = path.dirname(file);
-    pathExists(dir2, (err, itDoes) => {
+    const dir3 = path.dirname(file);
+    pathExists(dir3, (err, itDoes) => {
       if (err)
         return callback(err);
       if (itDoes)
         return fs.writeFile(file, data, encoding, callback);
-      mkdir2.mkdirs(dir2, (err2) => {
+      mkdir3.mkdirs(dir3, (err2) => {
         if (err2)
           return callback(err2);
         fs.writeFile(file, data, encoding, callback);
@@ -5195,11 +5195,11 @@ var require_output_file = __commonJS((exports, module) => {
     });
   }
   function outputFileSync(file, ...args) {
-    const dir2 = path.dirname(file);
-    if (fs.existsSync(dir2)) {
+    const dir3 = path.dirname(file);
+    if (fs.existsSync(dir3)) {
       return fs.writeFileSync(file, ...args);
     }
-    mkdir2.mkdirsSync(dir2);
+    mkdir3.mkdirsSync(dir3);
     fs.writeFileSync(file, ...args);
   }
   module.exports = {
@@ -6295,11 +6295,11 @@ var require_ProgressCallbackTransform = __commonJS((exports) => {
   var stream_1 = __require("stream");
 
   class ProgressCallbackTransform extends stream_1.Transform {
-    constructor(total, cancellationToken, onProgress) {
+    constructor(total, cancellationToken, onProgress2) {
       super();
       this.total = total;
       this.cancellationToken = cancellationToken;
-      this.onProgress = onProgress;
+      this.onProgress = onProgress2;
       this.start = Date.now();
       this.transferred = 0;
       this.delta = 0;
@@ -14700,8 +14700,8 @@ var require_ElectronAppAdapter = __commonJS((exports) => {
   var AppAdapter_1 = require_AppAdapter();
 
   class ElectronAppAdapter {
-    constructor(app2 = __require("electron").app) {
-      this.app = app2;
+    constructor(app3 = __require("electron").app) {
+      this.app = app3;
     }
     whenReady() {
       return this.app.whenReady();
@@ -15887,7 +15887,7 @@ var require_DataSplitter = __commonJS((exports) => {
   }
 
   class DataSplitter extends stream_1.Writable {
-    constructor(out2, options, partIndexToTaskIndex, boundary, partIndexToLength, finishHandler, grandTotalBytes, onProgress) {
+    constructor(out2, options, partIndexToTaskIndex, boundary, partIndexToLength, finishHandler, grandTotalBytes, onProgress2) {
       super();
       this.out = out2;
       this.options = options;
@@ -15895,7 +15895,7 @@ var require_DataSplitter = __commonJS((exports) => {
       this.partIndexToLength = partIndexToLength;
       this.finishHandler = finishHandler;
       this.grandTotalBytes = grandTotalBytes;
-      this.onProgress = onProgress;
+      this.onProgress = onProgress2;
       this.start = Date.now();
       this.nextUpdate = this.start + 1000;
       this.transferred = 0;
@@ -16199,11 +16199,11 @@ var require_ProgressDifferentialDownloadCallbackTransform = __commonJS((exports)
   })(OperationKind || (OperationKind = {}));
 
   class ProgressDifferentialDownloadCallbackTransform extends stream_1.Transform {
-    constructor(progressDifferentialDownloadInfo, cancellationToken, onProgress) {
+    constructor(progressDifferentialDownloadInfo, cancellationToken, onProgress2) {
       super();
       this.progressDifferentialDownloadInfo = progressDifferentialDownloadInfo;
       this.cancellationToken = cancellationToken;
-      this.onProgress = onProgress;
+      this.onProgress = onProgress2;
       this.start = Date.now();
       this.transferred = 0;
       this.delta = 0;
@@ -16648,7 +16648,7 @@ var require_AppUpdater = __commonJS((exports) => {
         this._isUserWithinRollout = value;
       }
     }
-    constructor(options, app2) {
+    constructor(options, app3) {
       super();
       this.autoDownload = true;
       this.autoInstallOnAppQuit = true;
@@ -16678,11 +16678,11 @@ var require_AppUpdater = __commonJS((exports) => {
       this.on("error", (error) => {
         this._logger.error(`Error: ${error.stack || error.message}`);
       });
-      if (app2 == null) {
+      if (app3 == null) {
         this.app = new ElectronAppAdapter_1.ElectronAppAdapter;
         this.httpExecutor = new electronHttpExecutor_1.ElectronHttpExecutor((authInfo, callback) => this.emit("login", authInfo, callback));
       } else {
-        this.app = app2;
+        this.app = app3;
         this.httpExecutor = null;
       }
       const currentVersionString = this.app.version;
@@ -17158,8 +17158,8 @@ var require_BaseUpdater = __commonJS((exports) => {
   var AppUpdater_1 = require_AppUpdater();
 
   class BaseUpdater extends AppUpdater_1.AppUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
       this.quitAndInstallCalled = false;
       this.quitHandlerAdded = false;
     }
@@ -17236,7 +17236,7 @@ var require_BaseUpdater = __commonJS((exports) => {
       });
     }
     sanitizeEnvPath(envPath) {
-      return envPath.split(path.delimiter).filter((dir2) => path.isAbsolute(dir2)).join(path.delimiter);
+      return envPath.split(path.delimiter).filter((dir3) => path.isAbsolute(dir3)).join(path.delimiter);
     }
     spawnSyncLog(cmd, args = [], env2 = {}) {
       var _a;
@@ -17333,8 +17333,8 @@ var require_AppImageUpdater = __commonJS((exports) => {
   var types_1 = require_types();
 
   class AppImageUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
     }
     isUpdaterActive() {
       if (process.env["APPIMAGE"] == null && !this.forceDevUpdateConfig) {
@@ -17436,8 +17436,8 @@ var require_LinuxUpdater = __commonJS((exports) => {
   var SAFE_PM_REGEX = /^[a-zA-Z0-9_-]+$/;
 
   class LinuxUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
     }
     isRunningAsRoot() {
       var _a;
@@ -17530,8 +17530,8 @@ var require_DebUpdater = __commonJS((exports) => {
   var LinuxUpdater_1 = require_LinuxUpdater();
 
   class DebUpdater extends LinuxUpdater_1.LinuxUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
     }
     doDownloadUpdate(downloadUpdateOptions) {
       const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
@@ -17609,8 +17609,8 @@ var require_PacmanUpdater = __commonJS((exports) => {
   var LinuxUpdater_1 = require_LinuxUpdater();
 
   class PacmanUpdater extends LinuxUpdater_1.LinuxUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
     }
     doDownloadUpdate(downloadUpdateOptions) {
       const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
@@ -17673,8 +17673,8 @@ var require_RpmUpdater = __commonJS((exports) => {
   var LinuxUpdater_1 = require_LinuxUpdater();
 
   class RpmUpdater extends LinuxUpdater_1.LinuxUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
     }
     doDownloadUpdate(downloadUpdateOptions) {
       const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
@@ -17745,8 +17745,8 @@ var require_MacUpdater = __commonJS((exports) => {
   var crypto_1 = __require("crypto");
 
   class MacUpdater extends AppUpdater_1.AppUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
       this.nativeUpdater = __require("electron").autoUpdater;
       this.squirrelDownloadedUpdate = false;
       this.nativeUpdater.on("error", (it) => {
@@ -18098,8 +18098,8 @@ var require_NsisUpdater = __commonJS((exports) => {
   var url_1 = __require("url");
 
   class NsisUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
+    constructor(options, app3) {
+      super(options, app3);
       this._verifyUpdateCodeSignature = (publisherNames, unescapedTempUpdateFile) => (0, windowsExecutableCodeSignatureVerifier_1.verifySignature)(publisherNames, unescapedTempUpdateFile, this._logger);
     }
     get verifyUpdateCodeSignature() {
@@ -18345,10 +18345,10 @@ var require_main2 = __commonJS((exports) => {
 });
 
 // shell/main.ts
-import { app as app4, BrowserWindow as BrowserWindow4, globalShortcut, ipcMain as ipcMain2, screen as screen2, shell as shell2 } from "electron";
+import { app as app5, BrowserWindow as BrowserWindow5, globalShortcut, ipcMain as ipcMain3, screen as screen2, shell as shell3 } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname as dirname2, join as join5, resolve } from "node:path";
-import { readFile as readFile5, writeFile as writeFile3, mkdir as mkdir3 } from "node:fs/promises";
+import { dirname as dirname2, join as join6, resolve } from "node:path";
+import { readFile as readFile5, writeFile as writeFile4, mkdir as mkdir4 } from "node:fs/promises";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -18890,6 +18890,7 @@ import { join as join3 } from "node:path";
 
 // src/data/clip.ts
 var CLIP_SCHEME = "loldata-clip";
+var clipUrl = (id) => `${CLIP_SCHEME}://recording/${id}`;
 
 // shell/capture.ts
 var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
@@ -19192,7 +19193,22 @@ function bodyOf(file, range) {
 }
 function serveClips() {
   protocol.handle(CLIP_SCHEME, async (request) => {
-    const id = new URL(request.url).pathname.replace(/^\//, "");
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/_page/")) {
+      const name = url.pathname.slice("/_page/".length);
+      if (!/^[\w.-]+$/.test(name))
+        return new Response("no", { status: 404 });
+      try {
+        const body = await readFile2(join3(__dirname, "..", "capture", name));
+        return new Response(body, {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }
+        });
+      } catch {
+        return new Response("no such page", { status: 404 });
+      }
+    }
+    const id = url.pathname.replace(/^\//, "");
     if (!located.has(id))
       await readIndex();
     const file = located.get(id);
@@ -19207,8 +19223,13 @@ function serveClips() {
     const headers = {
       "Content-Type": file.endsWith(".mp4") ? "video/mp4" : "video/webm",
       "Accept-Ranges": "bytes",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Range",
+      "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges"
     };
+    if (request.method === "OPTIONS")
+      return new Response(null, { status: 204, headers });
     const asked = /bytes=(\d*)-(\d*)/.exec(request.headers.get("Range") ?? "");
     if (!asked) {
       return new Response(bodyOf(file), {
@@ -19241,23 +19262,115 @@ function destroyRecorder() {
   ready = false;
 }
 
+// shell/clips.ts
+import { app as app2, BrowserWindow as BrowserWindow4, ipcMain as ipcMain2, shell as shell2 } from "electron";
+import { mkdir as mkdir2, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join4 } from "node:path";
+var __dirname = "C:\\Users\\marco\\OneDrive\\Desktop\\projects\\loldata-desktop\\shell";
+var dir2 = () => join4(app2.getPath("userData"), "clips");
+var win2 = null;
+var ready2 = false;
+var WIDTH = 1280;
+var HEIGHT = 720;
+var FPS = 30;
+var BITRATE = 3000000;
+async function ensureWindow2() {
+  if (win2 && !win2.isDestroyed())
+    return win2;
+  ready2 = false;
+  win2 = new BrowserWindow4({
+    show: false,
+    webPreferences: {
+      preload: join4(__dirname, "..", "capture", "clipper-preload.cjs"),
+      contextIsolation: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  win2.webContents.on("did-fail-load", (_e, code, desc, url) => console.log("[clip] page failed to load: %s %s (%s)", code, desc, url));
+  win2.webContents.on("preload-error", (_e, path, err) => console.log("[clip] preload failed: %s — %s", path, err?.message));
+  win2.webContents.on("console-message", (_e, _level, message) => console.log("[clip] page says: %s", message));
+  await win2.loadURL(`${CLIP_SCHEME}://recording/_page/clipper.html`);
+  return win2;
+}
+ipcMain2.on("clip:ready", () => {
+  ready2 = true;
+});
+ipcMain2.on("clip:warn", (_e, m) => console.log("[clip] %s", m));
+var onProgress = null;
+ipcMain2.on("clip:progress", (_e, fraction) => onProgress?.(fraction));
+async function makeClip(req, progress) {
+  const seconds = Math.max(1, Math.round((req.toMs - req.fromMs) / 1000));
+  const w = await ensureWindow2();
+  for (let i = 0;i < 60 && !ready2; i++)
+    await new Promise((r) => setTimeout(r, 100));
+  if (!ready2)
+    return { ok: false, message: "the clipper did not start" };
+  onProgress = progress;
+  const result = await new Promise((resolve) => {
+    const done = (_e, out2) => {
+      ipcMain2.off("clip:failed", failed);
+      resolve(out2);
+    };
+    const failed = (_e, message) => {
+      ipcMain2.off("clip:done", done);
+      resolve(message);
+    };
+    ipcMain2.once("clip:done", done);
+    ipcMain2.once("clip:failed", failed);
+    w.webContents.send("clip:cut", {
+      src: clipUrl(req.recordingId),
+      fromMs: req.fromMs,
+      toMs: req.toMs,
+      width: WIDTH,
+      height: HEIGHT,
+      fps: FPS,
+      bitrate: BITRATE
+    });
+  });
+  onProgress = null;
+  if (win2 && !win2.isDestroyed())
+    win2.destroy();
+  win2 = null;
+  ready2 = false;
+  if (typeof result === "string")
+    return { ok: false, message: result };
+  const ext = result.mimeType.startsWith("video/mp4") ? "mp4" : "webm";
+  const safe = req.label.replace(/[^\w -]+/g, "").trim().replace(/\s+/g, "-").slice(0, 48) || "clip";
+  const file = join4(dir2(), `${safe}-${Date.now()}.${ext}`);
+  await mkdir2(dir2(), { recursive: true });
+  const bytes = Buffer.from(result.buffer);
+  await writeFile2(file, bytes);
+  console.log("[clip] %s — %ds, %s MB", file, seconds, (bytes.byteLength / 1048576).toFixed(1));
+  return { ok: true, file, bytes: bytes.byteLength, seconds };
+}
+function revealClip(file) {
+  shell2.showItemInFolder(file);
+}
+function destroyClipper() {
+  if (win2 && !win2.isDestroyed())
+    win2.destroy();
+  win2 = null;
+  ready2 = false;
+}
+
 // shell/updater.ts
 var import_electron_updater = __toESM(require_main2(), 1);
-import { app as app2 } from "electron";
+import { app as app3 } from "electron";
 var { autoUpdater } = import_electron_updater.default;
 var emit = () => {};
 var current2;
-var canUpdate = () => app2.isPackaged;
+var canUpdate = () => app3.isPackaged;
 function initUpdater(onChange2) {
   emit = onChange2;
-  current2 = { state: "idle", version: app2.getVersion() };
+  current2 = { state: "idle", version: app3.getVersion() };
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   const set = (s) => {
     current2 = s;
     emit(s);
   };
-  const v = () => app2.getVersion();
+  const v = () => app3.getVersion();
   autoUpdater.on("checking-for-update", () => set({ state: "checking", version: v() }));
   autoUpdater.on("update-not-available", () => set({ state: "current", version: v(), checkedAt: Date.now() }));
   autoUpdater.on("update-available", (info) => set({
@@ -19383,9 +19496,9 @@ async function championRunes(championKey, championName, role, signal) {
 }
 
 // shell/prefs.ts
-import { app as app3 } from "electron";
-import { readFile as readFile3, writeFile as writeFile2, mkdir as mkdir2 } from "node:fs/promises";
-import { dirname, join as join4 } from "node:path";
+import { app as app4 } from "electron";
+import { readFile as readFile3, writeFile as writeFile3, mkdir as mkdir3 } from "node:fs/promises";
+import { dirname, join as join5 } from "node:path";
 var DEFAULT_SETTINGS = {
   launchAtLogin: false,
   smartBuild: false,
@@ -19398,7 +19511,7 @@ var DEFAULT_SETTINGS = {
   objectiveNotices: true,
   buildNotices: true
 };
-var file = () => join4(app3.getPath("userData"), "preferences.json");
+var file = () => join5(app4.getPath("userData"), "preferences.json");
 async function load2() {
   let cache2;
   try {
@@ -19494,8 +19607,8 @@ async function deleteBuild(championId) {
 }
 async function persist(store) {
   try {
-    await mkdir2(dirname(file()), { recursive: true });
-    await writeFile2(file(), JSON.stringify(store, null, 2), "utf8");
+    await mkdir3(dirname(file()), { recursive: true });
+    await writeFile3(file(), JSON.stringify(store, null, 2), "utf8");
   } catch {}
 }
 
@@ -20420,12 +20533,13 @@ var state = {
   runes: null,
   runeImport: { state: "idle" },
   account: null,
-  update: { state: "idle", version: app4.getVersion() },
+  update: { state: "idle", version: app5.getVersion() },
   canUpdate: false,
   pinned: false,
   hud: { scale: 1, nudge: { ...NO_NUDGE }, topRight: { ...NO_NUDGE }, source: null },
   settings: { ...DEFAULT_SETTINGS },
   loading: null,
+  clip: { state: "idle" },
   recording: false,
   recordings: [],
   libraryBytes: 0,
@@ -20437,11 +20551,11 @@ var state = {
   finalBoard: null,
   scoreboard: null
 };
-var win2 = null;
+var win3 = null;
 function push(patch2) {
   const before = state.phase;
   state = { ...state, ...patch2 };
-  win2?.webContents.send("state", state);
+  win3?.webContents.send("state", state);
   sendOverlay("state", {
     ...state,
     goldBar: goldVisible,
@@ -21200,53 +21314,53 @@ function stopGameClock() {
   dropNotice();
 }
 function createWindow() {
-  win2 = new BrowserWindow4({
+  win3 = new BrowserWindow5({
     width: 1280,
     height: 840,
     minWidth: 1040,
     minHeight: 700,
-    icon: join5(__dirname2, "../build/icon.png"),
+    icon: join6(__dirname2, "../build/icon.png"),
     show: false,
     frame: false,
     backgroundColor: "#040A0C",
     webPreferences: {
-      preload: join5(__dirname2, "preload.mjs"),
+      preload: join6(__dirname2, "preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
     }
   });
-  win2.once("ready-to-show", () => dismissSplash(() => {
-    win2?.show();
-    win2?.focus();
+  win3.once("ready-to-show", () => dismissSplash(() => {
+    win3?.show();
+    win3?.focus();
   }));
-  win2.webContents.setWindowOpenHandler(({ url }) => {
-    shell2.openExternal(url);
+  win3.webContents.setWindowOpenHandler(({ url }) => {
+    shell3.openExternal(url);
     return { action: "deny" };
   });
   if (DEV_URL2)
-    win2.loadURL(DEV_URL2);
+    win3.loadURL(DEV_URL2);
   else
-    win2.loadFile(join5(__dirname2, "../dist/index.html"));
+    win3.loadFile(join6(__dirname2, "../dist/index.html"));
 }
-ipcMain2.handle("state:get", () => state);
-ipcMain2.on("win:minimise", () => win2?.minimize());
-ipcMain2.on("win:close", () => win2?.close());
-ipcMain2.on("hud:calibrate-topright", (_e, patch2) => {
+ipcMain3.handle("state:get", () => state);
+ipcMain3.on("win:minimise", () => win3?.minimize());
+ipcMain3.on("win:close", () => win3?.close());
+ipcMain3.on("hud:calibrate-topright", (_e, patch2) => {
   const topRight = { ...state.hud.topRight ?? NO_NUDGE, ...patch2 };
   push({ hud: { ...state.hud, topRight } });
   console.log("[hud] top-right nudge x=%s y=%s size=%s", topRight.x.toFixed(4), topRight.y.toFixed(4), topRight.size.toFixed(2));
 });
-ipcMain2.on("hud:calibrate", (_e, patch2) => {
+ipcMain3.on("hud:calibrate", (_e, patch2) => {
   const nudge = { ...state.hud.nudge, ...patch2 };
   push({ hud: { ...state.hud, nudge } });
   console.log("[hud] nudge x=%s y=%s size=%s", nudge.x.toFixed(2), nudge.y.toFixed(2), nudge.size.toFixed(2));
 });
-ipcMain2.on("hud:hint", (_e, ability) => {
+ipcMain3.on("hud:hint", (_e, ability) => {
   push({ levelHint: ability });
   syncOverlay();
 });
-ipcMain2.on("overlay:report", (_e, info) => {
+ipcMain3.on("overlay:report", (_e, info) => {
   const d = screen2.getPrimaryDisplay();
   console.log("[hud] overlay viewport %dx%d dpr=%s | display bounds %dx%d at (%d,%d) scale=%s | physical %dx%d", info.w, info.h, info.dpr, d.bounds.width, d.bounds.height, d.bounds.x, d.bounds.y, d.scaleFactor, Math.round(d.bounds.width * d.scaleFactor), Math.round(d.bounds.height * d.scaleFactor));
   const box = abilityBox("Q", { width: info.w, height: info.h }, state.hud);
@@ -21270,28 +21384,53 @@ async function applyPage(champion, patch2, page) {
     push({ runeImport: { state: "error", message: e?.message ?? "import failed" } });
   }
 }
-ipcMain2.handle("profile:refresh", async () => {
+ipcMain3.handle("profile:refresh", async () => {
   await readProfile();
 });
 async function pushRecordings() {
   const [recordings, bytes] = await Promise.all([readIndex(), librarySize()]);
   push({ recordings, libraryBytes: bytes, recording: isRecording(), captureError: captureError() });
 }
-ipcMain2.handle("capture:list", async () => {
+ipcMain3.handle("capture:list", async () => {
   await pushRecordings();
 });
-ipcMain2.handle("capture:keep", async (_e, id, keep) => {
+ipcMain3.handle("capture:keep", async (_e, id, keep) => {
   await keepRecording(id, keep);
   await pushRecordings();
 });
-ipcMain2.handle("capture:delete", async (_e, id) => {
+ipcMain3.handle("capture:delete", async (_e, id) => {
   await deleteRecording(id);
   await pushRecordings();
 });
-ipcMain2.handle("capture:reveal", async (_e, id) => {
+ipcMain3.handle("capture:reveal", async (_e, id) => {
   await revealRecording(id);
 });
-ipcMain2.handle("capture:demo", async () => {
+ipcMain3.handle("clip:make", async (_e, req) => {
+  if (state.clip.state === "working")
+    return;
+  push({ clip: { state: "working", fraction: 0 } });
+  const out2 = await makeClip(req, (fraction) => {
+    if (state.clip.state === "working")
+      push({ clip: { state: "working", fraction } });
+  }).catch((e) => ({ ok: false, message: e?.message ?? "the clip failed" }));
+  push({
+    clip: out2.ok ? { state: "done", file: out2.file, bytes: out2.bytes, seconds: out2.seconds } : { state: "failed", message: out2.message }
+  });
+});
+ipcMain3.handle("clip:reveal", (_e, file2) => {
+  revealClip(file2);
+});
+ipcMain3.handle("clip:forget", () => {
+  push({ clip: { state: "idle" } });
+});
+ipcMain3.on("clip:drag", (e, file2) => {
+  try {
+    e.sender.startDrag({ file: file2, icon: join6(__dirname2, "../build/icon.png") });
+  } catch (err) {
+    console.log("[clip] drag failed: %s", err?.message);
+  }
+});
+ipcMain3.handle("capture:demo", async () => {
   if (state.recording)
     return;
   const started = await beginRecording({ ...state.settings, capture: true }, { championId: "Ahri", championName: "Ahri", queue: "Demo" }, () => void pushRecordings(), true).catch((e) => {
@@ -21356,15 +21495,15 @@ async function lookupRanks(riotIds, region) {
   }));
   return out2;
 }
-ipcMain2.handle("ranks:get", async (_e, riotIds, region) => lookupRanks(Array.isArray(riotIds) ? riotIds : [], region));
-var MODEL_DIR = () => join5(app4.getPath("userData"), "models");
-ipcMain2.handle("model:get", async (_e, championId, key) => {
+ipcMain3.handle("ranks:get", async (_e, riotIds, region) => lookupRanks(Array.isArray(riotIds) ? riotIds : [], region));
+var MODEL_DIR = () => join6(app5.getPath("userData"), "models");
+ipcMain3.handle("model:get", async (_e, championId, key) => {
   if (!/^[A-Za-z0-9]{1,32}$/.test(championId))
     return null;
   if (!Number.isInteger(key) || key < 1 || key > 1e5)
     return null;
   const id = `${key}000`;
-  const file2 = join5(MODEL_DIR(), `${championId}-${id}.glb`);
+  const file2 = join6(MODEL_DIR(), `${championId}-${id}.glb`);
   try {
     const cached = await readFile5(file2);
     return cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength);
@@ -21378,8 +21517,8 @@ ipcMain2.handle("model:get", async (_e, championId, key) => {
     if (buf.length < 20 || buf.subarray(0, 4).toString() !== "glTF") {
       throw new Error("not a glTF");
     }
-    await mkdir3(MODEL_DIR(), { recursive: true });
-    await writeFile3(file2, buf);
+    await mkdir4(MODEL_DIR(), { recursive: true });
+    await writeFile4(file2, buf);
     console.log("[model] %s cached, %s MB", championId, (buf.length / 1048576).toFixed(1));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   } catch (e) {
@@ -21387,11 +21526,11 @@ ipcMain2.handle("model:get", async (_e, championId, key) => {
     return null;
   }
 });
-ipcMain2.handle("settings:set", async (_e, patch2) => {
+ipcMain3.handle("settings:set", async (_e, patch2) => {
   const settings = await writeSettings(patch2);
   if ("launchAtLogin" in patch2) {
     try {
-      app4.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
+      app5.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
     } catch (e) {
       console.log("[settings] login item failed: %s", e?.message);
     }
@@ -21408,16 +21547,16 @@ ipcMain2.handle("settings:set", async (_e, patch2) => {
     syncOverlay();
   return settings;
 });
-ipcMain2.handle("settings:reveal", () => {
-  shell2.showItemInFolder(join5(app4.getPath("userData"), "preferences.json"));
+ipcMain3.handle("settings:reveal", () => {
+  shell3.showItemInFolder(join6(app5.getPath("userData"), "preferences.json"));
 });
-ipcMain2.handle("update:check", async () => {
+ipcMain3.handle("update:check", async () => {
   await checkForUpdate();
 });
-ipcMain2.handle("update:download", async () => {
+ipcMain3.handle("update:download", async () => {
   await downloadUpdate();
 });
-ipcMain2.on("update:install", () => installUpdate());
+ipcMain3.on("update:install", () => installUpdate());
 var GOLD_DEMOS = [
   { ours: 15250, theirs: 7700, oursCounted: 5, theirsCounted: 5 },
   { ours: 21400, theirs: 23900, oursCounted: 5, theirsCounted: 5 },
@@ -21498,11 +21637,11 @@ async function importBuild(raw) {
     push({ runeImport: { state: "error", message: `${link.champion} is not a champion we know` } });
     return;
   }
-  if (win2) {
-    if (win2.isMinimized())
-      win2.restore();
-    win2.show();
-    win2.focus();
+  if (win3) {
+    if (win3.isMinimized())
+      win3.restore();
+    win3.show();
+    win3.focus();
   }
   const existing = await buildFor(champ.slug).catch(() => null);
   await saveBuild({
@@ -21525,7 +21664,7 @@ async function pushBuilds() {
   console.log("[builds] %d profile(s): %s", builds.length, builds.map((b) => b.championName).join(", ") || "none");
   push({ builds });
 }
-ipcMain2.handle("builds:save", async () => {
+ipcMain3.handle("builds:save", async () => {
   const m = state.matchup;
   const champ = state.select?.champion;
   if (!m || !champ || !m.slots.length)
@@ -21545,7 +21684,7 @@ ipcMain2.handle("builds:save", async () => {
   await saveBuild(profile);
   await pushBuilds();
 });
-ipcMain2.handle("builds:update", async (_e, championId, items, runes) => {
+ipcMain3.handle("builds:update", async (_e, championId, items, runes) => {
   const existing = await buildFor(championId).catch(() => null);
   if (!existing)
     return;
@@ -21558,44 +21697,44 @@ ipcMain2.handle("builds:update", async (_e, championId, items, runes) => {
   });
   await pushBuilds();
 });
-ipcMain2.handle("builds:toggle", async (_e, championId, enabled) => {
+ipcMain3.handle("builds:toggle", async (_e, championId, enabled) => {
   await setBuildEnabled(championId, enabled);
   await pushBuilds();
 });
-ipcMain2.handle("builds:delete", async (_e, championId) => {
+ipcMain3.handle("builds:delete", async (_e, championId) => {
   await deleteBuild(championId);
   await pushBuilds();
 });
-ipcMain2.on("gold:demo", () => {
+ipcMain3.on("gold:demo", () => {
   goldDemo = (goldDemo + 1) % GOLD_DEMOS.length;
   goldVisible = GOLD_DEMOS[goldDemo] != null;
   push({ gold: GOLD_DEMOS[goldDemo] ?? null });
   syncOverlay();
 });
-ipcMain2.on("app:relaunch", () => {
-  app4.relaunch();
-  app4.quit();
+ipcMain3.on("app:relaunch", () => {
+  app5.relaunch();
+  app5.quit();
 });
-ipcMain2.on("account:signin", () => {
-  shell2.openExternal(`${SITE}/login?desktop=1`);
+ipcMain3.on("account:signin", () => {
+  shell3.openExternal(`${SITE}/login?desktop=1`);
 });
-ipcMain2.handle("account:signout", async () => {
+ipcMain3.handle("account:signout", async () => {
   await setSession(null);
 });
-ipcMain2.handle("ai:ask", async (_e, messages) => {
+ipcMain3.handle("ai:ask", async (_e, messages) => {
   return askAi(session?.token ?? null, messages);
 });
-ipcMain2.on("shell:open", (_e, url) => {
+ipcMain3.on("shell:open", (_e, url) => {
   if (/^https?:\/\//i.test(url))
-    shell2.openExternal(url);
+    shell3.openExternal(url);
 });
-ipcMain2.on("runes:choose", (_e, index) => {
+ipcMain3.on("runes:choose", (_e, index) => {
   const r = state.runes;
   if (!r || index < 0 || index >= r.variants.length)
     return;
   push({ runes: { ...r, chosen: index }, runeImport: { state: "idle" } });
 });
-ipcMain2.handle("runes:import", async () => {
+ipcMain3.handle("runes:import", async () => {
   const r = state.runes;
   const champ = state.select?.champion;
   if (!r || !champ)
@@ -21617,9 +21756,9 @@ async function handleLink(raw) {
     console.log("[link] auth received, valid=%s", !!auth);
     if (auth) {
       await setSession(auth);
-      if (win2) {
-        win2.show();
-        win2.focus();
+      if (win3) {
+        win3.show();
+        win3.focus();
       }
     }
     return;
@@ -21634,22 +21773,22 @@ async function handleLink(raw) {
     push({ runeImport: { state: "error", message: "that link was not a valid rune page" } });
     return;
   }
-  if (win2) {
-    if (win2.isMinimized())
-      win2.restore();
-    win2.show();
-    win2.focus();
+  if (win3) {
+    if (win3.isMinimized())
+      win3.restore();
+    win3.show();
+    win3.focus();
   }
   await applyPage(link.champion, link.patch ?? state.patch ?? "", link.page);
 }
-ipcMain2.on("overlay:pin", (_e, on) => {
+ipcMain3.on("overlay:pin", (_e, on) => {
   push({ pinned: on });
   if (on)
     readGame();
   else if (state.notice)
     noticeTimer = setTimeout(dropNotice, NOTICE_MS);
 });
-ipcMain2.on("overlay:demo", async () => {
+ipcMain3.on("overlay:demo", async () => {
   const stats = await liveGameStats();
   if (stats) {
     const [events, players, me] = await Promise.all([
@@ -21692,7 +21831,7 @@ var DEMO_LOADING = {
     demo("enemy five", "Senna", 235, "EMERALD I", 33, 21, { otp: true })
   ]
 };
-ipcMain2.on("loading:demo", () => {
+ipcMain3.on("loading:demo", () => {
   const on = state.loading === null;
   push({
     loading: on ? DEMO_LOADING : null,
@@ -21700,12 +21839,12 @@ ipcMain2.on("loading:demo", () => {
   });
   syncOverlay();
 });
-ipcMain2.on("loading:calibrate", (_e, patch2) => {
+ipcMain3.on("loading:calibrate", (_e, patch2) => {
   const loadingNudge = { ...state.loadingNudge, ...patch2 };
   push({ loadingNudge });
   console.log("[loading] nudge x=%s y=%s scale=%s", loadingNudge.x.toFixed(4), loadingNudge.y.toFixed(4), loadingNudge.scale.toFixed(3));
 });
-ipcMain2.on("overlay:demo-recal", () => {
+ipcMain3.on("overlay:demo-recal", () => {
   raiseNotice("build", 0, null, { ours: [], theirs: [] }, DEMO_MS, undefined, undefined, {
     items: [4633],
     shapeLabel: "3 items you have built",
@@ -21714,35 +21853,35 @@ ipcMain2.on("overlay:demo-recal", () => {
     note: "+2.6pp"
   });
 });
-var gotLock = app4.requestSingleInstanceLock();
+var gotLock = app5.requestSingleInstanceLock();
 if (!gotLock) {
-  app4.quit();
+  app5.quit();
 } else {
-  app4.on("second-instance", (_e, argv) => {
+  app5.on("second-instance", (_e, argv) => {
     console.log("[link] second-instance argv=%s", JSON.stringify(argv));
     handleLink(linkFromArgv(argv));
   });
-  app4.on("open-url", (e, url) => {
+  app5.on("open-url", (e, url) => {
     e.preventDefault();
     handleLink(url);
   });
-  app4.whenReady().then(async () => {
+  app5.whenReady().then(async () => {
     createSplash();
     const dev = process.defaultApp && process.argv.length >= 2;
     const launch = {
       exe: process.execPath,
       args: dev ? [resolve(process.argv[1])] : [],
       label: "LolData",
-      icon: dev ? join5(__dirname2, "..", "build", "icon.ico") : process.execPath
+      icon: dev ? join6(__dirname2, "..", "build", "icon.ico") : process.execPath
     };
-    const claimed = dev ? app4.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app4.setAsDefaultProtocolClient(PROTOCOL);
+    const claimed = dev ? app5.setAsDefaultProtocolClient(PROTOCOL, launch.exe, launch.args) : app5.setAsDefaultProtocolClient(PROTOCOL);
     const result = await ensureProtocol(PROTOCOL, claimed, launch);
     console.log("[link] %s:// ok=%s via=%s named=%s%s", PROTOCOL, result.ok, result.via, result.named ?? false, result.command ? ` cmd=${result.command}` : "");
     serveClips();
     setCaptureBudget((await readSettings()).captureBudgetGb);
     tidyLibrary();
     createWindow();
-    configureOverlay(join5(__dirname2, "preload.mjs"));
+    configureOverlay(join6(__dirname2, "preload.mjs"));
     const registered = globalShortcut.register(GOLD_HOTKEY, () => {
       goldVisible = !goldVisible;
       push({});
@@ -21757,7 +21896,7 @@ if (!gotLock) {
     const settings = await readSettings().catch(() => ({ ...DEFAULT_SETTINGS }));
     push({ settings });
     try {
-      app4.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
+      app5.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: ["--hidden"] });
     } catch {}
     await backfillRuneProfiles();
     await pushBuilds();
@@ -21769,20 +21908,21 @@ if (!gotLock) {
     handleLink(linkFromArgv(process.argv));
   });
 }
-app4.on("before-quit", () => {
+app5.on("before-quit", () => {
   stopGameClock();
+  destroyClipper();
   endRecording();
   destroyRecorder();
   destroyOverlay();
   globalShortcut.unregisterAll();
 });
-app4.on("window-all-closed", () => {
+app5.on("window-all-closed", () => {
   lcu.stop();
   destroyOverlay();
   if (process.platform !== "darwin")
-    app4.quit();
+    app5.quit();
 });
-app4.on("activate", () => {
-  if (BrowserWindow4.getAllWindows().length === 0)
+app5.on("activate", () => {
+  if (BrowserWindow5.getAllWindows().length === 0)
     createWindow();
 });

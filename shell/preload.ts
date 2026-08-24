@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld("desktop", {
   // addressed is the shell's business, and a renderer that spelled the scheme
   // itself would be a second place for it to drift.
   clipUrl: (id: string) => clipUrl(id),
+  makeClip: (req: unknown) => ipcRenderer.invoke("clip:make", req),
+  revealClip: (file: string) => ipcRenderer.invoke("clip:reveal", file),
+  forgetClip: () => ipcRenderer.invoke("clip:forget"),
+  dragClip: (file: string) => ipcRenderer.send("clip:drag", file),
   ranks: (riotIds: string[], region: string | null) => ipcRenderer.invoke("ranks:get", riotIds, region),
   // Signing in opens a BROWSER. This surface deliberately has no way to send a
   // password anywhere — the site hands a session back over loldata://auth.

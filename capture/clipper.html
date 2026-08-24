@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- This page loads nothing and talks to nobody; saying so silences the
+         renderer's warning and keeps it true if anyone edits it later. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src loldata-clip:; script-src 'unsafe-inline'; style-src 'unsafe-inline'" />
+    <title>lolData clipper</title>
+  </head>
+  <body style="margin:0;background:#000">
+    <script>
+      /**
+       * Cutting a moment out of a recording.
+       *
+       * ⚠️ By RE-ENCODING through playback, not by copying bytes. Trimming an
+       * MP4 without re-encoding means parsing the fragment index and stitching
+       * moof/mdat boxes by hand — lossless and instant, and a container parser
+       * to write and get wrong. This plays the segment into a canvas and
+       * records the canvas, which reuses the pipeline that already works and
+       * costs the length of the clip in wall time.
+       *
+       * ⚠️ The canvas MUST NOT be tainted. Drawing a video from another origin
+       * poisons it and captureStream() then throws — at the very last step,
+       * after the whole segment has played. So this page is SERVED FROM THE
+       * CLIP SCHEME itself, same origin as the recording. crossOrigin plus CORS
+       * headers was tried first and measured: the media stack rejected the
+       * partial responses with "Format error" whatever was exposed.
+       *
+       * ⚠️ Frames are pushed on a TIMER, not requestAnimationFrame. This window
+       * is never shown, and a page that is not compositing does not run rAF at
+       * all — the export would produce a single frame and no error.
+       */
+      // Put here by clipper-preload.js — see the note there.
+      const ipcRenderer = window.__ipc
+
+      const MIME = [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/webm;codecs=h264,opus",
+        "video/webm;codecs=vp8,opus",
+      ]
+
+      const once = (el, ev, ms) =>
+        new Promise((res, rej) => {
+          const t = setTimeout(() => rej(new Error("timed out waiting for " + ev)), ms)
+          el.addEventListener(ev, () => { clearTimeout(t); res() }, { once: true })
+        })
+
+      async function cut({ src, fromMs, toMs, width, height, fps, bitrate }) {
+        const video = document.createElement("video")
+        // ⚠️ No crossOrigin, and none needed: this page is served from the same
+        // scheme as the recording, so the canvas is never tainted.
+        video.src = src
+        video.muted = false
+        video.preload = "auto"
+        document.body.appendChild(video)
+
+        await once(video, "loadedmetadata", 20000)
+
+        // The recording's own aspect, letterboxed into the export if they differ.
+        const vw = video.videoWidth || 1920
+        const vh = video.videoHeight || 1080
+        const scale = Math.min(width / vw, height / vh)
+        const dw = Math.round(vw * scale)
+        const dh = Math.round(vh * scale)
+        const dx = Math.round((width - dw) / 2)
+        const dy = Math.round((height - dh) / 2)
+
+        const canvas = document.createElement("canvas")
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext("2d", { alpha: false })
+        ctx.fillStyle = "#000"
+        ctx.fillRect(0, 0, width, height)
+
+        video.currentTime = fromMs / 1000
+        await once(video, "seeked", 20000)
+        // One frame drawn before anything records, so the clip never opens on
+        // black while the first timer tick is still pending.
+        ctx.drawImage(video, dx, dy, dw, dh)
+
+        const stream = canvas.captureStream(fps)
+
+        // Sound comes off the element, which the canvas cannot carry.
+        try {
+          const from = video.captureStream ? video.captureStream() : null
+          for (const t of from ? from.getAudioTracks() : []) stream.addTrack(t)
+        } catch (e) {
+          ipcRenderer.send("clip:warn", "no audio in the clip: " + String(e).slice(0, 120))
+        }
+
+        const mimeType = MIME.find((m) => MediaRecorder.isTypeSupported(m)) ?? ""
+        const chunks = []
+        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitrate })
+        recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data) }
+
+        const stopped = new Promise((res) => { recorder.onstop = res })
+        recorder.start(400)
+
+        const paint = setInterval(() => {
+          try { ctx.drawImage(video, dx, dy, dw, dh) } catch {}
+        }, Math.max(8, Math.round(1000 / fps)))
+
+        await video.play()
+
+        // Progress, so a twenty-second wait is a bar rather than a freeze.
+        const span = Math.max(1, toMs - fromMs)
+        const ping = setInterval(() => {
+          const done = Math.min(1, Math.max(0, (video.currentTime * 1000 - fromMs) / span))
+          ipcRenderer.send("clip:progress", done)
+        }, 250)
+
+        await new Promise((res) => {
+          const check = () => {
+            if (video.currentTime * 1000 >= toMs || video.ended) {
+              video.removeEventListener("timeupdate", check)
+              res()
+            }
+          }
+          video.addEventListener("timeupdate", check)
+          // timeupdate fires ~4×/s; this is the backstop if playback stalls.
+          setTimeout(res, span + 15000)
+        })
+
+        clearInterval(ping)
+        clearInterval(paint)
+        video.pause()
+        recorder.stop()
+        await stopped
+        stream.getTracks().forEach((t) => t.stop())
+        video.remove()
+
+        const blob = new Blob(chunks, { type: mimeType })
+        return { buffer: await blob.arrayBuffer(), mimeType, width, height }
+      }
+
+      ipcRenderer.on("clip:cut", async (_e, opts) => {
+        try {
+          const out = await cut(opts)
+          ipcRenderer.send("clip:done", out)
+        } catch (e) {
+          ipcRenderer.send("clip:failed", String(e).slice(0, 220))
+        }
+      })
+
+      ipcRenderer.send("clip:ready")
+    </script>
+  </body>
+</html>

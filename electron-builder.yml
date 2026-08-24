@@ -42,6 +42,10 @@ files:
   # record, and fails on the first game — the dev run works because the file is
   # simply there on disk.
   - capture/recorder.html
+  # Same reasoning: without it a packaged build offers to share a moment and
+  # fails on the first attempt.
+  - capture/clipper.html
+  - capture/clipper-preload.cjs
   - package.json
 
 win:

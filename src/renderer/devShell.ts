@@ -459,6 +459,7 @@ const SCENES: Record<string, unknown> = {
  * list of recordings that no scene had.
  */
 const BASE = {
+  clip: { state: "idle" },
   recording: false,
   captureError: null,
   libraryBytes: 1_780_000_000,
