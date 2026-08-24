@@ -19697,7 +19697,6 @@ function toMatch(g, puuid) {
   const st = me.stats ?? {};
   const items = [0, 1, 2, 3, 4, 5, 6].map((i) => num(st[`item${i}`])).filter((id) => id > 0);
   const duration = num(g.gameDuration);
-  const { mvp, ace } = honours(g);
   return {
     gameId: g.gameId,
     playedAt: num(g.gameCreation),
@@ -19717,14 +19716,46 @@ function toMatch(g, puuid) {
     items,
     spells: [num(me.spell1Id), num(me.spell2Id)],
     role: readRole(me.timeline),
-    opponent: opponentOf(g, me),
-    honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null
+    opponent: null,
+    honour: null
   };
 }
 async function recentMatches(lcu, puuid, count = 20) {
   const { data } = await lcu.request("GET", `/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=${count - 1}`);
   const games = data?.games?.games ?? [];
-  return games.map((g) => toMatch(g, puuid)).filter((m) => m !== null).sort((a, b) => b.playedAt - a.playedAt);
+  const matches = games.map((g) => toMatch(g, puuid)).filter((m) => m !== null).sort((a, b) => b.playedAt - a.playedAt);
+  await enrich(lcu, matches, puuid);
+  return matches;
+}
+var extras = new Map;
+var AT_ONCE = 4;
+async function enrich(lcu, matches, puuid) {
+  const need = matches.filter((m) => !extras.has(m.gameId));
+  for (let i = 0;i < need.length; i += AT_ONCE) {
+    await Promise.all(need.slice(i, i + AT_ONCE).map(async (m) => {
+      try {
+        const { data } = await lcu.request("GET", `/lol-match-history/v1/games/${m.gameId}`);
+        if (!data?.participants?.length)
+          return;
+        const identity = data.participantIdentities?.find((x) => x.player?.puuid === puuid);
+        const me = identity && data.participants.find((p) => p.participantId === identity.participantId);
+        if (!me)
+          return;
+        const { mvp, ace } = honours(data);
+        extras.set(m.gameId, {
+          opponent: opponentOf(data, me),
+          honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null
+        });
+      } catch {}
+    }));
+  }
+  for (const m of matches) {
+    const extra = extras.get(m.gameId);
+    if (!extra)
+      continue;
+    m.opponent = extra.opponent;
+    m.honour = extra.honour;
+  }
 }
 async function rankedSummary(lcu) {
   const { data } = await lcu.request("GET", "/lol-ranked/v1/current-ranked-stats");
@@ -21066,9 +21097,9 @@ async function readLoading() {
   const enemies = await resolve2(roster.enemies);
   push({ loading: { allies, enemies } });
   console.log("[loading] allies: %s | enemies: %s", allies.map((a) => `${a.name}=${a.championId}`).join(" "), enemies.map((a) => `${a.name}=${a.championId}`).join(" "));
-  await enrich(allies, roster.allies, enemies, roster.enemies);
+  await enrich2(allies, roster.allies, enemies, roster.enemies);
 }
-async function enrich(allies, allyEntries, enemies, enemyEntries) {
+async function enrich2(allies, allyEntries, enemies, enemyEntries) {
   let region = state.region;
   if (!region) {
     region = await lcu.region().catch(() => null);

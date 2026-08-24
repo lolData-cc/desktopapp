@@ -158,7 +158,6 @@ function toMatch(g: RawGame, puuid: string): Match | null {
     .filter((id) => id > 0)
 
   const duration = num(g.gameDuration)
-  const { mvp, ace } = honours(g)
 
   return {
     gameId: g.gameId,
@@ -181,8 +180,9 @@ function toMatch(g: RawGame, puuid: string): Match | null {
     items,
     spells: [num(me.spell1Id), num(me.spell2Id)],
     role: readRole(me.timeline),
-    opponent: opponentOf(g, me),
-    honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null,
+    // Filled in by enrich() from the per-game endpoint; the list has only you.
+    opponent: null,
+    honour: null,
   }
 }
 
@@ -198,10 +198,67 @@ export async function recentMatches(
     `/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=${count - 1}`
   )
   const games = data?.games?.games ?? []
-  return games
+  const matches = games
     .map((g) => toMatch(g, puuid))
     .filter((m): m is Match => m !== null)
     .sort((a, b) => b.playedAt - a.playedAt)
+
+  await enrich(lcu, matches, puuid)
+  return matches
+}
+
+/* ── the other nine players ─────────────────────────────────────────────── */
+
+/**
+ * ⚠️ The LIST endpoint returns ONE participant — you.
+ *
+ * Measured, after building the lane opponent and the honour badge on the
+ * assumption that it returned ten: `participants: 1, identities: 1`. Both
+ * features came out null on every real game and worked perfectly against a
+ * fixture, which is the most misleading combination there is.
+ *
+ * The other nine are only in the per-game endpoint, so that is fetched — and
+ * cached, because a game that has been played does not change. A refresh
+ * re-reads the list and asks for nothing it has already seen.
+ */
+const extras = new Map<number, Pick<Match, "opponent" | "honour">>()
+
+/** At a time. The client is local and fast, but twenty simultaneous requests
+ *  at it while somebody is in champion select is not a courtesy. */
+const AT_ONCE = 4
+
+async function enrich(lcu: LcuConnection, matches: Match[], puuid: string): Promise<void> {
+  const need = matches.filter((m) => !extras.has(m.gameId))
+
+  for (let i = 0; i < need.length; i += AT_ONCE) {
+    await Promise.all(
+      need.slice(i, i + AT_ONCE).map(async (m) => {
+        try {
+          const { data } = await lcu.request<RawGame>("GET", `/lol-match-history/v1/games/${m.gameId}`)
+          if (!data?.participants?.length) return
+          const identity = data.participantIdentities?.find((x) => x.player?.puuid === puuid)
+          const me = identity && data.participants.find((p) => p.participantId === identity.participantId)
+          if (!me) return
+          const { mvp, ace } = honours(data)
+          extras.set(m.gameId, {
+            opponent: opponentOf(data, me),
+            honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null,
+          })
+        } catch {
+          // ⚠️ Never fatal. A game whose detail cannot be read shows no
+          // opponent and no badge, which is exactly what those fields mean
+          // when they are null — the row itself is unaffected.
+        }
+      })
+    )
+  }
+
+  for (const m of matches) {
+    const extra = extras.get(m.gameId)
+    if (!extra) continue
+    m.opponent = extra.opponent
+    m.honour = extra.honour
+  }
 }
 
 export type RankedSummary = {
