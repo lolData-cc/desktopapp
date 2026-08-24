@@ -19655,6 +19655,40 @@ function readRole(t) {
     return lane;
   return null;
 }
+function rate(p, peak) {
+  const st = p.stats ?? {};
+  const kda = (num(st.kills) + num(st.assists) * 0.6) / Math.max(1, num(st.deaths));
+  const share = (v, max) => max > 0 ? v / max : 0;
+  return share(kda, peak.kda) * 0.35 + share(num(st.totalDamageDealtToChampions), peak.dmg) * 0.25 + share(num(st.goldEarned), peak.gold) * 0.15 + share(num(st.totalMinionsKilled) + num(st.neutralMinionsKilled), peak.cs) * 0.1 + share(num(st.visionScore), peak.vision) * 0.15;
+}
+function honours(g) {
+  const all = g.participants ?? [];
+  if (all.length < 2)
+    return { mvp: null, ace: null };
+  const stat2 = (p, k) => num((p.stats ?? {})[k]);
+  const peak = {
+    kda: Math.max(...all.map((p) => (stat2(p, "kills") + stat2(p, "assists") * 0.6) / Math.max(1, stat2(p, "deaths")))),
+    dmg: Math.max(...all.map((p) => stat2(p, "totalDamageDealtToChampions"))),
+    gold: Math.max(...all.map((p) => stat2(p, "goldEarned"))),
+    cs: Math.max(...all.map((p) => stat2(p, "totalMinionsKilled") + stat2(p, "neutralMinionsKilled"))),
+    vision: Math.max(...all.map((p) => stat2(p, "visionScore")))
+  };
+  const best = (won) => {
+    const side = all.filter((p) => p.stats?.win === true === won);
+    if (!side.length)
+      return null;
+    return side.reduce((a, b) => rate(b, peak) > rate(a, peak) ? b : a).participantId;
+  };
+  return { mvp: best(true), ace: best(false) };
+}
+function opponentOf(g, me) {
+  const role = readRole(me.timeline);
+  if (!role || me.teamId === undefined)
+    return null;
+  const them = (g.participants ?? []).filter((p) => p.teamId !== me.teamId);
+  const match = them.find((p) => readRole(p.timeline) === role);
+  return match ? { championId: num(match.championId), role } : null;
+}
 function toMatch(g, puuid) {
   const identity = g.participantIdentities?.find((i) => i.player?.puuid === puuid);
   const me = identity && g.participants?.find((p) => p.participantId === identity.participantId);
@@ -19663,6 +19697,7 @@ function toMatch(g, puuid) {
   const st = me.stats ?? {};
   const items = [0, 1, 2, 3, 4, 5, 6].map((i) => num(st[`item${i}`])).filter((id) => id > 0);
   const duration = num(g.gameDuration);
+  const { mvp, ace } = honours(g);
   return {
     gameId: g.gameId,
     playedAt: num(g.gameCreation),
@@ -19681,7 +19716,9 @@ function toMatch(g, puuid) {
     visionScore: num(st.visionScore),
     items,
     spells: [num(me.spell1Id), num(me.spell2Id)],
-    role: readRole(me.timeline)
+    role: readRole(me.timeline),
+    opponent: opponentOf(g, me),
+    honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null
   };
 }
 async function recentMatches(lcu, puuid, count = 20) {

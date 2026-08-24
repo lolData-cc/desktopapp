@@ -135,6 +135,11 @@ export type Match = {
   items: number[]
   spells: [number, number]
   role: string | null
+  /** Who you were up against in your lane, when the lane is knowable. */
+  opponent: { championId: number; role: string | null } | null
+  /** Best on the winning side, or best on the losing side — our estimate, not
+   *  the client's badge. */
+  honour: "mvp" | "ace" | null
 }
 
 export type RankedSummary = {

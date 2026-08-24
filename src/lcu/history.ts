@@ -34,6 +34,17 @@ export type Match = {
   items: number[]
   spells: [number, number]
   role: string | null
+  /** Who you were up against in your lane, when the lane is knowable. */
+  opponent: { championId: number; role: string | null } | null
+  /**
+   * Best on the winning side, or best on the losing side.
+   *
+   * ⚠️ OURS, not Riot's. The client shows an MVP badge on its end screen and
+   * does not publish the score behind it or expose the result in match
+   * history — so this is computed here, and the interface says whose opinion
+   * it is rather than borrowing the authority of the game's own badge.
+   */
+  honour: "mvp" | "ace" | null
 }
 
 type RawGame = {
@@ -44,6 +55,7 @@ type RawGame = {
   gameMode: string
   participants?: {
     participantId: number
+    teamId?: number
     championId: number
     spell1Id: number
     spell2Id: number
@@ -64,6 +76,76 @@ function readRole(t: { lane?: string; role?: string } | undefined): string | nul
   return null
 }
 
+/**
+ * How well somebody played, relative to everyone else in that game.
+ *
+ * ⚠️ Ranked against the rest of the lobby rather than scored on an absolute
+ * scale. Fixed thresholds cannot survive a fifty-minute game and a fifteen-
+ * minute one, and every metric here is a share of the best in THIS match, so
+ * the length cancels out.
+ *
+ * ⚠️ Vision and assists carry real weight on purpose. A formula built from
+ * kills and damage hands the badge to the carry in every single game, and a
+ * support who warded the whole map never appears — which is not a scoreboard,
+ * it is a role preference.
+ */
+function rate(
+  p: NonNullable<RawGame["participants"]>[number],
+  peak: { kda: number; dmg: number; gold: number; cs: number; vision: number }
+): number {
+  const st = p.stats ?? {}
+  const kda = (num(st.kills) + num(st.assists) * 0.6) / Math.max(1, num(st.deaths))
+  const share = (v: number, max: number) => (max > 0 ? v / max : 0)
+  return (
+    share(kda, peak.kda) * 0.35 +
+    share(num(st.totalDamageDealtToChampions), peak.dmg) * 0.25 +
+    share(num(st.goldEarned), peak.gold) * 0.15 +
+    share(num(st.totalMinionsKilled) + num(st.neutralMinionsKilled), peak.cs) * 0.1 +
+    share(num(st.visionScore), peak.vision) * 0.15
+  )
+}
+
+/** MVP for the winners, ACE for the losers — the participantIds of each. */
+function honours(g: RawGame): { mvp: number | null; ace: number | null } {
+  const all = g.participants ?? []
+  if (all.length < 2) return { mvp: null, ace: null }
+
+  const stat = (p: (typeof all)[number], k: string) => num((p.stats ?? {})[k])
+  const peak = {
+    kda: Math.max(...all.map((p) => (stat(p, "kills") + stat(p, "assists") * 0.6) / Math.max(1, stat(p, "deaths")))),
+    dmg: Math.max(...all.map((p) => stat(p, "totalDamageDealtToChampions"))),
+    gold: Math.max(...all.map((p) => stat(p, "goldEarned"))),
+    cs: Math.max(...all.map((p) => stat(p, "totalMinionsKilled") + stat(p, "neutralMinionsKilled"))),
+    vision: Math.max(...all.map((p) => stat(p, "visionScore"))),
+  }
+
+  const best = (won: boolean) => {
+    const side = all.filter((p) => (p.stats?.win === true) === won)
+    if (!side.length) return null
+    return side.reduce((a, b) => (rate(b, peak) > rate(a, peak) ? b : a)).participantId
+  }
+
+  return { mvp: best(true), ace: best(false) }
+}
+
+/**
+ * The champion who stood in the same lane on the other side.
+ *
+ * ⚠️ Null when the lane is not knowable, which is often — Riot's own lane
+ * assignment is a guess, and in an ARAM or a mode with no lanes there is no
+ * answer. A wrong opponent printed confidently is worse than a blank.
+ */
+function opponentOf(
+  g: RawGame,
+  me: NonNullable<RawGame["participants"]>[number]
+): { championId: number; role: string | null } | null {
+  const role = readRole(me.timeline)
+  if (!role || me.teamId === undefined) return null
+  const them = (g.participants ?? []).filter((p) => p.teamId !== me.teamId)
+  const match = them.find((p) => readRole(p.timeline) === role)
+  return match ? { championId: num(match.championId), role } : null
+}
+
 function toMatch(g: RawGame, puuid: string): Match | null {
   // The two arrays are parallel but not ordered, so the join is by id.
   const identity = g.participantIdentities?.find((i) => i.player?.puuid === puuid)
@@ -76,6 +158,7 @@ function toMatch(g: RawGame, puuid: string): Match | null {
     .filter((id) => id > 0)
 
   const duration = num(g.gameDuration)
+  const { mvp, ace } = honours(g)
 
   return {
     gameId: g.gameId,
@@ -98,6 +181,8 @@ function toMatch(g: RawGame, puuid: string): Match | null {
     items,
     spells: [num(me.spell1Id), num(me.spell2Id)],
     role: readRole(me.timeline),
+    opponent: opponentOf(g, me),
+    honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null,
   }
 }
 

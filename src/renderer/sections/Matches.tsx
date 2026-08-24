@@ -24,6 +24,20 @@ import {
  * The recording lives on the row rather than in a library of its own: a capture
  * is not a separate kind of object, it is this game with a video attached.
  */
+/**
+ * The only queues this page shows.
+ *
+ * ⚠️ Solo, Flex and Clash — and everything else is DROPPED rather than
+ * greyed. This screen compares games to each other: CS a minute, gold a
+ * minute, vision. An ARAM has no lane and a bot game has no opponent, so a row
+ * for one is a row of numbers that cannot be read next to the row above it,
+ * and it drags every average on the page with it.
+ *
+ * ARAM Clash (720) is left out with the rest for the same reason — it is Clash
+ * in name and ARAM in every number.
+ */
+const QUEUES = new Set([420, 440, 700])
+
 export default function Matches({ s }: { s: AppState }) {
   const [busy, setBusy] = useState(false)
   const [watching, setWatching] = useState<string | null>(null)
@@ -33,7 +47,10 @@ export default function Matches({ s }: { s: AppState }) {
   const [open, setOpen] = useState<number | null>(null)
   const [only, setOnly] = useState<"all" | "wins" | "losses" | "clips">("all")
 
-  const matches = s.matches
+  const matches = useMemo(
+    () => (s.matches ?? null) && s.matches!.filter((m) => QUEUES.has(m.queueId)),
+    [s.matches]
+  )
   useEffect(() => { void window.desktop.listRecordings() }, [])
 
   const refresh = async () => {
@@ -51,7 +68,9 @@ export default function Matches({ s }: { s: AppState }) {
   }, [matches, s.recordings, only])
 
   if (!matches) return <Empty>Reading your match history…</Empty>
-  if (!matches.length) return <Empty>No games yet. Play one and it will show up here.</Empty>
+  if (!matches.length) {
+    return <Empty>No ranked or Clash games in your recent history.</Empty>
+  }
 
   const real = matches.filter((m) => !m.remake)
   const wins = real.filter((m) => m.win).length
@@ -179,7 +198,7 @@ function Head({
       </div>
 
       <p className="mt-1 font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/20">
-        last {total} games from the client
+        last {total} ranked and clash games · other queues are not shown
       </p>
     </div>
   )
@@ -248,11 +267,25 @@ function Row({
           cursor: "pointer",
         }}
       >
-        {slug ? (
-          <img src={`${CDN}/${v}/img/champion/${slug}.png`} alt="" className="h-11 w-11 shrink-0 rounded-[3px] ring-1 ring-jade/15" />
-        ) : (
-          <span className="h-11 w-11 shrink-0 rounded-[3px] bg-flash/[0.04]" />
-        )}
+        <span className="relative block h-11 w-11 shrink-0">
+          {slug ? (
+            <img src={`${CDN}/${v}/img/champion/${slug}.png`} alt="" className="h-11 w-11 rounded-[3px] ring-1 ring-jade/15" />
+          ) : (
+            <span className="block h-11 w-11 rounded-[3px] bg-flash/[0.04]" />
+          )}
+
+          {/* ⚠️ On the portrait, not in a column. The level belongs to the
+              champion, and the game itself puts it in exactly this corner —
+              borrowing that placement costs a reader nothing to learn. */}
+          <span
+            className="absolute -bottom-[3px] -right-[3px] grid h-[17px] min-w-[17px] place-items-center rounded-full px-[3px] font-jetbrains text-[9px] font-bold tabular-nums leading-none"
+            style={{ background: "#040A0C", color: "rgba(215,216,217,0.75)", boxShadow: "0 0 0 1px rgba(215,216,217,0.18)" }}
+          >
+            {m.champLevel}
+          </span>
+
+          {m.honour && <Honour kind={m.honour} />}
+        </span>
 
         <div className="w-[112px] shrink-0">
           <p className="truncate font-chakrapetch text-[13px] font-bold leading-tight text-flash/85">
@@ -273,6 +306,8 @@ function Row({
             {m.deaths === 0 ? "perfect" : `${kda.toFixed(2)} kda`}
           </p>
         </div>
+
+        <Versus opponent={m.opponent} patch={v} />
 
         {/* ⚠️ Per minute, with the raw number underneath. A CS total is a
             statement about the length of the game as much as about the player;
@@ -327,6 +362,79 @@ function Row({
     </div>
   )
 }
+
+/**
+ * Who you were up against, in a rhombus.
+ *
+ * ⚠️ The shape is the label. A second round portrait beside your own would read
+ * as a second champion you played; turned forty-five degrees it reads as the
+ * other side of something, which is what it is — and it needs no word saying
+ * "versus" to do it.
+ *
+ * ⚠️ The slot is drawn even when the lane is unknown. Riot's own lane
+ * assignment is a guess and often has none, and a column that appears and
+ * disappears shifts every row beside it as you scroll.
+ */
+function Versus({ opponent, patch }: { opponent: Match["opponent"]; patch: string }) {
+  const [slug, setSlug] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!opponent) return
+    let alive = true
+    void championById(opponent.championId)
+      .then((c) => { if (alive) setSlug(c?.slug ?? null) })
+      .catch(() => undefined)
+    return () => { alive = false }
+  }, [opponent?.championId])
+
+  return (
+    <span className="grid w-[52px] shrink-0 place-items-center" title={opponent ? `against ${slug ?? "?"} in ${opponent.role?.toLowerCase() ?? "lane"}` : "no lane opponent for this game"}>
+      <span
+        className="grid h-[34px] w-[34px] rotate-45 place-items-center overflow-hidden"
+        style={{
+          boxShadow: opponent ? "0 0 0 1px rgba(255,98,134,0.35)" : "0 0 0 1px rgba(215,216,217,0.08)",
+          background: "rgba(4,10,12,0.6)",
+        }}
+      >
+        {opponent && slug ? (
+          // Turned back upright inside the turned frame, so the face is not on
+          // its side.
+          <img
+            src={`${CDN}/${patch}/img/champion/${slug}.png`}
+            alt=""
+            className="h-[46px] w-[46px] max-w-none -rotate-45"
+          />
+        ) : (
+          <span className="-rotate-45 font-jetbrains text-[10px] text-flash/15">—</span>
+        )}
+      </span>
+    </span>
+  )
+}
+
+/**
+ * ⚠️ Ours, and it says so.
+ *
+ * The client shows an MVP badge on its end screen, does not publish the score
+ * behind it, and does not expose the result in match history. So this is our
+ * own reckoning — best on the winning side, best on the losing side — and the
+ * tooltip says whose opinion it is rather than borrowing the authority of the
+ * game's own badge.
+ */
+const Honour = ({ kind }: { kind: "mvp" | "ace" }) => (
+  <span
+    title={`${kind === "mvp" ? "Best on the winning team" : "Best on the losing team"} — our reckoning, not the client's badge`}
+    className="absolute -left-[4px] -top-[4px] grid h-[16px] place-items-center px-[4px] font-jetbrains text-[8px] font-bold uppercase leading-none tracking-[0.06em]"
+    style={{
+      background: kind === "mvp" ? "#FFB615" : "rgba(215,216,217,0.85)",
+      color: "#040A0C",
+      clipPath: "polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%)",
+      paddingBottom: 3,
+    }}
+  >
+    {kind}
+  </span>
+)
 
 const Metric = ({ value, unit, sub, good }: { value: string; unit: string; sub: string; good: boolean }) => (
   <div className="hidden w-[74px] shrink-0 lg:block">
