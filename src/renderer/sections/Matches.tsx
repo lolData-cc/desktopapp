@@ -388,29 +388,60 @@ function Versus({ opponent, patch }: { opponent: Match["opponent"]; patch: strin
   }, [opponent?.championId])
 
   return (
-    <span className="grid w-[52px] shrink-0 place-items-center" title={opponent ? `against ${slug ?? "?"} in ${opponent.role?.toLowerCase() ?? "lane"}` : "no lane opponent for this game"}>
+    <span
+      className="relative grid w-[52px] shrink-0 place-items-center"
+      title={opponent ? `against ${slug ?? "?"} in ${opponent.role?.toLowerCase() ?? "lane"}` : "no lane opponent for this game"}
+    >
+      {/**
+        * ⚠️ CLIPPED, not rotated.
+        *
+        * It was a rotated box with a counter-rotated image inside, which is two
+        * transforms fighting to end up where one clip-path puts you — and it
+        * left no way to say WHERE in the picture the window should sit. A
+        * clip-path is the diamond, and the image behind it can then be nudged.
+        */}
       <span
-        className="grid h-[34px] w-[34px] rotate-45 place-items-center overflow-hidden"
-        style={{
-          boxShadow: opponent ? "0 0 0 1px rgba(255,98,134,0.35)" : "0 0 0 1px rgba(215,216,217,0.08)",
-          background: "rgba(4,10,12,0.6)",
-        }}
+        className="relative block h-[38px] w-[38px] overflow-hidden"
+        style={{ clipPath: DIAMOND, background: "rgba(4,10,12,0.6)" }}
       >
         {opponent && slug ? (
-          // Turned back upright inside the turned frame, so the face is not on
-          // its side.
+          /**
+           * ⚠️ Biased UPWARDS in the frame, and only just zoomed.
+           *
+           * Riot's square portraits put the face above centre, so a window on
+           * the middle of one keeps the chin and cuts the forehead — which is
+           * exactly what "shifted down" looks like. The image is moved down by
+           * 6% so the face rises into the diamond, and the zoom is 1.16 rather
+           * than 1.35: a diamond already hides the four corners of any square,
+           * and magnifying on top of that was throwing away half the width.
+           */
           <img
             src={`${CDN}/${patch}/img/champion/${slug}.png`}
             alt=""
-            className="h-[46px] w-[46px] max-w-none -rotate-45"
+            className="absolute left-1/2 top-1/2 h-[44px] w-[44px] max-w-none"
+            style={{ transform: "translate(-50%, -44%)" }}
           />
         ) : (
-          <span className="-rotate-45 font-jetbrains text-[10px] text-flash/15">—</span>
+          <span className="grid h-full w-full place-items-center font-jetbrains text-[10px] text-flash/15">—</span>
         )}
       </span>
+
+      {/* The outline on top, so the clip cannot eat its own edge. */}
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden className="pointer-events-none absolute">
+        <path
+          d="M20 1 L39 20 L20 39 L1 20 Z"
+          fill="none"
+          stroke={opponent ? "rgba(255,98,134,0.42)" : "rgba(215,216,217,0.10)"}
+          strokeWidth="1"
+        />
+      </svg>
     </span>
   )
 }
+
+/** The rhombus, as a clip. Written once: the outline above has to trace the
+ *  same shape, and two definitions of it drift apart on the first tweak. */
+const DIAMOND = "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)"
 
 /**
  * ⚠️ Ours, and it says so.
