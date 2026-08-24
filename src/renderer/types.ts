@@ -140,6 +140,33 @@ export type Match = {
   /** Best on the winning side, or best on the losing side — our estimate, not
    *  the client's badge. */
   honour: "mvp" | "ace" | null
+  /** All ten players, once the per-game detail has been read. */
+  board: MatchPlayer[] | null
+}
+
+/** One row of a finished game's scoreboard. */
+export type MatchPlayer = {
+  participantId: number
+  teamId: number
+  championId: number
+  riotId: string | null
+  name: string
+  win: boolean
+  kills: number
+  deaths: number
+  assists: number
+  creepScore: number
+  goldEarned: number
+  damage: number
+  damageTaken: number
+  visionScore: number
+  wardsPlaced: number
+  champLevel: number
+  items: number[]
+  spells: [number, number]
+  role: string | null
+  isMe: boolean
+  honour: "mvp" | "ace" | null
 }
 
 export type RankedSummary = {

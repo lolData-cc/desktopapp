@@ -38,12 +38,21 @@ export default function Player({
   startAt,
   patch,
   onClose,
+  inline,
 }: {
   rec: Recording
   /** Open here, in milliseconds — a kill clicked in the recap. */
   startAt?: number
   patch: string
   onClose: () => void
+  /**
+   * Render in place rather than over the window.
+   *
+   * ⚠️ The difference is the PORTAL, not the styling. Over the window this has
+   * to escape its ancestors to be positioned against the viewport; inside a
+   * page it must not, or it would tear itself out of the layout it was put in.
+   */
+  inline?: boolean
 }) {
   const video = useRef<HTMLVideoElement | null>(null)
   const panel = useRef<HTMLDivElement | null>(null)
@@ -355,18 +364,26 @@ export default function Player({
    * containing block disappears, and the same markup lands somewhere else. A
    * portal takes the question away rather than answering it.
    */
-  return createPortal(
+  const frame = (
     <div
       ref={panel}
       onMouseMove={wake}
-      className="clip-player fixed bottom-0 left-[196px] right-0 top-11 z-50 overflow-hidden bg-black"
+      className={
+        inline
+          ? "clip-player relative w-full overflow-hidden bg-black"
+          : "clip-player fixed bottom-0 left-[196px] right-0 top-11 z-50 overflow-hidden bg-black"
+      }
       /* ⚠️ The cursor belongs to the MODE, not to the canvas.
          Set on the canvas alone it changed back to an arrow over every control
          that overlapped it — which, with the strip across the bottom, was most
          of the lower third — so it flickered as the pointer crossed edges that
          were invisible. Drawing is a mode: the pointer means one thing until
          the mode ends. */
-      style={drawing ? { cursor: "crosshair" } : undefined}
+      style={{
+        ...(drawing ? { cursor: "crosshair" } : null),
+        // Inline it has no fixed edges to stretch to, so the shape is stated.
+        ...(inline ? { aspectRatio: `${rec.width || 16} / ${rec.height || 9}` } : null),
+      }}
     >
       <video
         ref={video}
@@ -480,6 +497,7 @@ export default function Player({
           <Minimal label="file" title="Show the file on disk" onClick={() => void window.desktop.revealRecording(rec.id)} />
           </>
           )}
+          {!inline && (
           <button
             type="button"
             onClick={onClose}
@@ -490,6 +508,7 @@ export default function Player({
               <path d="M1 1 L10 10 M10 1 L1 10" stroke="currentColor" strokeWidth="1.3" fill="none" />
             </svg>
           </button>
+          )}
         </div>
       </header>
 
@@ -560,9 +579,10 @@ export default function Player({
           </span>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   )
+
+  return inline ? frame : createPortal(frame, document.body)
 }
 
 

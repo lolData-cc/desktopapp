@@ -19681,6 +19681,38 @@ function honours(g) {
   };
   return { mvp: best(true), ace: best(false) };
 }
+function readBoard(g, meId, mvp, ace) {
+  const who = new Map((g.participantIdentities ?? []).map((i) => [i.participantId, i.player ?? {}]));
+  return (g.participants ?? []).map((p) => {
+    const st = p.stats ?? {};
+    const player = who.get(p.participantId) ?? {};
+    const game = player.gameName ?? player.summonerName ?? "";
+    const tag = player.tagLine ?? "";
+    return {
+      participantId: p.participantId,
+      teamId: num(p.teamId),
+      championId: num(p.championId),
+      riotId: game && tag ? `${game}#${tag}` : game || null,
+      name: game || "—",
+      win: st.win === true,
+      kills: num(st.kills),
+      deaths: num(st.deaths),
+      assists: num(st.assists),
+      creepScore: num(st.totalMinionsKilled) + num(st.neutralMinionsKilled),
+      goldEarned: num(st.goldEarned),
+      damage: num(st.totalDamageDealtToChampions),
+      damageTaken: num(st.totalDamageTaken),
+      visionScore: num(st.visionScore),
+      wardsPlaced: num(st.wardsPlaced),
+      champLevel: num(st.champLevel),
+      items: [0, 1, 2, 3, 4, 5, 6].map((i) => num(st[`item${i}`])),
+      spells: [num(p.spell1Id), num(p.spell2Id)],
+      role: readRole(p.timeline),
+      isMe: p.participantId === meId,
+      honour: mvp === p.participantId ? "mvp" : ace === p.participantId ? "ace" : null
+    };
+  });
+}
 var SMITE = 11;
 var hasSmite = (p) => p.spell1Id === SMITE || p.spell2Id === SMITE;
 function opponentOf(g, me) {
@@ -19728,7 +19760,8 @@ function toMatch(g, puuid) {
     spells: [num(me.spell1Id), num(me.spell2Id)],
     role: readRole(me.timeline),
     opponent: null,
-    honour: null
+    honour: null,
+    board: null
   };
 }
 async function recentMatches(lcu, puuid, count = 20) {
@@ -19755,7 +19788,8 @@ async function enrich(lcu, matches, puuid) {
         const { mvp, ace } = honours(data);
         extras.set(m.gameId, {
           opponent: opponentOf(data, me),
-          honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null
+          honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null,
+          board: readBoard(data, me.participantId, mvp, ace)
         });
       } catch {}
     }));
@@ -19766,6 +19800,7 @@ async function enrich(lcu, matches, puuid) {
       continue;
     m.opponent = extra.opponent;
     m.honour = extra.honour;
+    m.board = extra.board;
   }
 }
 async function rankedSummary(lcu) {

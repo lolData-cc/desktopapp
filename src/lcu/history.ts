@@ -12,6 +12,36 @@
  */
 import type { LcuConnection } from "./connection"
 
+/** One row of a finished game's scoreboard. */
+export type MatchPlayer = {
+  participantId: number
+  /** 100 or 200 — which side, not which team you were on. */
+  teamId: number
+  championId: number
+  /** "Name#TAG" when the client gives both, otherwise whatever it gives. */
+  riotId: string | null
+  name: string
+  win: boolean
+  kills: number
+  deaths: number
+  assists: number
+  creepScore: number
+  goldEarned: number
+  /** To champions, which is the number people mean by "damage". */
+  damage: number
+  damageTaken: number
+  visionScore: number
+  wardsPlaced: number
+  champLevel: number
+  items: number[]
+  spells: [number, number]
+  role: string | null
+  /** True for the row belonging to the player whose history this is. */
+  isMe: boolean
+  /** Best on the winning side, or best on the losing side — ours. */
+  honour: "mvp" | "ace" | null
+}
+
 export type Match = {
   gameId: number
   /** Milliseconds since epoch, from the client's own clock. */
@@ -36,6 +66,13 @@ export type Match = {
   role: string | null
   /** Who you were up against in your lane, when the lane is knowable. */
   opponent: { championId: number; role: string | null } | null
+  /**
+   * All ten players, once the per-game detail has been read.
+   *
+   * ⚠️ Null until enrich() has run, and null forever for a game whose detail
+   * cannot be read. The list endpoint carries only you.
+   */
+  board: MatchPlayer[] | null
   /**
    * Best on the winning side, or best on the losing side.
    *
@@ -62,7 +99,10 @@ type RawGame = {
     timeline?: { lane?: string; role?: string }
     stats?: Record<string, number | boolean>
   }[]
-  participantIdentities?: { participantId: number; player?: { puuid?: string } }[]
+  participantIdentities?: {
+    participantId: number
+    player?: { puuid?: string; gameName?: string; tagLine?: string; summonerName?: string }
+  }[]
 }
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0)
@@ -126,6 +166,56 @@ function honours(g: RawGame): { mvp: number | null; ace: number | null } {
   }
 
   return { mvp: best(true), ace: best(false) }
+}
+
+/**
+ * The whole scoreboard, in our shape.
+ *
+ * ⚠️ Riot's two arrays are joined by participantId, and the NAME lives in the
+ * other one — participants carry the numbers, participantIdentities carry the
+ * people. Nothing downstream should have to know that, which is the whole
+ * reason this file exists.
+ */
+function readBoard(
+  g: RawGame,
+  meId: number,
+  mvp: number | null,
+  ace: number | null
+): MatchPlayer[] {
+  const who = new Map(
+    (g.participantIdentities ?? []).map((i) => [i.participantId, i.player ?? {}])
+  )
+
+  return (g.participants ?? []).map((p) => {
+    const st = p.stats ?? {}
+    const player = who.get(p.participantId) ?? {}
+    const game = player.gameName ?? player.summonerName ?? ""
+    const tag = player.tagLine ?? ""
+
+    return {
+      participantId: p.participantId,
+      teamId: num(p.teamId),
+      championId: num(p.championId),
+      riotId: game && tag ? `${game}#${tag}` : game || null,
+      name: game || "—",
+      win: st.win === true,
+      kills: num(st.kills),
+      deaths: num(st.deaths),
+      assists: num(st.assists),
+      creepScore: num(st.totalMinionsKilled) + num(st.neutralMinionsKilled),
+      goldEarned: num(st.goldEarned),
+      damage: num(st.totalDamageDealtToChampions),
+      damageTaken: num(st.totalDamageTaken),
+      visionScore: num(st.visionScore),
+      wardsPlaced: num(st.wardsPlaced),
+      champLevel: num(st.champLevel),
+      items: [0, 1, 2, 3, 4, 5, 6].map((i) => num(st[`item${i}`])),
+      spells: [num(p.spell1Id), num(p.spell2Id)],
+      role: readRole(p.timeline),
+      isMe: p.participantId === meId,
+      honour: mvp === p.participantId ? "mvp" : ace === p.participantId ? "ace" : null,
+    }
+  })
 }
 
 /** Smite. The one role signal in this data that cannot be wrong. */
@@ -210,6 +300,7 @@ function toMatch(g: RawGame, puuid: string): Match | null {
     // Filled in by enrich() from the per-game endpoint; the list has only you.
     opponent: null,
     honour: null,
+    board: null,
   }
 }
 
@@ -248,7 +339,7 @@ export async function recentMatches(
  * cached, because a game that has been played does not change. A refresh
  * re-reads the list and asks for nothing it has already seen.
  */
-const extras = new Map<number, Pick<Match, "opponent" | "honour">>()
+const extras = new Map<number, Pick<Match, "opponent" | "honour" | "board">>()
 
 /** At a time. The client is local and fast, but twenty simultaneous requests
  *  at it while somebody is in champion select is not a courtesy. */
@@ -270,6 +361,7 @@ async function enrich(lcu: LcuConnection, matches: Match[], puuid: string): Prom
           extras.set(m.gameId, {
             opponent: opponentOf(data, me),
             honour: mvp === me.participantId ? "mvp" : ace === me.participantId ? "ace" : null,
+            board: readBoard(data, me.participantId, mvp, ace),
           })
         } catch {
           // ⚠️ Never fatal. A game whose detail cannot be read shows no
@@ -285,6 +377,7 @@ async function enrich(lcu: LcuConnection, matches: Match[], puuid: string): Prom
     if (!extra) continue
     m.opponent = extra.opponent
     m.honour = extra.honour
+    m.board = extra.board
   }
 }
 

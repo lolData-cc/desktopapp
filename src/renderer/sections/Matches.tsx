@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { championById } from "../../data/champions"
 import Player from "../Player"
 import ShareClip from "../ShareClip"
+import MatchDetail from "./MatchDetail"
 import {
   CDN,
   mmss,
@@ -42,8 +43,14 @@ export default function Matches({ s }: { s: AppState }) {
   const [busy, setBusy] = useState(false)
   const [watching, setWatching] = useState<string | null>(null)
   const [sharing, setSharing] = useState<Recording | null>(null)
-  /** Which row is expanded. One at a time: this is a list you scan, and two
-   *  open rows push the third off the screen. */
+  /**
+   * Which game is OPEN, by id.
+   *
+   * ⚠️ A page, not an expanded row. It was an accordion, and a scoreboard is
+   * ten people with a dozen numbers each — unfolded inside the list it pushed
+   * every other game off the screen and left you scrolling a list to read a
+   * table.
+   */
   const [open, setOpen] = useState<number | null>(null)
   const [only, setOnly] = useState<"all" | "wins" | "losses" | "clips">("all")
 
@@ -66,6 +73,9 @@ export default function Matches({ s }: { s: AppState }) {
     if (only === "clips") return all.filter((r) => r.clip)
     return all
   }, [matches, s.recordings, only])
+
+  const detail = open !== null ? (matches ?? []).find((m) => m.gameId === open) : null
+  if (detail) return <MatchDetail s={s} match={detail} onBack={() => setOpen(null)} />
 
   if (!matches) return <Empty>Reading your match history…</Empty>
   if (!matches.length) {
@@ -102,10 +112,7 @@ export default function Matches({ s }: { s: AppState }) {
               clip={clip}
               patch={s.patch}
               index={i}
-              open={open === m.gameId}
-              onOpen={() => setOpen(open === m.gameId ? null : m.gameId)}
-              onWatch={() => clip && setWatching(clip.id)}
-              onShare={() => clip && setSharing(clip)}
+              onOpen={() => setOpen(m.gameId)}
             />
           ))
         )}
@@ -217,19 +224,13 @@ function Row({
   clip,
   patch,
   index,
-  open,
   onOpen,
-  onWatch,
-  onShare,
 }: {
   m: Match
   clip: Recording | null
   patch: string | null
   index: number
-  open: boolean
   onOpen: () => void
-  onWatch: () => void
-  onShare: () => void
 }) {
   const [slug, setSlug] = useState<string | null>(null)
   const v = patch ?? "16.16.1"
@@ -353,25 +354,10 @@ function Row({
           )}
         </span>
 
-        <span
-          aria-hidden
-          className="shrink-0 font-jetbrains text-[9px] text-flash/25 transition-transform"
-          style={{ transform: open ? "rotate(90deg)" : "none" }}
-        >
+        <span aria-hidden className="shrink-0 font-jetbrains text-[9px] text-flash/25">
           ▸
         </span>
       </button>
-
-      {open && (
-        <Detail
-          m={m}
-          clip={clip}
-          patch={v}
-          mins={mins}
-          onWatch={onWatch}
-          onShare={onShare}
-        />
-      )}
     </div>
   )
 }
@@ -496,117 +482,6 @@ const Metric = ({ value, unit, sub, good }: { value: string; unit: string; sub: 
   </div>
 )
 
-/* ── the game, opened ────────────────────────────────────────────────────── */
-
-/**
- * ⚠️ Everything here is derived from what the client already gave us. Nothing
- * on this panel costs a request, which is why it can open instantly and why it
- * works with no account and no network.
- */
-function Detail({
-  m,
-  clip,
-  patch,
-  mins,
-  onWatch,
-  onShare,
-}: {
-  m: Match
-  clip: Recording | null
-  patch: string
-  mins: number
-  onWatch: () => void
-  onShare: () => void
-}) {
-  const kills = clip?.highlights.filter((h) => h.kind === "kill").length ?? 0
-  const deaths = clip?.highlights.filter((h) => h.kind === "death").length ?? 0
-
-  return (
-    <div className="ds-enter flex flex-wrap items-start gap-x-8 gap-y-4 px-4 py-4" style={{ background: "rgba(215,216,217,0.02)" }}>
-      <Facts
-        title="the game"
-        rows={[
-          ["result", m.remake ? "remake" : m.win ? "victory" : "defeat"],
-          ["length", mmss(m.durationSeconds)],
-          ["queue", queueName(m.queueId, m.gameMode)],
-          ["level reached", String(m.champLevel)],
-          ["role", m.role ? m.role.toLowerCase() : "—"],
-        ]}
-      />
-
-      <Facts
-        title="what you did"
-        rows={[
-          ["kills / deaths / assists", `${m.kills} / ${m.deaths} / ${m.assists}`],
-          ["creep score", `${m.creepScore} · ${(m.creepScore / mins).toFixed(1)} a minute`],
-          ["gold", `${short(m.goldEarned)} · ${short(m.goldEarned / mins)} a minute`],
-          ["vision score", `${m.visionScore} · ${(m.visionScore / mins).toFixed(1)} a minute`],
-        ]}
-      />
-
-      <div>
-        <p className="mb-2 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">summoners</p>
-        <div className="flex gap-1.5">
-          {m.spells.filter(Boolean).map((id, i) => (
-            <img key={`${id}-${i}`} src={`${CDN}/${patch}/img/spell/${spellFile(id)}.png`} alt="" className="h-8 w-8 rounded-[3px] opacity-80" />
-          ))}
-        </div>
-      </div>
-
-      {/* the recording, if this game has one */}
-      <div className="ml-auto min-w-[210px]">
-        <p className="mb-2 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">the recording</p>
-        {clip ? (
-          <>
-            <p className="mb-2 font-jetbrains text-[9.5px] uppercase tracking-[0.14em] text-flash/30">
-              {Math.round(clip.bytes / 1048576)} MB · {clip.fps > 0 ? `${clip.fps}fps · ` : ""}
-              <span className="text-jade">{kills} kills</span>
-              {deaths > 0 && <span className="text-flash/30"> · {deaths} deaths</span>}
-            </p>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={onWatch}
-                className="act-btn h-8 rounded-[3px] px-4 font-chakrapetch text-[11px] font-bold uppercase tracking-[0.14em]"
-              >
-                watch
-              </button>
-              <button
-                type="button"
-                onClick={onShare}
-                className="win-btn h-8 rounded-[3px] px-4 font-chakrapetch text-[11px] font-bold uppercase tracking-[0.14em] text-flash/60"
-              >
-                share a moment
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className="max-w-[30ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
-            This game was not recorded. Turn capture on in Settings and the ones you
-            play from now on will be.
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const Facts = ({ title, rows }: { title: string; rows: [string, string][] }) => (
-  <div>
-    <p className="mb-2 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">{title}</p>
-    <table className="border-separate border-spacing-y-[3px]">
-      <tbody>
-        {rows.map(([k, val]) => (
-          <tr key={k}>
-            <td className="pr-6 font-jetbrains text-[9.5px] uppercase tracking-[0.1em] text-flash/25">{k}</td>
-            <td className="font-chakrapetch text-[12.5px] font-bold tabular-nums text-flash/80">{val}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-)
-
 /* ── odds and ends ───────────────────────────────────────────────────────── */
 
 /** Green when it is good, plain when it is not — and never red. A bad KDA in
@@ -615,18 +490,3 @@ const kdaColour = (k: number) =>
   k >= 4 ? "#00d992" : k >= 2.5 ? "rgba(215,216,217,0.75)" : "rgba(215,216,217,0.4)"
 
 const short = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)))
-
-/**
- * Summoner spell ids into DDragon's file names.
- *
- * DDragon keys spells by internal NAME, not by the numeric id the client
- * reports, and publishes no id→name map — so this is the join, and an id we do
- * not know renders nothing rather than a broken image.
- */
-const SPELL_FILE: Record<number, string> = {
-  1: "SummonerBoost", 3: "SummonerExhaust", 4: "SummonerFlash", 6: "SummonerHaste",
-  7: "SummonerHeal", 11: "SummonerSmite", 12: "SummonerTeleport", 13: "SummonerMana",
-  14: "SummonerDot", 21: "SummonerBarrier", 32: "SummonerSnowball", 39: "SummonerSnowURFSnowball_Mark",
-  54: "Summoner_UltBookPlaceholder", 55: "Summoner_UltBookSmitePlaceholder",
-}
-const spellFile = (id: number) => SPELL_FILE[id] ?? "SummonerFlash"
