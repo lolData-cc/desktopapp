@@ -74,6 +74,19 @@ win:
     #   arch: [arm64]
 
 nsis:
+  # ⚠️ Off because it cost us a broken release. The blockmap is a separate
+  # artifact, and electron-builder publishes each artifact by "create the
+  # release if it does not exist yet". With the blockmap finishing alongside
+  # the installer, both calls raced and BOTH won: v0.0.4 ended up as two
+  # release objects sharing one tag, the installer and latest.yml on one, the
+  # blockmap on the other. The tag's download URLs resolve to only one of
+  # them, so the installer 404'd while the build reported success.
+  #
+  # What it buys back is delta updates — downloading only the changed blocks
+  # instead of the whole installer. That is worth having, but not at the price
+  # of a release that silently publishes nothing installable; revisit only
+  # with a way to serialise the uploads.
+  differentialPackage: false
   oneClick: false
   perMachine: false          # per-user install needs no administrator prompt
   allowToChangeInstallationDirectory: true
