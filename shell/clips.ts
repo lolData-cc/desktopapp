@@ -16,6 +16,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron"
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { captureFile } from "./paths"
 import { CLIP_SCHEME, clipUrl } from "../src/data/clip"
 
 export type ClipRequest = {
@@ -56,7 +57,7 @@ async function ensureWindow(): Promise<BrowserWindow> {
     webPreferences: {
       // A preload rather than nodeIntegration: the page is loaded from the clip
       // scheme (see below), and a preload works whatever the origin is.
-      preload: join(__dirname, "..", "capture", "clipper-preload.cjs"),
+      preload: captureFile("clipper-preload.cjs"),
       contextIsolation: false,
       sandbox: false,
       backgroundThrottling: false,

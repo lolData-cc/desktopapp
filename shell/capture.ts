@@ -26,6 +26,7 @@ import { createReadStream, createWriteStream, type WriteStream } from "node:fs"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { Readable } from "node:stream"
 import { join } from "node:path"
+import { captureFile } from "./paths"
 import { CLIP_SCHEME } from "../src/data/clip"
 
 export type Highlight = {
@@ -167,7 +168,7 @@ async function ensureWindow(): Promise<BrowserWindow> {
     },
   })
 
-  await win.loadFile(join(__dirname, "..", "capture", "recorder.html"))
+  await win.loadFile(captureFile("recorder.html"))
   return win
 }
 
@@ -695,7 +696,7 @@ export function serveClips(): void {
       const name = url.pathname.slice("/_page/".length)
       if (!/^[\w.-]+$/.test(name)) return new Response("no", { status: 404 })
       try {
-        const body = await readFile(join(__dirname, "..", "capture", name))
+        const body = await readFile(captureFile(name))
         return new Response(body as unknown as BodyInit, {
           status: 200,
           headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },

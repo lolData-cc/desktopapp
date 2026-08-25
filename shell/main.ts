@@ -9,8 +9,8 @@
  */
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen, shell } from "electron"
 import { execFile, spawn } from "node:child_process"
-import { fileURLToPath } from "node:url"
-import { dirname, join, resolve } from "node:path"
+import { buildFile, distFile, shellFile } from "./paths"
+import { join, resolve } from "node:path"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { LcuConnection, type Phase, type RosterEntry } from "../src/lcu/connection"
 import { championById, championByName, currentPatch, type Champion } from "../src/data/champions"
@@ -47,7 +47,6 @@ import { bootsIds, allItems } from "../src/data/itemCatalog"
 import { nextBest, inventoryKey, type NextBest } from "../src/data/smartBuild"
 import { buildForComp, compShapes, describeShapes, type BuildSlot, type CompShape } from "../src/data/compAdvice"
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
 
 /** Everything the interface is allowed to know. Our words, not Riot's. */
@@ -1686,14 +1685,14 @@ function createWindow(): void {
     height: 840,
     minWidth: 1040,
     minHeight: 700,
-    icon: join(__dirname, "../build/icon.png"),
+    icon: buildFile("icon.png"),
     show: false,
     // Frameless with our own title bar: a native chrome bar on a dark HUD reads
     // like two applications stacked on each other.
     frame: false,
     backgroundColor: "#040A0C",
     webPreferences: {
-      preload: join(__dirname, "preload.mjs"),
+      preload: shellFile("preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -1716,7 +1715,7 @@ function createWindow(): void {
   })
 
   if (DEV_URL) void win.loadURL(DEV_URL)
-  else void win.loadFile(join(__dirname, "../dist/index.html"))
+  else void win.loadFile(distFile("index.html"))
 }
 
 // ── ipc ────────────────────────────────────────────────────────────────────
@@ -1974,7 +1973,7 @@ ipcMain.handle("clip:forget", () => { push({ clip: { state: "idle" } }) })
  */
 ipcMain.on("clip:drag", (e, file: string) => {
   try {
-    e.sender.startDrag({ file, icon: join(__dirname, "../build/icon.png") })
+    e.sender.startDrag({ file, icon: buildFile("icon.png") })
   } catch (err) {
     console.log("[clip] drag failed: %s", (err as Error)?.message)
   }
@@ -2715,7 +2714,7 @@ if (!gotLock) {
       label: "LolData",
       // Ours in a packaged build; in development the source icon, since
       // electron.exe's own would be the Electron atom.
-      icon: dev ? join(__dirname, "..", "build", "icon.ico") : process.execPath,
+      icon: dev ? buildFile("icon.ico") : process.execPath,
     }
 
     const claimed = dev
@@ -2739,7 +2738,7 @@ if (!gotLock) {
     void tidyLibrary()
 
     createWindow()
-    configureOverlay(join(__dirname, "preload.mjs"))
+    configureOverlay(shellFile("preload.mjs"))
 
     // Read the player's own HUD scale before anything is drawn over the game, so
     // the first frame is already in the right place rather than being corrected

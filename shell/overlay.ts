@@ -16,7 +16,7 @@
  * that short of injecting, which we will not do.
  */
 import { BrowserWindow, screen } from "electron"
-import { join } from "node:path"
+import { distFile } from "./paths"
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
 
@@ -116,7 +116,7 @@ function build(): BrowserWindow {
   // ever taking a click.
   overlay.setIgnoreMouseEvents(true, { forward: true })
 
-  const url = DEV_URL ? `${DEV_URL}?overlay=1` : `file://${join(__dirname, "../dist/index.html")}?overlay=1`
+  const url = DEV_URL ? `${DEV_URL}?overlay=1` : `file://${distFile("index.html")}?overlay=1`
   void overlay.loadURL(url)
 
   // Everything the shell said while this window did not exist.

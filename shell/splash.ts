@@ -22,7 +22,7 @@
  * a slow one is never held hostage to it.
  */
 import { BrowserWindow } from "electron"
-import { join } from "node:path"
+import { buildFile } from "./paths"
 
 /** Long enough for the sequence in splash.html to finish (~1.9s) plus its exit. */
 const MIN_VISIBLE_MS = 2100
@@ -55,7 +55,7 @@ export function createSplash(): BrowserWindow {
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   })
 
-  const file = join(__dirname, "../build/splash.html")
+  const file = buildFile("splash.html")
   splash.webContents.on("did-fail-load", (_e, code, desc) =>
     console.error("[splash] FAILED to load: %s %s", code, desc)
   )
