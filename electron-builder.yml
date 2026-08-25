@@ -93,5 +93,5 @@ protocols:
 publish:
   - provider: github
     owner: lolData-cc
-    repo: loldata-desktop
+    repo: desktopapp
     releaseType: release
