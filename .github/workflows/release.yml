@@ -18,6 +18,12 @@ permissions:
   # after the whole build.
   contents: write
 
+# Two runs publishing the same tag would race to create one release, and the
+# loser fails after having built the whole installer. Queue instead.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   windows:
     runs-on: windows-latest
