@@ -48,6 +48,16 @@ files:
   - capture/clipper-preload.cjs
   - package.json
 
+# Chromium ships a translation file per language, and they are 47 MB of the
+# unpacked app. This interface is English-only, so the other 50-odd are dead
+# weight that every download pays for.
+#
+# ⚠️ This strips Chromium's OWN strings — the ones in its context menus, its
+# file dialogs and its spellchecker. If the app is ever localised, this list
+# grows with it or those parts stay stubbornly English.
+electronLanguages:
+  - en-US
+
 win:
   # A ready-made .ico, which skips the builder's own PNG converter — that runs
   # as a WebAssembly module and failed to allocate on this machine. Built by
