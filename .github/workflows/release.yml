@@ -1,0 +1,53 @@
+# Build the installer and publish it as a GitHub Release.
+#
+# Tag-driven on purpose: pushing `v0.0.3` is the whole ritual, and the version
+# people can download is then whatever the tag says rather than whatever was
+# last built on somebody's laptop and remembered to be uploaded. That gap is
+# the reason this exists.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  # So the build can be proven without cutting a release.
+  workflow_dispatch:
+
+permissions:
+  # ⚠️ Needed to create the release. The default token is read-only, and
+  # electron-builder's failure when it cannot publish comes at the very end,
+  # after the whole build.
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # ⚠️ Frozen. A CI build that resolves a different dependency tree than
+      # the one committed is a build of something nobody has run.
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+
+      # Typechecked here rather than trusted: `bun run build` transpiles and
+      # does not typecheck, so without this a type error ships.
+      - run: bunx tsc --noEmit -p tsconfig.json
+
+      - name: Package and publish
+        # Publishes only for a tag; a manual run builds and proves nothing is
+        # broken without putting anything in front of anybody.
+        run: bunx electron-builder --win --x64 --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: release/*.exe
+          if-no-files-found: warn

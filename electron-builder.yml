@@ -78,10 +78,20 @@ protocols:
   - name: lolData
     schemes: [loldata]
 
-# Where the app asks whether it is out of date. A generic feed rather than
-# GitHub Releases because this repository has no remote — and because our own
-# CDN is where everything else already lives.
+# Where the app asks whether it is out of date.
+#
+# GitHub Releases, now that the source has a home there. It replaces a generic
+# feed on our own CDN, and the reason is not that the CDN was slow: an update
+# had to be built here and uploaded by hand, so the version somebody could
+# download was whatever had last been remembered. A tag now builds it and
+# publishes it, and the bandwidth is GitHub's.
+#
+# ⚠️ This only works because the repository is PUBLIC. Release assets on a
+# private repo need a token to download, and the only place to put that token
+# is inside the app — where anybody can read it back out, and where it would
+# grant read access to the source it was hiding.
 publish:
-  - provider: generic
-    url: https://cdn2.loldata.cc/desktopapp
-    channel: latest
+  - provider: github
+    owner: lolData-cc
+    repo: loldata-desktop
+    releaseType: release

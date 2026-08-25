@@ -12,3 +12,11 @@ release/
 # A video dropped here to work on the player in a browser. Whatever it is,
 # it is somebody's screen recording and it is not ours to commit.
 public/dev-clip.*
+
+# The compiled shell. It is BUILD OUTPUT — `bun run build:main` regenerates
+# both from shell/*.ts — and it was tracked, so a 750 KB bundle was rewritten
+# into the history on every commit that touched anything at all. A clone runs
+# `bun install && bun run build` before `electron .`, which is what every other
+# part of this project already needs.
+shell/main.mjs
+shell/preload.mjs
