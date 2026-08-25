@@ -269,10 +269,23 @@ let state: AppState = {
 
 let win: BrowserWindow | null = null
 
+/**
+ * ⚠️ `win?.` is not enough. Optional chaining answers "is the reference null",
+ * and a closed BrowserWindow is not null — it is a live object whose native
+ * half is gone, so reading `.webContents` off it throws "Object has been
+ * destroyed". That is what put an Electron error dialog on screen every time
+ * the app was quit: `before-quit` runs `stopGameClock()`, which pushes one
+ * last `{gold: null}` at a window the user had just closed.
+ *
+ * capture.ts, clips.ts and overlay.ts all already guard this way; this was the
+ * one place that did not.
+ */
+const alive = (w: BrowserWindow | null): w is BrowserWindow => !!w && !w.isDestroyed()
+
 function push(patch: Partial<AppState>): void {
   const before = state.phase
   state = { ...state, ...patch }
-  win?.webContents.send("state", state)
+  if (alive(win)) win.webContents.send("state", state)
   // The overlay is told what to DRAW: hiding the bar is a content decision, so
   // the window does not have to be torn down and rebuilt to honour a keypress.
   // The FLAG travels, not a censored copy of the state: the top-right readout
@@ -1712,6 +1725,19 @@ function createWindow(): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: "deny" }
+  })
+
+  // ⚠️ Drop the reference the moment the window is gone. Without this, `win`
+  // stays pointing at a destroyed object for the rest of the process, and every
+  // `win?.` guard in this file silently stops meaning anything: optional
+  // chaining tests for null, and a destroyed window is not null — touching it
+  // throws. That is what surfaced as an Electron error dialog on quit.
+  //
+  // It also makes the macOS `activate` path work: there the app outlives its
+  // last window, so reopening from the Dock has to be able to see that there is
+  // no window to reuse.
+  win.on("closed", () => {
+    win = null
   })
 
   if (DEV_URL) void win.loadURL(DEV_URL)
