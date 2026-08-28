@@ -136,7 +136,12 @@ export default function MatchDetail({
                 share a moment
               </button>
             </div>
-            <div className="match-stage-video mx-auto w-full max-w-[880px]">
+            {/* ⚠️ No max-width. It used to be capped at 880px and centred, which
+                left the page's own background down both sides of the picture —
+                reading exactly like letterboxing without being it. The frame
+                already states the video's aspect ratio, so taking the full
+                width just makes the picture bigger; nothing stretches. */}
+            <div className="match-stage-video w-full">
               <Player rec={clip} patch={patch} inline stage={stage} onClose={() => undefined} />
             </div>
           </div>
