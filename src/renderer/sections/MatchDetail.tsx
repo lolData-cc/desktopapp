@@ -538,7 +538,7 @@ function Row({
         <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.1em] text-flash/20">cs</p>
       </div>
 
-      <div className="hidden w-[62px] shrink-0 xl:block">
+      <div className="row-roomy hidden w-[62px] shrink-0 xl:block">
         <p className="font-chakrapetch text-[12px] font-bold tabular-nums leading-tight text-flash/70">{p.visionScore}</p>
         <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.1em] text-flash/20">vision</p>
       </div>
@@ -564,7 +564,7 @@ function Row({
  * bars, and neither would say who did the damage.
  */
 const Bar = ({ label, value, peak, colour }: { label: string; value: number; peak: number; colour: string }) => (
-  <div className="hidden w-[92px] shrink-0 lg:block">
+  <div className="row-roomy hidden w-[92px] shrink-0 lg:block">
     <p className="font-chakrapetch text-[12px] font-bold tabular-nums leading-tight text-flash/75">
       {short(value)}
     </p>

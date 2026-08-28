@@ -965,11 +965,21 @@ body {
      a floor as well as a ceiling so a narrow-ish maximised window cannot squeeze
      the ten rows into something unreadable. */
   .match-stage-board {
-    /* Wide enough for a whole row: portrait, spells, crest, a 164px name, the
-       KDA, two bars and seven items come to roughly 710px. At 560 the items
-       were simply clipped off the end — data quietly missing rather than
-       visibly cut. */
-    flex: 0 0 clamp(420px, 40%, 720px);
+    /* A whole row wants ~880px: portrait, spells, crest, a 164px name, the KDA,
+     two bars, CS, vision and seven items. No column that also leaves room for
+     a video is going to be 880 wide, so three of them stand down instead —
+     see .row-roomy below. What is left comes to ~630. */
+    flex: 0 0 clamp(420px, 34%, 640px);
     min-width: 0;
+  }
+
+  /* ⚠️ The row already had responsive rules — `lg:block` on the bars,
+     `xl:block` on vision — but they key off the WINDOW, and here the window is
+     wide while the column is narrow. So they showed exactly when there was no
+     room for them, and pushed the items off the end where nothing said they had
+     gone. Damage, taken and vision are all one click away on the player card;
+     the items are not. */
+  .match-stage-board .row-roomy {
+    display: none;
   }
 }
