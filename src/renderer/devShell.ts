@@ -13,6 +13,40 @@
  */
 type Listener = (s: unknown) => void
 
+
+/** One row of a dev scoreboard — the fields MatchDetail actually reads. */
+const BP = (
+  id: number, team: number, champ: number, name: string, role: string | null,
+  k: number, d: number, a: number, cs: number, gold: number,
+  dmg: number, taken: number, lvl: number, win: boolean, me = false
+) => ({
+  participantId: id, teamId: team, championId: champ, riotId: name + "#EUW",
+  name, win, kills: k, deaths: d, assists: a, creepScore: cs, goldEarned: gold,
+  damage: dmg, damageTaken: taken, visionScore: 20, wardsPlaced: 8,
+  champLevel: lvl, items: [3157, 6653, 3020, 4645, 3089, 3135],
+  spells: [4, 11] as [number, number], role, isMe: me,
+})
+
+/**
+ * A full ten-player board on the newest dev match.
+ *
+ * Without one, ?state=board reaches the match page and shows "the client did
+ * not give up the rest of this game's scoreboard" — so the two team headers,
+ * the ten rows and the player card were all unreachable in a browser.
+ */
+const DEV_BOARD = [
+  BP(1, 100, 875, "KR Heartsteel", "TOP", 1, 4, 3, 214, 12400, 15700, 19100, 16, true),
+  BP(2, 100, 876, "yuumi45", "JUNGLE", 13, 3, 13, 187, 14200, 46500, 24100, 18, true, true),
+  BP(3, 100, 134, "Pretty Hands", "MIDDLE", 14, 3, 11, 240, 15100, 30700, 17300, 16, true),
+  BP(4, 100, 201, "Bark for Braum", "BOTTOM", 8, 7, 10, 198, 11800, 34800, 22600, 14, true),
+  BP(5, 100, 555, "OH OUI PING MOI", "UTILITY", 5, 5, 12, 41, 8900, 16500, 21400, 13, true),
+  BP(6, 200, 79, "신을 죽이는 자", "TOP", 6, 6, 2, 205, 11200, 26100, 31800, 16, false),
+  BP(7, 200, 62, "Kung Fu Panda 3", "JUNGLE", 6, 7, 7, 160, 10400, 23200, 28900, 13, false),
+  BP(8, 200, 84, "NEXT SAMD", "MIDDLE", 1, 7, 5, 178, 9800, 15100, 19700, 14, false),
+  BP(9, 200, 119, "AUR BIG EDGER007", "BOTTOM", 7, 9, 6, 221, 12100, 29900, 20300, 14, false),
+  BP(10, 200, 350, "SilleniKittlen", "UTILITY", 2, 12, 13, 33, 7600, 6300, 24800, 12, false),
+]
+
 const SCENES: Record<string, unknown> = {
   waiting: {
     client: "waiting",
@@ -668,6 +702,11 @@ SCENES.board = {
  * screen read at a glance, and "does the dot actually change" is not a question
  * worth a live game to answer.
  */
+// Il primo match della scena board porta un tabellone completo, cosi la pagina
+// di dettaglio e' raggiungibile senza una partita vera.
+const boardMatches = (SCENES.board as Record<string, unknown>).matches as Record<string, unknown>[]
+if (boardMatches?.[0]) boardMatches[0].board = DEV_BOARD
+
 SCENES.recording = { ...(SCENES.board as object), recording: true }
 
 export function installDevShell(): void {

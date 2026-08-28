@@ -61,7 +61,11 @@ export default function MatchDetail({
     let alive = true
     void window.desktop
       .ranks(ids, s.region)
-      .then((r) => { if (alive) setRanks(r) })
+      // ⚠️ `?? {}`. Every row reads ranks[riotId], so one empty answer from the
+      //    shell turns the whole page into the error boundary — which is what
+      //    it did. A missing rank is a normal outcome; a missing OBJECT should
+      //    not be able to take the scoreboard down with it.
+      .then((r) => { if (alive) setRanks(r ?? {}) })
       .catch(() => undefined)
     return () => { alive = false }
   }, [board, s.region])
@@ -160,7 +164,8 @@ export default function MatchDetail({
         ) : (
           <>
             <Side
-              label={mine?.win ? "your team · victory" : "your team · defeat"}
+              side="your team"
+              outcome={mine?.win ? "victory" : "defeat"}
               won={!!mine?.win}
               players={ours}
               patch={patch}
@@ -170,7 +175,8 @@ export default function MatchDetail({
               onPick={setPicked}
             />
             <Side
-              label={mine?.win ? "their team · defeat" : "their team · victory"}
+              side="their team"
+              outcome={mine?.win ? "defeat" : "victory"}
               won={!mine?.win}
               players={theirs}
               patch={patch}
@@ -275,15 +281,63 @@ function Head({
         )}
       </p>
 
-      <p className="ml-auto font-chakrapetch text-[15px] font-bold tabular-nums">
-        {match.kills} <span className="text-flash/25">/</span> {match.deaths}{" "}
-        <span className="text-flash/25">/</span> {match.assists}
-        <span className="ml-2 font-jetbrains text-[9.5px] font-normal text-flash/35">
-          {match.deaths === 0 ? "perfect" : `${kda.toFixed(2)} kda`}
-        </span>
-        <span className="ml-3 font-jetbrains text-[9.5px] font-normal text-flash/35">
-          {(match.creepScore / mins).toFixed(1)} cs/m
-        </span>
+      {/**
+       * ⚠️ Three numbers with names under them, not one sentence.
+       *
+       * This was a single run of text — "13 / 3 / 13 8.67 kda 10.3 cs/m" — in
+       * which the three figures ran together and the two derived ones were
+       * unlabelled trailing words. Numbers on a scoreboard need to say what
+       * they are: each gets its value above its name, the same shape the rest
+       * of this page uses for damage and gold, and the deaths take the enemy
+       * colour because that is the one figure of the three you did not want.
+       */}
+      <div className="ml-auto flex items-center gap-4">
+        <div className="text-right">
+          <p className="font-chakrapetch text-[20px] font-bold leading-none tabular-nums">
+            {match.kills}
+            <span className="text-flash/20"> / </span>
+            <span style={{ color: "#ff6286" }}>{match.deaths}</span>
+            <span className="text-flash/20"> / </span>
+            {match.assists}
+          </p>
+          <p className="mt-1.5 font-jetbrains text-[8px] uppercase leading-none tracking-[0.22em] text-flash/25">
+            k · d · a
+          </p>
+        </div>
+
+        <span aria-hidden className="h-7 w-px bg-jade/15" />
+
+        <Figure
+          value={match.deaths === 0 ? "perfect" : kda.toFixed(2)}
+          label="kda"
+          lit={match.deaths === 0}
+        />
+        <Figure value={(match.creepScore / mins).toFixed(1)} label="cs / min" />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One number with its name under it.
+ *
+ * The whole point is the LABEL. A scoreboard full of bare figures makes the
+ * reader carry the meaning; putting the name under each one costs a line of
+ * 8px type and removes the guessing. `lit` is for the one case worth colouring
+ * — a game with no deaths in it.
+ */
+function Figure({ value, label, lit }: { value: string; label: string; lit?: boolean }) {
+  return (
+    <div className="text-right">
+      <p
+        className={`font-chakrapetch text-[15px] font-bold leading-none tabular-nums ${
+          lit ? "text-jade" : "text-flash/70"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-1.5 font-jetbrains text-[8px] uppercase leading-none tracking-[0.22em] text-flash/25">
+        {label}
       </p>
     </div>
   )
@@ -294,7 +348,8 @@ function Head({
 type Peak = { damage: number; taken: number; gold: number }
 
 function Side({
-  label,
+  side,
+  outcome,
   won,
   players,
   patch,
@@ -303,7 +358,10 @@ function Side({
   picked,
   onPick,
 }: {
-  label: string
+  /** Whose half this is — the caption. */
+  side: string
+  /** What happened to them — the headline. */
+  outcome: string
   won: boolean
   players: MatchPlayer[]
   patch: string
@@ -314,12 +372,44 @@ function Side({
 }) {
   return (
     <div className="mb-5">
-      <p
-        className="mb-2 font-jetbrains text-[9px] uppercase tracking-[0.2em]"
-        style={{ color: won ? "rgba(0,217,146,0.6)" : "rgba(255,182,21,0.55)" }}
-      >
-        {label}
-      </p>
+      {/**
+       * ⚠️ The OUTCOME is the headline, not "your team".
+       *
+       * This was a single 9px monospace line reading "your team · victory",
+       * which gave equal weight to the half you already know and the half you
+       * are looking for — and at 9px gave neither enough to be read at a
+       * glance. The result now carries the size and the colour; whose side it
+       * is stays a caption, because you can already see whose side it is.
+       */}
+      <div className="mb-2.5 flex items-center gap-2.5">
+        {/* The rhombus the rest of the app marks a section with. Rotation on
+            the <g>, never on the rect — see DsPanel. */}
+        <svg aria-hidden width="9" height="9" viewBox="0 0 9 9" className="shrink-0 overflow-visible">
+          <g transform="rotate(45 4.5 4.5)">
+            <rect x="1.6" y="1.6" width="5.8" height="5.8" fill={won ? "#00d992" : "#FFB615"} />
+          </g>
+        </svg>
+        <p
+          className="font-chakrapetch text-[16px] font-bold uppercase leading-none tracking-[0.05em]"
+          style={{ color: won ? "#00d992" : "#FFB615" }}
+        >
+          {outcome}
+        </p>
+        <p className="font-jetbrains text-[8.5px] uppercase leading-none tracking-[0.24em] text-flash/30">
+          {side}
+        </p>
+        {/* A rule that leaves the mark and dies into nothing: it closes the
+            header without drawing a box around it. */}
+        <span
+          aria-hidden
+          className="ml-1 h-px flex-1"
+          style={{
+            background: `linear-gradient(90deg, ${
+              won ? "rgba(0,217,146,0.35)" : "rgba(255,182,21,0.3)"
+            }, rgba(0,0,0,0))`,
+          }}
+        />
+      </div>
       <div className="space-y-1">
         {players.map((p) => (
           <Row
