@@ -987,3 +987,62 @@ body {
     display: none;
   }
 }
+
+/* ── the update panel ─────────────────────────────────────────────────────
+   The same idea as the lock-in menu: light with nothing under it. There is no
+   plate, no border and no card — only an emission that reaches zero inside its
+   own box, a rhombus where it comes from, and one rule that dies into nothing.
+
+   ⚠️ It used to be a full-width band in normal flow, whose translucent green
+   ran straight behind the version stamped in the bottom-right corner. It now
+   floats and stops short of that corner (right-[132px] in the component). */
+
+/* The frame holds NO background. Anything opaque here would put a plate back
+   under light that is supposed to have none. */
+.upd-frame {
+  isolation: auto;
+}
+
+/* ⚠️ `screen`, so it ADDS rather than covers: what shows through underneath
+   brightens instead of being veiled, which is the whole difference between
+   projected light and a tinted rectangle. Over #040A0C the two look nearly
+   identical everywhere except across something bright, which is exactly where
+   it matters. */
+.upd-cast {
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(120% 180% at 2% 50%, rgba(0, 217, 146, 0.10) 0%, rgba(0, 217, 146, 0.035) 34%, rgba(0, 217, 146, 0) 72%),
+    linear-gradient(180deg, rgba(226, 255, 245, 0.035), rgba(0, 0, 0, 0) 60%);
+  /* The top edge is where the light enters. A hairline rather than a border:
+     it runs out before the panel does, so it never closes a box. */
+  box-shadow: inset 0 1px 0 0 rgba(0, 217, 146, 0.16);
+}
+
+/* The mark is the source, so it strikes first and everything else follows. */
+.upd .ds-mark { animation-delay: 30ms; }
+.upd-mark { filter: drop-shadow(0 0 7px rgba(0, 217, 146, 0.55)); }
+
+/* One rule, leaving the words and fading out. ⚠️ Longhands only on a ds-*
+   element: the `animation` shorthand here would replace `.ds-in .ds-rule` and
+   silently delete the stagger it is riding on. */
+.upd-rail {
+  background: linear-gradient(90deg, rgba(0, 217, 146, 0.35), rgba(0, 217, 146, 0));
+  transform-origin: left center;
+}
+.upd.ds-in .ds-rule {
+  animation-duration: 240ms;
+  animation-delay: 120ms;
+}
+
+/* Square ends. A pill would be the only rounded thing on this screen. */
+.upd-track { background: rgba(215, 216, 217, 0.08); }
+.upd-fill {
+  background: #00d992;
+  box-shadow: 0 0 8px rgba(0, 217, 146, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The panel is a STATE, not a flourish: it still has to appear. Only the
+     movement goes — index.css already stops the ds-* children. */
+  .upd { animation: none; }
+}
