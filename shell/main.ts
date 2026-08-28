@@ -375,29 +375,39 @@ function push(patch: Partial<AppState>): void {
 
 // ── the League connection ──────────────────────────────────────────────────
 
+/**
+ * Read everything that belongs to whoever is signed in, and show it.
+ *
+ * Used on connect AND when the account changes underneath a connection that
+ * never dropped — the two need identical work, and having written it twice is
+ * how one of them ends up missing a field.
+ *
+ * ⚠️ Anything that throws in here used to vanish: the promise rejected, the
+ * state stayed "waiting", and the window said "Open League" with the client
+ * plainly running. A failure has to be visible, not silent.
+ */
+async function reattach(): Promise<void> {
+  const [summoner, phase, patchVersion, region] = await Promise.all([
+    lcu.currentSummoner().catch((e) => { console.error("[lcu] summoner:", e?.message); return null }),
+    lcu.phase().catch((e) => { console.error("[lcu] phase:", e?.message); return null }),
+    currentPatch().catch(() => null),
+    lcu.region().catch(() => null),
+  ])
+  push({ client: "attached", summoner, phase, patch: patchVersion, region })
+
+  // The profile and history are not needed to attach, so they load after —
+  // the window should show something the moment the client is there.
+  void readProfile()
+
+  // Pull what is already true. LCU events only fire on CHANGES, so attaching
+  // mid-select would otherwise leave the window blank until someone locked in.
+  if (phase === "ChampSelect") await readSelect(await lcu.champSelect())
+  // Attaching mid-game, including mid-loading.
+  if (IN_GAME_PHASES.has(phase ?? "")) startGameClock()
+}
+
 const lcu = new LcuConnection({
-  onConnect: async () => {
-    // Anything that throws in here used to vanish: the promise rejected, the
-    // state stayed "waiting", and the window said "Open League" with the client
-    // plainly running. A failure has to be visible, not silent.
-    const [summoner, phase, patchVersion, region] = await Promise.all([
-      lcu.currentSummoner().catch((e) => { console.error("[lcu] summoner:", e?.message); return null }),
-      lcu.phase().catch((e) => { console.error("[lcu] phase:", e?.message); return null }),
-      currentPatch().catch(() => null),
-      lcu.region().catch(() => null),
-    ])
-    push({ client: "attached", summoner, phase, patch: patchVersion, region })
-
-    // The profile and history are not needed to attach, so they load after —
-    // the window should show something the moment the client is there.
-    void readProfile()
-
-    // Pull what is already true. LCU events only fire on CHANGES, so attaching
-    // mid-select would otherwise leave the window blank until someone locked in.
-    if (phase === "ChampSelect") await readSelect(await lcu.champSelect())
-    // Attaching mid-game, including mid-loading.
-    if (IN_GAME_PHASES.has(phase ?? "")) startGameClock()
-  },
+  onConnect: reattach,
 
   onDisconnect: () => {
     lastEnemyKey = ""
@@ -405,6 +415,44 @@ const lcu = new LcuConnection({
   },
 
   onEvent: (e) => {
+    /**
+     * Somebody signed in — possibly as somebody else.
+     *
+     * ⚠️ Signing out of League does NOT drop the LCU. The client stays open on
+     * its login screen, keeping the same port and the same token, so the socket
+     * never closes and `onConnect` never runs again. Without this the app went
+     * on showing the previous account's name, rank and match history to whoever
+     * signed in next — the stalest possible answer, delivered with confidence.
+     *
+     * Keyed on the PUUID, not the name: a rename is the same person and must
+     * not throw away their history, while two accounts can share a display name
+     * across regions.
+     */
+    if (e.uri === "/lol-summoner/v1/current-summoner") {
+      const next = (e.data as { puuid?: string } | null)?.puuid ?? null
+      const now = state.summoner?.puuid ?? null
+      if (next && next !== now) {
+        console.log("[lcu] account changed: %s -> %s", now ?? "(none)", next)
+        // ⚠️ The module-level caches go too. They are keyed on a game, not on a
+        // player, so after a switch they would answer for the wrong one: the
+        // matchup would still be the last account's lane, and the loading board
+        // would refuse to rebuild because it thinks it has already drawn this
+        // roster.
+        lastEnemyKey = ""
+        loadingFor = ""
+        smartCache = null
+        // Everything below is per-account. Cleared first, so a slow re-read can
+        // never leave one account's rank standing beside another's name.
+        push({
+          summoner: null, ranked: null, matches: null, account: null,
+          lastPlayed: null, finalBoard: null, scoreboard: null, loading: null,
+          matchup: null,
+        })
+        void reattach()
+      }
+      return
+    }
+
     if (e.uri === "/lol-gameflow/v1/gameflow-phase") {
       const phase = e.data as Phase
       push({
