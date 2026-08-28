@@ -483,9 +483,14 @@ function Row({
         {p.honour && <Honour kind={p.honour} small />}
       </span>
 
-      <div className="flex gap-[3px]">
+      {/* ⚠️ shrink-0 on BOTH the group and the icons. `w-[17px]` in a flex row
+          is only a starting width — the item still shrinks when the row runs
+          short, and in the narrow column of the wide layout these collapsed to
+          about a pixel each: two vertical hairlines where two spells should be.
+          A 17px icon has no useful smaller size, so it is told not to have one. */}
+      <div className="flex shrink-0 gap-[3px]">
         {p.spells.filter(Boolean).map((id, i) => (
-          <img key={`${id}-${i}`} src={`${CDN}/${patch}/img/spell/${spellFile(id)}.png`} alt="" className="h-[17px] w-[17px] rounded-[2px] opacity-70" />
+          <img key={`${id}-${i}`} src={`${CDN}/${patch}/img/spell/${spellFile(id)}.png`} alt="" className="h-[17px] w-[17px] shrink-0 rounded-[2px] opacity-70" />
         ))}
       </div>
 

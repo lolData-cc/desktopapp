@@ -965,7 +965,11 @@ body {
      a floor as well as a ceiling so a narrow-ish maximised window cannot squeeze
      the ten rows into something unreadable. */
   .match-stage-board {
-    flex: 0 0 clamp(380px, 32%, 560px);
+    /* Wide enough for a whole row: portrait, spells, crest, a 164px name, the
+       KDA, two bars and seven items come to roughly 710px. At 560 the items
+       were simply clipped off the end — data quietly missing rather than
+       visibly cut. */
+    flex: 0 0 clamp(420px, 40%, 720px);
     min-width: 0;
   }
 }
