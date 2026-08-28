@@ -207,9 +207,15 @@ export class LcuConnection {
   /**
    * The roster of the game being loaded.
    *
-   * ⚠️ The Live Client Data API is NOT up during the loading screen — it starts
-   * answering once the player is in the world — so this is the only source for
-   * who is in the game while that screen is on. The session itself only exists
+   * ⚠️ The Live Client Data API does not carry the ROSTER during the loading
+   * screen, so this is the only source for who is in the game while that screen
+   * is on.
+   *
+   * This used to claim the 2999 API "is NOT up during the loading screen". It
+   * is — measured: it answers at gameTime=0.0 with the board still on screen,
+   * and that stopped clock is exactly how the app knows a loading screen is up
+   * (paintBoard, shell/main.ts). The wrong version of this comment nearly cost
+   * that mechanism, so the correction stays here. The session itself only exists
    * during a game flow; it 404s from an idle client, which is why the caller
    * treats a null as "not in a game" rather than as a fault.
    *

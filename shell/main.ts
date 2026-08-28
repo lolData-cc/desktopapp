@@ -342,6 +342,8 @@ function push(patch: Partial<AppState>): void {
       stopGameClock()
       // Nothing about the last game's timing survives into the next one.
       answeringSince = 0
+      clockStarted = false
+      pendingBoard = null
       recordingStarted = false
       startingRecording = false
       // A refusal belongs to the game it was made in, not to every game after it.
@@ -690,6 +692,9 @@ const CAPTURE_MS = 6_000
 const RECAL_MS = 11_000
 const POLL_MS = 2_000
 
+/** While the loading board is up, four times as often — see startGameClock. */
+const LOADING_POLL_MS = 500
+
 /** How long the debug button holds a demo notice up. Shorter than a real one
  *  on purpose — it is for checking the animation, not for reading. */
 const DEMO_MS = 5_000
@@ -702,7 +707,7 @@ const DEMO_MS = 5_000
  *  if that CSS duration changes, this changes with it. */
 const EXIT_MS = 660
 
-let tick: ReturnType<typeof setInterval> | null = null
+let tick: ReturnType<typeof setTimeout> | null = null
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
 /** The spawn we have already announced, on the game clock, so one dragon
  *  produces one notice rather than one per poll. */
@@ -1119,6 +1124,33 @@ async function readShop(
 let loadingFor = ""
 
 /**
+ * The board, built and waiting for the loading screen to actually be there.
+ *
+ * ⚠️ It used to be pushed the moment the roster resolved, which is when the
+ * gameflow phase turns InProgress — seconds before the game process has even
+ * drawn a window. Ten rank cards would appear over the client, sit there while
+ * the game launched, and only then line up with the loading screen they belong
+ * to. The data is still gathered that early; only the SHOWING waits.
+ */
+let pendingBoard: AppState["loading"] = null
+
+/**
+ * Show the waiting board, but only while the game says it is loading.
+ *
+ * The one reliable signal, and the same one the board comes down on: the game
+ * answers on 2999 with a stopped clock for exactly as long as the loading
+ * screen is up. Before it answers there is no loading screen yet; once the
+ * clock moves there is no longer one.
+ */
+function paintBoard(): void {
+  if (!pendingBoard) return
+  const loadingNow = answeringSince > 0 && !clockStarted
+  if (!loadingNow) return
+  push({ loading: pendingBoard })
+  syncOverlay()
+}
+
+/**
  * Seconds on the game clock before the loading board is taken down. One is
  * enough to know the world exists, and a board that lingers for one second
  * over the fountain costs nothing.
@@ -1129,6 +1161,14 @@ const GAME_UNDER_WAY = 1
 const LOADING_CEILING = 25_000
 /** When the game first answered this match, so the ceiling has a start. */
 let answeringSince = 0
+
+/**
+ * Has the match clock actually started ticking?
+ *
+ * The loading screen is up for exactly the window between the game answering
+ * and this becoming true, so both edges of the board hang off it.
+ */
+let clockStarted = false
 
 async function readLoading(): Promise<void> {
   /**
@@ -1188,7 +1228,8 @@ async function readLoading(): Promise<void> {
 
   const allies = await resolve(roster.allies)
   const enemies = await resolve(roster.enemies)
-  push({ loading: { allies, enemies } })
+  pendingBoard = { allies, enemies }
+  paintBoard()
   console.log("[loading] allies: %s | enemies: %s",
     allies.map((a) => `${a.name}=${a.championId}`).join(" "),
     enemies.map((a) => `${a.name}=${a.championId}`).join(" "))
@@ -1333,12 +1374,13 @@ async function enrich(
       }
     })
 
-  push({
-    loading: {
-      allies: decorate(allies, allyEntries),
-      enemies: decorate(enemies, enemyEntries),
-    },
-  })
+  pendingBoard = {
+    allies: decorate(allies, allyEntries),
+    enemies: decorate(enemies, enemyEntries),
+  }
+  // Already on screen: replace it in place with the enriched version.
+  if (state.loading) push({ loading: pendingBoard })
+  else paintBoard()
 }
 
 /**
@@ -1489,7 +1531,12 @@ async function readGame(): Promise<void> {
       stats.gameTime.toFixed(1), state.loading ? "still up" : "not up")
   }
   const underWay = stats.gameTime >= GAME_UNDER_WAY
+  clockStarted = underWay
   const overdue = Date.now() - answeringSince > LOADING_CEILING
+
+  // The game has answered and the clock has not moved: the loading screen is
+  // on screen right now, which is the only moment the board should be.
+  if (!underWay) paintBoard()
 
   if (state.loading && (underWay || overdue)) {
     console.log(
@@ -1784,11 +1831,27 @@ function startGameClock(): void {
   readOpening()
   announced = null
   void readGame()
-  tick = setInterval(() => void readGame(), POLL_MS)
+  /**
+   * ⚠️ Self-scheduling rather than setInterval, so the RATE can change.
+   *
+   * The loading board's whole timing rests on one fact — the game answers with
+   * a stopped clock while the loading screen is up — and at one poll every two
+   * seconds we can only notice the clock has started up to two seconds late.
+   * That is two seconds of ten rank cards sitting over the Rift. While the
+   * board is up the game is polled four times as often, and the moment it comes
+   * down the rate drops back: a game does not need 250ms attention for forty
+   * minutes to tell you your gold.
+   */
+  const loop = async () => {
+    await readGame()
+    if (!tick) return
+    tick = setTimeout(loop, state.loading ? LOADING_POLL_MS : POLL_MS)
+  }
+  tick = setTimeout(loop, POLL_MS)
 }
 
 function stopGameClock(): void {
-  if (tick) clearInterval(tick)
+  if (tick) clearTimeout(tick)
   tick = null
   push({ gold: null })
   syncOverlay()
