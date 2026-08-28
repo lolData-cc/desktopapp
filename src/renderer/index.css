@@ -941,7 +941,7 @@ body {
    ⚠️ The flex items are .match-stage's DIRECT children — the clip block and the
    board. Sizing .match-stage-video instead sizes something that is not a flex
    item, leaves its wrapper with no height, and collapses the player to nothing. */
-@media (min-width: 1500px) {
+@media (min-width: 1700px) {
   .match-stage {
     display: flex;
     flex-direction: row;
@@ -969,7 +969,11 @@ body {
      two bars, CS, vision and seven items. No column that also leaves room for
      a video is going to be 880 wide, so three of them stand down instead —
      see .row-roomy below. What is left comes to ~630. */
-    flex: 0 0 clamp(420px, 34%, 640px);
+    /* MEASURED, not guessed: the visible children come to 526px, the five gaps
+       to 60 and the padding to 24 — 610px for a row with six items. A
+       percentage alone gives less than that at the low end of the breakpoint,
+       so the floor is fixed and the percentage only lets it grow. */
+    flex: 0 0 clamp(620px, 38%, 720px);
     min-width: 0;
   }
 
