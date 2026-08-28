@@ -670,3 +670,259 @@ body {
    is more below, and a thin line down the edge is just a line. */
 .no-bar { scrollbar-width: none; }
 .no-bar::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ── the lock-in ──────────────────────────────────────────────────────────
+   Champ select has exactly one irreversible moment, and until now this screen
+   did not react to it. `select.lockedIn` is already computed and pushed
+   (shell/main.ts, off the pick action's `completed` flag — a hovered champion
+   is not a commitment) and already declared in types.ts. Nothing new to plumb.
+
+   At that moment two things happen, and they are ONE gesture: the totem steps
+   out of the focal plane, and the light it now throws becomes the rune menu.
+
+   The hologram here is not a texture. It is a SOURCE — one rhombus on the
+   totem's own vertical axis — and everything below it is that source's light.
+   That is why there is no plate, no border and no frame: a projection has an
+   energy limit, not an edge, and an energy limit is a gradient reaching zero
+   inside its own box (DsPanel's feathered-ground rule, re-aimed as an emission
+   from a point rather than a pool).
+
+   ⚠️ NOTHING here loops. The whole event is over in ~850ms and the resting
+   state has zero running animations — in fact it has two FEWER than before,
+   because the lock pauses totem-float and metal-sweep. This paints while a
+   game is loading on the same machine; anything that runs forever is a cost
+   with no end. */
+
+/* The optical space the recession happens in.
+   ⚠️ `perspective` applies to DIRECT CHILDREN ONLY. .lock-recede is a direct
+   child of this element (it is the grid item that used to be .totem itself),
+   which is the whole reason the recede is a real perspective shrink and not a
+   scale() impersonating one. Wrap another div in between and the depth
+   silently flattens.
+
+   Second, quieter job: this creates a stacking context, which BOUNDS the blend
+   group of .lock-cast below to this subtree. That is exactly what we want —
+   the group contains the watermark (the one thing the light should brighten)
+   and excludes CyberBackdrop's .cb-scan, a 42s infinite translateY that lives
+   in <main> outside this element. Without the bound, a permanently moving band
+   underneath a screen-blended layer would force it to re-composite forever. */
+.lock-stage { perspective: 1200px; }
+
+/* ── 1. the totem leaves the focal plane ──────────────────────────────────
+ * ⚠️ This class goes on a WRAPPER, never on .totem itself. .totem runs
+ * totem-float, and an animation's transform BEATS a transitioned one — put
+ * this on the card and the translate3d is discarded sixty times a second.
+ *
+ * ⚠️ `filter` creates a containing block AND a stacking context. Anything
+ * later that wants to escape the totem (a rank tooltip, an account menu) will
+ * be trapped in here. This file already carries one comment about that exact
+ * class of bug cutting the account menu off at the window edge. */
+.lock-recede {
+  transition:
+    transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter    560ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity   560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lock-back {
+  /* Back AND up. Back is the rack; up opens the throw distance the layout does
+     not otherwise have — measured, the totem's bottom edge sits ~25px above
+     the panel at the window's own minHeight of 700, and 34px of lift is what
+     keeps the projection from starting inside the card. The menu deliberately
+     does NOT dock upward to meet it: an unconditional lift there collides with
+     the receded card at minimum height. All of the room comes from here. */
+  transform: translate3d(0, -34px, -110px);
+  /* Four depth cues, moving together and in the direction atmospheric
+     perspective actually moves them: smaller (perspective derives the shrink
+     from the Z, so it is geometrically correct), softer, desaturated, dimmer.
+     ONE of these reads as something breaking. All four read as distance.
+     ⚠️ 1.4px, not 3. The .metal card is a bevel, a brushed grain and a
+     travelling specular band — at 3px and 0.4 opacity it stops being a
+     defocused object and becomes a grey smudge. It has to stay legibly the
+     same card, only further away. */
+  filter: blur(1.4px) saturate(0.6) brightness(0.72);
+  opacity: 0.68;
+}
+
+/* A receded object is INERT, and that stillness is most of the focus change.
+   ⚠️ PAUSED, never `animation: none`. totem-float's transform IS the
+   animation, so removing it snaps the card up to 6px sideways at the exact
+   instant the recession starts — the one thing here that would read as a bug
+   rather than as depth.
+   It is also the performance answer: with these two stopped, nothing under the
+   blended layer repaints, and the screen is cheaper after the lock than it was
+   idle before it. If a future edit removes this rule, a blurred card
+   re-rasterises every frame forever while a game loads. That coupling is
+   invisible from the JSX. */
+.lock-back .totem,
+.lock-back .metal::after { animation-play-state: paused; }
+
+/* The emitter mouth: the totem's existing lower rule, which was always there
+   and was simply dark. A colour change and nothing else.
+   ⚠️ No scaleY, no box-shadow. .metal is `overflow: hidden`, so a slit that
+   grew past the card's bottom edge would be cut in half and its entire bloom
+   would be clipped to the card body — the projector would be unable to emit
+   past its own silhouette. The light does its work OUTSIDE the card, at the
+   rhombus. This is only the last lit inch before it. */
+.lock-mouth { transition: background-color 560ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ── 2. the projection group ──────────────────────────────────────────────
+ * ⚠️ .ds-in is kept here purely as the TRIGGER for its staggered child rules;
+ * its own arrival is cancelled. ds-arrive slides in 28px from the right, which
+ * is right for a notification that was delivered and wrong for light that was
+ * emitted.
+ *
+ * ⚠️ animation-NAME only, at (0,2,0). Never the `animation` shorthand and
+ * never a shorthand on a descendant that also carries a ds-* class: the child
+ * rules in this file are `.ds-in .ds-slot` etc. at (0,2,0), and a (0,3,0)
+ * shorthand on the same element would REPLACE them and silently delete the
+ * whole stagger. Longhands here compose; shorthands here destroy.
+ *
+ * ⚠️ It must also carry no transform, no filter and no opacity < 1 of its own.
+ * Any of those creates a stacking context, which isolates blending, and
+ * .lock-cast below would then blend against its own transparent parent instead
+ * of against the watermark — which is the single detail that proves this is
+ * projected light rather than a tinted panel. */
+.lock-projection.ds-in { animation-name: none; }
+
+/* ── 3. the light ─────────────────────────────────────────────────────────
+ * Not a ground: a ground has an edge. This is an emission from 50% 0% — the
+ * rhombus — falling off with distance and reaching zero well inside its own
+ * box, so there is nothing to draw a border around and nothing to reject.
+ *
+ * `screen`, so it ADDS: where it crosses the watermark's outline stroke, that
+ * stroke BRIGHTENS instead of being veiled. That is what light does and what a
+ * tinted plate categorically cannot. One static element, composited once.
+ *
+ * ⚠️ Over #040A0C, screen and normal are near-identical. It is load-bearing at
+ * exactly one place — over the watermark — and nothing else depends on it. If
+ * it ever costs a compositor fast path, delete this one line; the missing
+ * plate and the low alphas are doing the actual work.
+ *
+ * ⚠️ A SIBLING of .lock-plane, never a child. .lock-plane is transformed
+ * during its arrival, and a transform isolates blending. */
+.lock-cast {
+  mix-blend-mode: screen;
+  /* The core clips toward the same near-white .metal already uses for its lit
+     bevel, so the app has one idea of "hot" rather than two. */
+  background: radial-gradient(
+    118% 100% at 50% 0%,
+    rgba(226, 255, 245, 0.055) 0%,
+    rgba(0, 217, 146, 0.038) 22%,
+    rgba(0, 217, 146, 0.014) 46%,
+    rgba(0, 217, 146, 0) 70%
+  );
+  animation: lock-cast-in 420ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+}
+@keyframes lock-cast-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── 4. the source ───────────────────────────────────────────────────────
+ * One rhombus. It is the lock, the light source, and the only ornament — and
+ * with IMPORT it is one of exactly two solid things on this screen. That rule
+ * is what makes the absence of a frame read as intent rather than as an
+ * unfinished panel.
+ *
+ * ⚠️ Built as DsPanel builds its diamond: a rotated <g> around a plain <rect>,
+ * NOT a clip-path and NOT a rotate on the animated element. An animated
+ * transform replaces the property rather than composing with it — "this is how
+ * this diamond became a square the first time it moved" is already a comment
+ * in DsPanel.tsx. The rect carries .ds-mark, so it arrives with ds-snap and
+ * lands exactly like every other diamond in the app instead of inventing a
+ * third way for a rhombus to appear.
+ *
+ * The glow lives here, on the <svg>, where nothing clips it. */
+.lock-source { filter: drop-shadow(0 0 7px rgba(0, 217, 146, 0.55)); }
+
+/* the mark is the SOURCE, so it strikes first and everything follows from it */
+.lock-projection.ds-in .ds-mark { animation-delay: 40ms; }
+
+/* ── 5. the one drawn line ───────────────────────────────────────────────
+ * A single hairline leaving the rhombus to the right and dying into
+ * rgba(0,217,146,0) at its far end.
+ *
+ * A line that terminates in NOTHING cannot be read as the top of a box, which
+ * is the entire job: it is not a border, not a corner bracket, and not the
+ * rejected travelling ribbon (it scales from its own end once and then never
+ * moves again). One side only, because DsPanel states the rule in prose —
+ * "Nothing is symmetrical. A mirrored frame reads as a border" — and a pair of
+ * rules mirrored around a centred bead is stock HUD clipart. And it starts AT
+ * the mark, because "a line that turns is MARKED at the turn" is the same
+ * component's other rule. */
+.lock-rail {
+  left: calc(50% + 6px);
+  background: linear-gradient(90deg, rgba(0, 217, 146, 0.55), rgba(0, 217, 146, 0));
+  box-shadow: 0 0 8px rgba(0, 217, 146, 0.3);
+}
+/* It carries .ds-rule, so the name, easing, fill and transform-origin all come
+   from `.ds-in .ds-rule` unchanged. Only the timing is pulled forward: an
+   interrupt strikes, it does not unroll at the end of the sequence.
+   ⚠️ Longhands. See the shorthand warning above. */
+.lock-projection.ds-in .ds-rule {
+  animation-duration: 220ms;
+  animation-delay: 120ms;
+}
+
+/* ── 6. the image lands, and corrects itself ─────────────────────────────
+ * A projector aimed at a surface not square to it throws a trapezoid, and the
+ * correction of that distortion is called keystone — which is also the name of
+ * the one rune this menu exists to recommend. That is the whole hologram, and
+ * because it is geometry rather than texture it cannot be slapped onto a box.
+ *
+ * ⚠️ `perspective()` is written INTO the transform function, not declared on
+ * an ancestor. .lock-stage's perspective reaches its direct children only, and
+ * this element is three levels down — declared there it would produce a 1.5%
+ * vertical squash and nothing else.
+ *
+ * ⚠️ It ends on `transform: none`, NOT on a residual identity rotateX. A
+ * lingering 3D transform keeps the subtree on its own composited layer and
+ * drops LCD subpixel antialiasing on every 8.5–11px label inside it, forever,
+ * for an effect that finished 300ms ago. Interpolating a transform list to
+ * `none` is well-defined (none is treated as the matching identity), so this
+ * costs nothing to do correctly. */
+.lock-plane { animation: lock-resolve 340ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both; }
+
+@keyframes lock-resolve {
+  from { opacity: 0; transform: perspective(900px) rotateX(7deg) translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── 7. what is NOT projected ────────────────────────────────────────────
+ * The content is not blended, not blurred, not tilted and not fringed. LIGHT
+ * is additive; INFORMATION is not. A screened, chromatically split 8.5px
+ * uppercase label over a moving watermark is unreadable, and this is a
+ * functional menu with five choices and an irreversible action at the end of
+ * it, not a splash.
+ *
+ * What the content DOES take from the physics is falloff: it is ranked by
+ * distance from the source, so the variant row nearest the rhombus is
+ * brightest and the share line furthest away is faintest. A projection dims as
+ * it travels, and the type says which end it is at. (Those values live on the
+ * elements in Overview.tsx; the unchosen labels also step up from flash/30 to
+ * flash/45 — removing a ground means paying for the contrast in ink.) */
+
+/* The action lands last, after the thing it acts on, and it LIFTS rather than
+   pops: this is the one control in the app that changes the client, and a
+   bouncing button is the wrong register for it. Name and duration still come
+   from `.ds-in .ds-late`; only the delay moves. */
+.lock-projection.ds-in .ds-late.lock-last { animation-delay: 620ms; }
+
+/* The menu now genuinely holds the focus, so it has to show it — and in jade,
+   never in a pale ring. The app had no focus-visible style at all before this. */
+.lock-projection :focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 217, 146, 0.75), 0 0 12px rgba(0, 217, 146, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Motion goes. MEANING stays — the recession is a STATE, not a flourish, and
+     dropping it would leave two equally-lit things competing for attention,
+     which is the exact problem this interaction exists to fix. Only the blur
+     goes with the motion: it is the most expensive cue and the least legible
+     one when there is no movement to explain it. */
+  .lock-recede, .lock-mouth { transition: none; }
+  .lock-back { filter: saturate(0.6) brightness(0.72); }
+  .lock-cast { animation: none; opacity: 1; }
+  .lock-plane { animation: none; }
+  /* .lock-rail rests at scaleX(1) with no transform declared, and the existing
+     reduced-motion block already kills `.ds-in .ds-rule` / `.ds-in .ds-mark`,
+     so both draw correctly with nothing further to do here. */
+}

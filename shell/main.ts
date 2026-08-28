@@ -64,6 +64,10 @@ export type AppState = {
   select: {
     champion: Champion | null
     role: string | null
+    /** True only once the client marks our pick action `completed` — a hovered
+     *  champion is not a commitment. This is the moment the interface treats
+     *  as an event. */
+    lockedIn: boolean
     allies: { locked: number; total: number }
     enemies: { locked: number; total: number }
   } | null
@@ -570,6 +574,26 @@ async function readSelect(data: unknown): Promise<void> {
   const locked = (t: any[]) => t.filter((p) => p.championId > 0).length
   const theirTeam = s.theirTeam ?? []
 
+  /**
+   * Has the local player actually LOCKED IN, as opposed to hovering a pick?
+   *
+   * ⚠️ `championId` cannot answer this. The client fills it in while you are
+   * still only hovering, which is exactly why the rune panel could already be
+   * shown before any commitment was made. The commitment lives in `actions`: a
+   * flat-ish 2D array of every ban and pick in the room, where the one that
+   * matters is the `pick` whose `actorCellId` is ours, and `completed` is the
+   * client's own word for "this is now irreversible".
+   *
+   * Flattened rather than indexed, because the outer array is turn groups and
+   * their shape varies by queue — in a blind pick every ally picks in one group,
+   * in draft they are separate. Reading actions[n] positionally works in the
+   * queue you happen to test and silently misreads the others.
+   */
+  const acts: any[] = Array.isArray(s.actions) ? s.actions.flat() : []
+  const lockedIn = acts.some(
+    (a) => a?.type === "pick" && a?.actorCellId === s.localPlayerCellId && a?.completed === true
+  )
+
   const champion = await championById(me.championId)
   const role = me.assignedPosition || null
   // Only refetch when the pick actually changed — champ select emits a session
@@ -589,6 +613,7 @@ async function readSelect(data: unknown): Promise<void> {
       // Empty in customs and blind pick — the client only fills it for queues
       // that assign roles, so the interface has to cope with not knowing.
       role,
+      lockedIn,
       allies: { locked: locked(s.myTeam), total: s.myTeam.length },
       enemies: { locked: locked(theirTeam), total: theirTeam.length },
     },

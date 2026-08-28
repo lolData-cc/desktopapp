@@ -6,7 +6,7 @@
  * is slow, so the renderer is built to run anywhere: if `window.desktop` is
  * missing it gets this instead. It also makes states reachable on demand that
  * are otherwise a queue and a champion select away —
- * `?state=waiting|lobby|select|game`.
+ * `?state=waiting|lobby|select|locked|game`.
  *
  * This never ships behaviour into the real app: inside Electron the preload has
  * already defined window.desktop, so install() returns immediately.
@@ -93,6 +93,9 @@ const SCENES: Record<string, unknown> = {
     patch: "16.16.1",
     select: {
       champion: { slug: "Nami", key: 267, name: "Nami" },
+      // Hovering. The client fills `champion` in while you are still scrolling
+      // the grid, which is exactly why this flag has to exist separately.
+      lockedIn: false,
       role: null, // a custom, where the client assigns no position
       allies: { locked: 3, total: 5 },
       enemies: { locked: 1, total: 5 },
@@ -447,6 +450,57 @@ const SCENES: Record<string, unknown> = {
       build: { items: [6653, 4633, 3157, 3089], shapeLabel: "3+ ad, 3+ melee, 2+ tank", cohortGames: 1224 },
     },
   },
+}
+
+/**
+ * `?state=locked` — the same room one beat later.
+ *
+ * Derived from `select` rather than written out again, so the two scenes differ
+ * by exactly what the LOCK changes and nothing else. That is the whole point of
+ * having it: put them side by side and any difference you see is the feature.
+ *
+ * ⚠️ `select` carries `runes: null`, so the panel never rendered in dev at all
+ * and the interaction was unreachable without a live champion select. The
+ * variants below are shaped like the real payload — five pages, descending
+ * share, real perk ids so the icons actually resolve against the CDN.
+ */
+const DEV_RUNES = {
+  chosen: 0,
+  remembered: false,
+  pageName: "loldata · Nami",
+  variants: [
+      { label: "popular", games: 48213, winrate: 51.8, share: 62,
+        page: { keystone: 8214, primaryStyle: 8200, primary: [8214, 8226, 8210, 8237],
+                subStyle: 8300, secondary: [8345, 8352], shards: [5008, 5008, 5001] } },
+      { label: "aery", games: 14907, winrate: 52.4, share: 19,
+        page: { keystone: 8214, primaryStyle: 8200, primary: [8214, 8226, 8210, 8237],
+                subStyle: 8100, secondary: [8143, 8135], shards: [5008, 5008, 5001] } },
+      { label: "comet", games: 8801, winrate: 50.1, share: 11,
+        page: { keystone: 8229, primaryStyle: 8200, primary: [8229, 8226, 8210, 8237],
+                subStyle: 8300, secondary: [8345, 8352], shards: [5008, 5008, 5001] } },
+      { label: "glacial", games: 3120, winrate: 49.2, share: 4,
+        page: { keystone: 8351, primaryStyle: 8300, primary: [8351, 8306, 8345, 8352],
+                subStyle: 8200, secondary: [8226, 8210], shards: [5008, 5008, 5001] } },
+    { label: "guardian", games: 2440, winrate: 53.9, share: 3,
+      page: { keystone: 8465, primaryStyle: 8400, primary: [8465, 8463, 8473, 8242],
+              subStyle: 8300, secondary: [8345, 8352], shards: [5008, 5008, 5001] } },
+  ],
+}
+
+// Both scenes get the same pages, so the ONLY difference between them is the
+// lock. Anything else you notice on screen is the feature doing its job.
+;(SCENES.select as Record<string, unknown>).runes = DEV_RUNES
+
+SCENES.locked = {
+  ...(SCENES.select as object),
+  select: {
+    champion: { slug: "Nami", key: 267, name: "Nami" },
+    lockedIn: true,
+    role: "UTILITY",
+    allies: { locked: 5, total: 5 },
+    enemies: { locked: 3, total: 5 },
+  },
+  runes: DEV_RUNES,
 }
 
 /**

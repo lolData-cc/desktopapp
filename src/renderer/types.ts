@@ -230,6 +230,10 @@ export type AppState = {
   select: {
     champion: Champion | null
     role: string | null
+    /** True only once the client marks our pick action `completed`. A hovered
+     *  champion is not a commitment — `champion` is filled in while you are
+     *  still scrolling the grid, which is why it cannot stand in for this. */
+    lockedIn: boolean
     allies: { locked: number; total: number }
     enemies: { locked: number; total: number }
   } | null

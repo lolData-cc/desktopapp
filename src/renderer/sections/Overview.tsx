@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { resolvePage, type Perk, type Style } from "../../data/perks"
 import { CDN, type AppState } from "../types"
 import Scoreboard from "./Scoreboard"
@@ -94,16 +94,33 @@ export function Attached({ s }: { s: AppState }) {
   const patch = s.patch ?? "16.16.1"
   const r = s.ranked
 
+  // The one irreversible moment champ select has. A hovered champion fills in
+  // `champion` too, which is why that cannot stand in for this.
+  const locked = !!sel?.champion && sel.lockedIn
+
   return (
-    <div className="relative grid h-full place-items-center">
-      <Watermark text={copy.title} />
+    // ⚠️ .lock-stage carries the perspective, and .lock-recede below must stay
+    //    its DIRECT child or the recession flattens into a scale().
+    <div className="lock-stage relative grid h-full place-items-center">
+      {/* The screen-sized word stops being a phase label and becomes the
+          champion you can no longer un-pick. The largest element on screen
+          turns into information, and it costs one expression — Watermark is
+          already keyed on its own text, so its arrival re-fires by itself. */}
+      <Watermark text={locked && sel?.champion ? sel.champion.name : copy.title} />
 
       {/* The totem: who you are, and nothing else.
           ⚠️ No DsPanel here on purpose. That frame — rails, ticks, a shoulder,
           an eyebrow — is right on a card that has to hold its own against the
           game, and it is noise in front of a word the size of the screen. The
           watermark is the ornament on this screen; a second one competes with
-          it. A plate and a hairline are enough to lift the card off the word. */}
+          it. A plate and a hairline are enough to lift the card off the word.
+
+          ⚠️ The recede lives on the WRAPPER and never on .totem. .totem runs
+          totem-float, and an animation's transform beats a transitioned one —
+          on the card itself the translate3d would be overwritten every frame.
+          The wrapper owns depth; the card keeps its own breathing, paused from
+          there. */}
+      <div className={`lock-recede ${locked ? "lock-back" : ""}`}>
       <div
         className="totem metal relative flex w-[186px] flex-col items-center rounded-[6px] px-5 py-10"
       >
@@ -111,7 +128,17 @@ export function Attached({ s }: { s: AppState }) {
             thing, and the fastest way to say so is to put the vertical axis on
             the card itself rather than only in its proportions. */}
         <span aria-hidden className="absolute left-1/2 top-0 z-[1] h-5 w-px -translate-x-1/2 bg-jade/25" />
-        <span aria-hidden className="absolute bottom-0 left-1/2 z-[1] h-5 w-px -translate-x-1/2 bg-jade/15" />
+        {/* The lower rule was always the emitter mouth — it was simply dark.
+            ⚠️ A colour change ONLY. .metal is `overflow: hidden`, so a slit
+            grown past the card's bottom edge would be cut off and its glow
+            clipped to the card body. The light leaves at the rhombus, outside
+            the card; this is the last lit inch before it. */}
+        <span
+          aria-hidden
+          className={`lock-mouth absolute bottom-0 left-1/2 z-[1] h-5 w-px -translate-x-1/2 ${
+            locked ? "bg-jade/[0.55]" : "bg-jade/15"
+          }`}
+        />
 
         {/* ⚠️ Above the specular sweep. That highlight is an ::after, so it
             paints OVER the children by default — a reflection passing across a
@@ -154,13 +181,17 @@ export function Attached({ s }: { s: AppState }) {
         )}
         </div>
       </div>
+      </div>
 
       {/* Champion select still gets its own room, below the totem — in champ
-          select the page has a job beyond saying who you are. */}
+          select the page has a job beyond saying who you are.
+          ⚠️ The menu deliberately does NOT dock upward on lock. All of the
+          throw distance comes from the totem's 34px of lift; lifting here as
+          well collides with the receded card at the window's own minHeight. */}
       {sel?.champion && (
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto w-full max-w-[560px]">
-            <RunePanel s={s} />
+            <RunePanel s={s} locked={locked} />
             <RuneImportNotice imp={s.runeImport} />
           </div>
         </div>
@@ -222,10 +253,11 @@ function RuneImportNotice({ imp }: { imp: AppState["runeImport"] }) {
  * should not quietly claim the stronger one.
  */
 
-function RunePanel({ s }: { s: AppState }) {
+function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
   const r = s.runes
   const v = r?.variants[r.chosen]
   const [art, setArt] = useState<{ perks: (Perk | null)[]; primary: Style | null; secondary: Style | null } | null>(null)
+  const chosenRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!v) return setArt(null)
@@ -237,39 +269,77 @@ function RunePanel({ s }: { s: AppState }) {
     return () => { alive = false }
   }, [v?.page.keystone, v?.label])
 
+  /**
+   * "The focus moves onto it" made true of the machine, not only of the picture.
+   *
+   * ⚠️ Guarded twice, and the guards ARE the feature. During champ select the
+   * player is nearly always in the League client, not in this window — a
+   * companion app that yanks focus mid-pick is a bug with a nice animation on
+   * it. So: only when this window already has focus, and only when nothing in
+   * it is focused already. Otherwise the visual shift stands on its own and the
+   * first Tab lands here anyway.
+   *
+   * The delay lets the arrival finish; focusing a button mid-animation scrolls
+   * and fights the transform.
+   */
+  useEffect(() => {
+    if (!locked) return
+    if (!document.hasFocus()) return
+    if (document.activeElement && document.activeElement !== document.body) return
+    const id = window.setTimeout(() => chosenRef.current?.focus({ preventScroll: true }), 700)
+    return () => window.clearTimeout(id)
+  }, [locked])
+
   if (!r || !v) return null
   const imp = s.runeImport
 
-  return (
-    <div className="rise mt-6 border-t border-jade/[0.12] pt-5">
+  const body = (
+    <>
+      {/* Only once it is a projection: the word this panel's doc comment argues
+          for — POPULAR rather than BEST — was never actually on screen. */}
+      {locked && (
+        <p className="ds-eyebrow font-jetbrains text-[8.5px] uppercase tracking-[0.28em] text-jade/60">
+          runes · popular
+        </p>
+      )}
+
       {/* The same five the site offers, in the same order and the same words.
           Knowing only the most played page is what let champ select overwrite a
-          choice made on the website. */}
-      <div className="flex flex-wrap items-center gap-1.5">
+          choice made on the website.
+          ⚠️ The brighter unchosen label is conditional on the lock, not global:
+          it pays for the contrast lost with the ground, and there is still a
+          ground before the lock. */}
+      <div className={`flex flex-wrap items-center gap-1.5 ${locked ? "mt-3" : ""}`}>
         {r.variants.map((variant, i) => (
           <button
             key={variant.label}
+            ref={i === r.chosen ? chosenRef : undefined}
             type="button"
             onClick={() => window.desktop.chooseRunes(i)}
-            className={`win-btn rounded-[3px] px-2 py-1 text-left ${i === r.chosen ? "bg-jade/[0.13]" : ""}`}
+            style={{ ["--in-delay" as string]: `${300 + i * 40}ms` }}
+            className={`ds-slot win-btn rounded-[3px] px-2 py-1 text-left ${i === r.chosen ? "bg-jade/[0.13]" : ""}`}
           >
-            <span className={`block font-jetbrains text-[8.5px] uppercase tracking-[0.14em] ${i === r.chosen ? "text-jade" : "text-flash/30"}`}>
+            <span className={`block font-jetbrains text-[8.5px] uppercase tracking-[0.14em] ${i === r.chosen ? "text-jade" : locked ? "text-flash/45" : "text-flash/30"}`}>
               {variant.label}
             </span>
-            <span className={`block font-chakrapetch text-[11px] font-bold tabular-nums ${i === r.chosen ? "text-flash/85" : "text-flash/40"}`}>
+            <span className={`block font-chakrapetch text-[11px] font-bold tabular-nums ${i === r.chosen ? "text-flash/85" : locked ? "text-flash/45" : "text-flash/40"}`}>
               {variant.winrate.toFixed(1)}%
             </span>
           </button>
         ))}
       </div>
 
-      <p className="mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30">
+      {/* Furthest from the source, so faintest — a projection dims as it
+          travels, and the ranking of the type says which end it is at. */}
+      <p className="ds-late mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30">
         {r.remembered && r.chosen !== 0 && <span className="text-jade/70">your last choice · </span>}
         {v.share >= 1 ? `${Math.round(v.share)}% of games` : "rarely played"} · {v.games.toLocaleString()} games
       </p>
 
       <div className="mt-3 flex items-center gap-4">
-        <div className="flex items-center gap-1.5">
+        {/* .ds-icon on each group and on the separator: one class, one timing,
+            so the nine icons land as a SET rather than as a sequence. */}
+        <div className="ds-icon flex items-center gap-1.5">
           {art?.primary && <img src={art.primary.icon} alt={art.primary.name} title={art.primary.name} className="h-5 w-5 opacity-70" />}
           {art?.perks.slice(0, 4).map((p, i) => (
             <img
@@ -283,27 +353,87 @@ function RunePanel({ s }: { s: AppState }) {
           ))}
         </div>
 
-        <span aria-hidden className="h-6 w-px bg-jade/12" />
+        <span aria-hidden className="ds-icon h-6 w-px bg-jade/12" />
 
-        <div className="flex items-center gap-1.5">
+        <div className="ds-icon flex items-center gap-1.5">
           {art?.secondary && <img src={art.secondary.icon} alt={art.secondary.name} title={art.secondary.name} className="h-5 w-5 opacity-70" />}
           {art?.perks.slice(4, 6).map((p, i) => (
             <img key={p?.id ?? i} src={p?.icon} alt={p?.name ?? ""} title={p?.name ?? ""} className="h-[22px] w-[22px] opacity-85" />
           ))}
+          {/* ⚠️ The index is part of the key, not a fallback for a missing id.
+              Shards REPEAT by design — two Adaptive Force slots are both 5008 —
+              so keying on the id alone gives React duplicate keys and licence to
+              drop or reorder one of them. */}
           {art?.perks.slice(6, 9).map((p, i) => (
-            <img key={p?.id ?? `s${i}`} src={p?.icon} alt={p?.name ?? ""} title={p?.name ?? ""} className="ml-0.5 h-[15px] w-[15px] opacity-70" />
+            <img key={`${p?.id ?? "s"}-${i}`} src={p?.icon} alt={p?.name ?? ""} title={p?.name ?? ""} className="ml-0.5 h-[15px] w-[15px] opacity-70" />
           ))}
         </div>
 
+        {/* The second solid thing on the screen, and the last to arrive: the
+            action lands after the thing it acts on. .lock-last moves only its
+            delay — see the longhand-not-shorthand warning in index.css. */}
         <button
           type="button"
           disabled={imp.state === "working"}
           onClick={() => void window.desktop.importRunes()}
-          className="act-btn ml-auto h-8 w-[112px] shrink-0 rounded-[3px] font-chakrapetch text-[12px] font-bold uppercase tracking-[0.12em]"
+          className="act-btn ds-late lock-last ml-auto h-8 w-[112px] shrink-0 rounded-[3px] font-chakrapetch text-[12px] font-bold uppercase tracking-[0.12em]"
         >
           {imp.state === "working" ? "setting" : imp.state === "done" ? "imported" : "import"}
         </button>
       </div>
+    </>
+  )
+
+  // Before the lock: exactly today's panel. Nothing changes until the decision
+  // becomes irreversible. The ds-* classes on the contents are inert until an
+  // ancestor carries .ds-in, so this renders as it always did.
+  if (!locked) {
+    return <div className="rise mt-6 border-t border-jade/[0.12] pt-5">{body}</div>
+  }
+
+  return (
+    // ⚠️ .ds-in is here purely as the TRIGGER for its staggered child rules;
+    //    index.css cancels its own slide-in by name. This element must keep NO
+    //    transform, filter or opacity of its own — any of them creates a
+    //    stacking context and would isolate .lock-cast's blending from the
+    //    watermark, which is the single detail proving this is projected light
+    //    rather than a tinted panel.
+    // ⚠️ The top hairline is gone. `border-t` is the flat strip's edge, and an
+    //    edge is the one thing a projection does not have.
+    <div
+      className="lock-projection ds-in relative mt-6 pt-6"
+      role="group"
+      aria-label={`Runes for ${s.select?.champion?.name ?? "your champion"}`}
+    >
+      {/* The light it throws. No edge, because it reaches zero inside its own
+          box; additive, so what it crosses brightens.
+          ⚠️ A SIBLING of .lock-plane, never a child — .lock-plane is
+          transformed during its arrival, and a transform isolates blending. */}
+      <span aria-hidden className="lock-cast pointer-events-none absolute -inset-x-10 -top-3 bottom-[-26px]" />
+
+      {/* The source. One rhombus, on the totem's own vertical axis.
+          ⚠️ Rotation on the <g>, scale on the <rect> (.ds-mark → ds-snap): an
+          animated transform REPLACES the attribute rather than composing with
+          it, which is how DsPanel's diamond once became a square. */}
+      <svg
+        aria-hidden
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        className="lock-source absolute left-1/2 top-0 z-[1] -ml-[6px] -mt-[6px] overflow-visible"
+      >
+        <g transform="rotate(45 6 6)">
+          <rect className="ds-mark" x="2.5" y="2.5" width="7" height="7" fill="#00d992" />
+        </g>
+      </svg>
+
+      {/* The only drawn line: it starts at the mark and dies into nothing. One
+          side only — a mirrored pair reads as a border. */}
+      <span aria-hidden className="lock-rail ds-rule absolute right-0 top-0 h-px" />
+
+      {/* The image: it lands keystoned and corrects itself in 340ms, ending on
+          transform: none so the type rasterises normally from then on. */}
+      <div className="lock-plane relative">{body}</div>
     </div>
   )
 }
