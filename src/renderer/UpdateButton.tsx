@@ -78,54 +78,69 @@ export default function UpdateButton({
   )
 
   /**
-   * Downloading is a status, not a control. It is deliberately not a <button>:
-   * there is nothing to press while it runs, and a disabled button would still
-   * read as an affordance that has been taken away.
+   * ⚠️ Every state renders the SAME element type, and that is not cosmetic.
+   *
+   * Downloading was a <div> here — "a status, not a control", which reads well
+   * and is wrong twice over. React swaps the DOM node when the tag changes, so
+   * pressing "update" from the keyboard dropped focus to <body>: the player
+   * pressed a thing and lost their place in the window. And `aria-label` does
+   * nothing on a role-less <div> — it names elements whose role supports being
+   * named, so a screen reader was told precisely nothing about the download it
+   * was supposedly announcing.
+   *
+   * As a <button> that is `aria-disabled` while it runs, the node survives the
+   * transition, focus stays where the player put it, and the label is actually
+   * read. aria-disabled rather than `disabled`, because a disabled button is
+   * not focusable either — the same bug wearing a different hat.
    */
-  if (u.state === "downloading") {
-    return (
-      <div
-        style={sized}
-        className="upd-btn upd-static ds-in relative flex h-8 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-[3px] px-3"
-        title={`Downloading version ${next}`}
-        aria-label={`Downloading version ${next}, ${u.percent} percent complete`}
-      >
-        {mark}
-        <span className="relative z-[1] font-jetbrains text-[10px] leading-none tabular-nums text-jade/85">
-          {u.percent}%
-        </span>
-        {/* Along the bottom edge of the button itself: at this size a separate
-            track would be more chrome than information. */}
-        <span
-          aria-hidden
-          className="upd-fill absolute bottom-0 left-0 z-[2] h-px transition-[width] duration-300"
-          style={{ width: `${u.percent}%` }}
-        />
-      </div>
-    )
-  }
-
+  const downloading = u.state === "downloading"
   const ready = u.state === "ready"
 
   return (
     <button
       type="button"
       style={sized}
-      onClick={() =>
+      aria-disabled={downloading || undefined}
+      onClick={() => {
+        if (downloading) return
         ready ? window.desktop.installUpdate() : void window.desktop.downloadUpdate()
-      }
+      }}
       title={
-        ready
-          ? `Version ${next} is downloaded — restart to install it`
-          : `Version ${next} is available. You have ${u.version}.`
+        downloading
+          ? `Downloading version ${next}`
+          : ready
+            ? `Version ${next} is downloaded — restart to install it`
+            : `Version ${next} is available. You have ${u.version}.`
       }
-      className="upd-btn act-btn ds-in relative flex h-8 shrink-0 items-center justify-center gap-2 rounded-[3px] px-3 font-chakrapetch text-[11px] font-bold uppercase leading-none tracking-[0.1em]"
+      aria-label={
+        downloading ? `Downloading version ${next}, ${u.percent} percent complete` : undefined
+      }
+      className={`upd-btn ds-in relative flex h-8 shrink-0 items-center justify-center gap-2 rounded-[3px] px-3 ${
+        downloading
+          ? "upd-static overflow-hidden"
+          : "act-btn font-chakrapetch text-[11px] font-bold uppercase leading-none tracking-[0.1em]"
+      }`}
     >
       {mark}
-      {/* truncate rather than clip: if the account is ever narrower than the
-          word, a cut-off label is still readable and the button keeps its
-          shape, where overflow would slice the glyphs off square. */}
-      <span className="relative z-[1] min-w-0 truncate">{ready ? "restart" : "update"}</span>
+      {downloading ? (
+        <span className="relative z-[1] font-jetbrains text-[10px] leading-none tabular-nums text-jade/85">
+          {u.percent}%
+        </span>
+      ) : (
+        /* truncate rather than clip: if the account is ever narrower than the
+           word, a cut-off label is still readable and the button keeps its
+           shape, where overflow would slice the glyphs off square. */
+        <span className="relative z-[1] min-w-0 truncate">{ready ? "restart" : "update"}</span>
+      )}
+      {downloading && (
+        /* Along the bottom edge of the button itself: at this size a separate
+           track would be more chrome than information. */
+        <span
+          aria-hidden
+          className="upd-fill absolute bottom-0 left-0 z-[2] h-px transition-[width] duration-300"
+          style={{ width: `${u.percent}%` }}
+        />
+      )}
     </button>
   )
 }

@@ -1051,6 +1051,21 @@ body {
     0 0 12px rgba(0, 217, 146, 0.22);
 }
 
+/* ⚠️ It enters from the LEFT, and the override exists for a real reason.
+
+   `ds-arrive` slides in from +28px on x, which was right for a panel with
+   nothing beside it. Here the account button sits immediately to the RIGHT, so
+   the stock animation drags the control 28px across its neighbour every time an
+   update appears — measured as a 24px overlap.
+
+   ⚠️ animation-NAME only. The `animation` shorthand would replace .ds-in's
+   timing wholesale and, worse, reset the stagger its children ride on. */
+@keyframes upd-arrive {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: none; }
+}
+.upd-btn { animation-name: upd-arrive; }
+
 @media (prefers-reduced-motion: reduce) {
   /* An available update is a STATE, not a flourish: it still has to appear.
      Only the movement goes. */

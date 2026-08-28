@@ -108,7 +108,7 @@ be tested with `bun start`. It takes two real builds:
 
 1. build `0.0.1`, upload it, install it
 2. bump to `0.0.2`, build, upload
-3. reopen the installed `0.0.1` — the bar should appear within a few seconds
+3. reopen the installed `0.0.1` — the update button should appear in the title bar, left of the account, within a few seconds
 
 Nothing downloads or restarts on its own at any point. The check is automatic;
 everything after it is a button.
