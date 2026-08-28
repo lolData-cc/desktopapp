@@ -23,7 +23,30 @@ import type { AppState } from "./types"
  * an update is something you DO, so it belongs beside the account with the rest
  * of the things you can act on, rather than sitting on top of the content.
  */
-export default function UpdateButton({ s }: { s: AppState | null }) {
+export default function UpdateButton({
+  s,
+  /**
+   * The account button's width, measured by TitleBar, so the two controls are
+   * the same size and read as a pair.
+   *
+   * ⚠️ Applied as a MINIMUM, not as a fixed width, and the difference is
+   * load-bearing. The account is only as wide as the summoner name, and a Riot
+   * ID can be three characters: at that size the account measures ~92px, which
+   * leaves 51px for a word that needs 55, and "RESTART" comes out cut in half.
+   * As a minimum the two are identical at every realistic name length (~5
+   * characters and up) and the button quietly outgrows it rather than
+   * mutilating the label.
+   *
+   * This is also why the version number is NOT on the face: spelled out, the
+   * three states are 126, 57 and 132px wide, and the widest would force that
+   * overflow constantly. The version lives in the tooltip, where it gets to be
+   * a whole sentence instead of a fragment.
+   */
+  width,
+}: {
+  s: AppState | null
+  width?: number | null
+}) {
   const u = s?.update
   if (!s?.canUpdate || !u) return null
   if (u.state === "idle" || u.state === "checking" || u.state === "current" || u.state === "failed") {
@@ -31,6 +54,7 @@ export default function UpdateButton({ s }: { s: AppState | null }) {
   }
 
   const next = "next" in u ? u.next : ""
+  const sized = width ? { minWidth: width } : undefined
 
   /**
    * The source of the light: the same rhombus the rest of the app uses.
@@ -61,7 +85,8 @@ export default function UpdateButton({ s }: { s: AppState | null }) {
   if (u.state === "downloading") {
     return (
       <div
-        className="upd-btn upd-static ds-in relative flex h-8 shrink-0 items-center gap-2 overflow-hidden rounded-[3px] pl-2.5 pr-3"
+        style={sized}
+        className="upd-btn upd-static ds-in relative flex h-8 shrink-0 items-center justify-center gap-2 overflow-hidden rounded-[3px] px-3"
         title={`Downloading version ${next}`}
         aria-label={`Downloading version ${next}, ${u.percent} percent complete`}
       >
@@ -85,6 +110,7 @@ export default function UpdateButton({ s }: { s: AppState | null }) {
   return (
     <button
       type="button"
+      style={sized}
       onClick={() =>
         ready ? window.desktop.installUpdate() : void window.desktop.downloadUpdate()
       }
@@ -93,15 +119,13 @@ export default function UpdateButton({ s }: { s: AppState | null }) {
           ? `Version ${next} is downloaded — restart to install it`
           : `Version ${next} is available. You have ${u.version}.`
       }
-      className="upd-btn act-btn ds-in relative flex h-8 shrink-0 items-center gap-2 rounded-[3px] pl-2.5 pr-3 font-chakrapetch text-[11px] font-bold uppercase leading-none tracking-[0.1em]"
+      className="upd-btn act-btn ds-in relative flex h-8 shrink-0 items-center justify-center gap-2 rounded-[3px] px-3 font-chakrapetch text-[11px] font-bold uppercase leading-none tracking-[0.1em]"
     >
       {mark}
-      <span className="relative z-[1]">{ready ? "restart" : "update"}</span>
-      {/* The version, quietly. It answers "into what?" without being asked, and
-          at a weight that keeps the verb the thing being read. */}
-      <span className="relative z-[1] font-jetbrains text-[9px] font-normal leading-none tracking-[0.08em] text-jade/45">
-        {next}
-      </span>
+      {/* truncate rather than clip: if the account is ever narrower than the
+          word, a cut-off label is still readable and the button keeps its
+          shape, where overflow would slice the glyphs off square. */}
+      <span className="relative z-[1] min-w-0 truncate">{ready ? "restart" : "update"}</span>
     </button>
   )
 }

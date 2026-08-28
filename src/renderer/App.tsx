@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { CDN, CDRAGON, isPremium, planBadge, type AppState } from "./types"
 import { Attached, Waiting } from "./sections/Overview"
 /**
@@ -262,6 +262,32 @@ const Loading = () => (
 /* ── chrome ──────────────────────────────────────────────────────────────── */
 
 function TitleBar({ s }: { s: AppState | null }) {
+  /**
+   * The update takes the account's width exactly, so the two read as a pair
+   * instead of as two unrelated sizes.
+   *
+   * Measured rather than declared, because the account's own width follows
+   * the summoner name — which changes when the player signs into a different
+   * account, and again when a plan badge appears beside it.
+   *
+   * It also settles something the fixed width was not asked to fix: the
+   * update is 126, 57 and 132px wide across its three states, so the whole
+   * right-hand group used to shift under the pointer as a download ran.
+   */
+  const accountRef = useRef<HTMLDivElement>(null)
+  const [accountWidth, setAccountWidth] = useState<number | null>(null)
+  useEffect(() => {
+    const el = accountRef.current
+    if (!el) return
+    // ⚠️ Not rounded. The account's width is fractional, and rounding it made
+    // the update a pixel wider than the thing it is supposed to match.
+    const measure = () => setAccountWidth(el.getBoundingClientRect().width)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     <header className="drag relative z-20 flex h-11 shrink-0 items-center gap-2.5 border-b border-jade/[0.10] px-3">
       <img src={logo} alt="" className="h-[18px] w-[18px] rounded-[3px]" />
@@ -276,8 +302,8 @@ function TitleBar({ s }: { s: AppState | null }) {
         {/* Left of the account, and inside no-drag: the header is a drag
             region, so a button placed outside this group would silently
             never fire — the press moves the window instead. */}
-        <UpdateButton s={s} />
-        <Account s={s} />
+        <UpdateButton s={s} width={accountWidth} />
+        <Account s={s} ref={accountRef} />
 
         <button
           type="button"
@@ -308,7 +334,7 @@ function TitleBar({ s }: { s: AppState | null }) {
  * They are shown together but labelled apart, because conflating them is how
  * someone ends up wondering why signing into League did not unlock the AI.
  */
-function Account({ s }: { s: AppState | null }) {
+function Account({ s, ref }: { s: AppState | null; ref?: React.Ref<HTMLDivElement> }) {
   const [open, setOpen] = useState(false)
   const summoner = s?.summoner
   const account = s?.account
@@ -316,7 +342,7 @@ function Account({ s }: { s: AppState | null }) {
   const badge = planBadge(account?.tier)
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
