@@ -852,17 +852,45 @@ const STEELCAPS = 3047
  */
 function bootsAdvice(enemies: ChampInfo[]): { item: number; reason: string; keys: number[] } | null {
   const cc = ccCarriers(enemies)
-  if (cc.length >= CC_HEAVY_AT) {
-    return {
-      item: MERCURYS,
-      reason: `${cc.length} enemies bring hard CC`,
-      keys: cc.map((c) => c.key),
-    }
-  }
-
   // Four or more AD is the point at which armour beats everything else; below
   // that the choice is a preference, not a read.
   const ad = enemies.filter((c) => c.categories.includes("AD")).length
+  const ap = enemies.filter((c) => c.categories.includes("AP")).length
+
+  const mercs = () => ({
+    item: MERCURYS,
+    reason: `${cc.length} enemies bring hard CC`,
+    keys: cc.map((c) => c.key),
+  })
+
+  /**
+   * ⚠️ The two reads are WEIGHED, not tried in order.
+   *
+   * The CC test used to return before the AD count was even computed, so a comp
+   * that was both CC-heavy and physical always got Mercury's and the armour
+   * branch below was unreachable in exactly the case it exists for.
+   *
+   * Found in a real game: Renekton, Jayce, Briar, Varus, Blitzcrank — three
+   * hard-CC champions and four AD, so both thresholds were met and the app
+   * recommended magic-resist boots against a team with no champion classified
+   * as magic damage at all.
+   *
+   * Mercury's is half magic resist. Against a comp carrying no magic damage
+   * that half is bought against nothing, and tenacity alone does not beat
+   * armour when four enemies are hitting you physically.
+   *
+   * ⚠️ `ap === 0` counts CLASSIFIED magic champions, and the classifier
+   * leaves hybrids in neither camp — Blitzcrank deals magic damage but counts
+   * as neither AD nor AP. So this is "nothing on that team is a magic-damage
+   * champion", not "no magic damage will ever be dealt", which is the reason it
+   * is the strict zero rather than a threshold.
+   */
+  if (ad >= 4 && ap === 0) {
+    return { item: STEELCAPS, reason: `${ad} enemies deal physical damage`, keys: [] }
+  }
+
+  if (cc.length >= CC_HEAVY_AT) return mercs()
+
   if (ad >= 4) {
     return { item: STEELCAPS, reason: `${ad} enemies deal physical damage`, keys: [] }
   }
