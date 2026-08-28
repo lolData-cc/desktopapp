@@ -988,61 +988,72 @@ body {
   }
 }
 
-/* ── the update panel ─────────────────────────────────────────────────────
-   The same idea as the lock-in menu: light with nothing under it. There is no
-   plate, no border and no card — only an emission that reaches zero inside its
-   own box, a rhombus where it comes from, and one rule that dies into nothing.
+/* ── the update, as a control in the title bar ─────────────────────────────
+   It used to be a floating panel at the bottom of the window. That put it in
+   the same strip as the version stamp, but the better reason for moving it is
+   the simpler one: an update is something you DO, so it belongs among the
+   other things you can do — beside the account — rather than parked on top of
+   the content.
 
-   ⚠️ It used to be a full-width band in normal flow, whose translucent green
-   ran straight behind the version stamped in the bottom-right corner. It now
-   floats and stops short of that corner (right-[132px] in the component). */
+   ⚠️ It has to live INSIDE the title bar's `no-drag` group. The header itself
+   is `-webkit-app-region: drag`, and a button placed anywhere else inside it
+   is not clickable at all: the drag region swallows the press and moves the
+   window instead of firing the click. This is silent — the button looks
+   perfectly normal and simply never works. */
 
-/* The frame holds NO background. Anything opaque here would put a plate back
-   under light that is supposed to have none. */
-.upd-frame {
-  isolation: auto;
+/* The interactive states borrow `.act-btn` wholesale — the app's existing
+   "this one does something" idiom: jade, a left rail, a sweep across on
+   hover. Nothing new to define, and the control arrives already speaking the
+   language of the bar it sits in. */
+
+/* Downloading is a STATUS, not a control, so it deliberately does NOT take
+   .act-btn: nothing here answers a hover, because nothing here can be
+   pressed. The same rail, without the sweep or the pointer. */
+.upd-static {
+  color: var(--jade);
+  background: rgba(0, 217, 146, 0.075);
+  box-shadow: inset 2px 0 0 0 rgba(0, 217, 146, 0.55);
+  cursor: default;
 }
 
-/* ⚠️ `screen`, so it ADDS rather than covers: what shows through underneath
-   brightens instead of being veiled, which is the whole difference between
-   projected light and a tinted rectangle. Over #040A0C the two look nearly
-   identical everywhere except across something bright, which is exactly where
-   it matters. */
-.upd-cast {
-  mix-blend-mode: screen;
-  background:
-    radial-gradient(120% 180% at 2% 50%, rgba(0, 217, 146, 0.10) 0%, rgba(0, 217, 146, 0.035) 34%, rgba(0, 217, 146, 0) 72%),
-    linear-gradient(180deg, rgba(226, 255, 245, 0.035), rgba(0, 0, 0, 0) 60%);
-  /* The top edge is where the light enters. A hairline rather than a border:
-     it runs out before the panel does, so it never closes a box. */
-  box-shadow: inset 0 1px 0 0 rgba(0, 217, 146, 0.16);
-}
+/* The source of the light. ⚠️ The glow is 5px against 10px of left padding:
+   `.act-btn` is `overflow: hidden`, so a wider drop-shadow gets sliced off
+   square against the button's own edge — a glow with a straight cut in it. */
+.upd-mark { filter: drop-shadow(0 0 5px rgba(0, 217, 146, 0.5)); }
 
-/* The mark is the source, so it strikes first and everything else follows. */
-.upd .ds-mark { animation-delay: 30ms; }
-.upd-mark { filter: drop-shadow(0 0 7px rgba(0, 217, 146, 0.55)); }
+/* The mark is where the light comes from, so it strikes first and the label
+   follows. ⚠️ A longhand, never the `animation` shorthand: the shorthand
+   replaces `.ds-in .ds-mark` outright and silently deletes the snap this is
+   riding on. */
+.upd-btn .ds-mark { animation-delay: 30ms; }
 
-/* One rule, leaving the words and fading out. ⚠️ Longhands only on a ds-*
-   element: the `animation` shorthand here would replace `.ds-in .ds-rule` and
-   silently delete the stagger it is riding on. */
-.upd-rail {
-  background: linear-gradient(90deg, rgba(0, 217, 146, 0.35), rgba(0, 217, 146, 0));
-  transform-origin: left center;
-}
-.upd.ds-in .ds-rule {
-  animation-duration: 240ms;
-  animation-delay: 120ms;
-}
-
-/* Square ends. A pill would be the only rounded thing on this screen. */
-.upd-track { background: rgba(215, 216, 217, 0.08); }
+/* Progress runs along the bottom edge of the button itself rather than in a
+   track of its own: at 32px tall a second element would be more chrome than
+   information. Square ends, clipped by the button's own overflow. */
 .upd-fill {
-  background: #00d992;
-  box-shadow: 0 0 8px rgba(0, 217, 146, 0.5);
+  background: var(--jade);
+  box-shadow: 0 0 6px rgba(0, 217, 146, 0.55);
+}
+
+/* Keyboard focus, in jade and never in a pale ring — the same answer the
+   lock-in menu already gives, and the reason this is spelled out rather than
+   left to the browser: Chromium's default ring is a light outline, which is
+   the one thing this app never draws.
+
+   ⚠️ box-shadow REPLACES, it does not add. The inset left rail belongs to
+   .act-btn and lives in that same property, so it has to be restated here or
+   focusing the button silently deletes its rail. */
+.upd-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 2px 0 0 0 var(--jade),
+    inset 0 0 0 1px rgba(0, 217, 146, 0.75),
+    0 0 12px rgba(0, 217, 146, 0.22);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* The panel is a STATE, not a flourish: it still has to appear. Only the
-     movement goes — index.css already stops the ds-* children. */
-  .upd { animation: none; }
+  /* An available update is a STATE, not a flourish: it still has to appear.
+     Only the movement goes. */
+  .upd-btn { animation: none; }
+  .upd-fill { transition: none; }
 }

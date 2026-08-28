@@ -709,6 +709,18 @@ if (boardMatches?.[0]) boardMatches[0].board = DEV_BOARD
 
 SCENES.recording = { ...(SCENES.board as object), recording: true }
 
+// I due stati dell'aggiornamento che non si possono raggiungere aspettando:
+// il pulsante in alto cambia forma tra loro (controllo -> stato -> controllo),
+// e senza queste scene l'unico modo di vederli e' pubblicare una release.
+SCENES.updating = {
+  ...(SCENES.select as object),
+  update: { state: "downloading", version: "0.0.6", next: "0.0.7", percent: 42 },
+}
+SCENES.updated = {
+  ...(SCENES.select as object),
+  update: { state: "ready", version: "0.0.6", next: "0.0.7" },
+}
+
 export function installDevShell(): void {
   if ((window as any).desktop) return // running inside Electron — nothing to do
 

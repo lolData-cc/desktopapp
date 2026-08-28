@@ -22,7 +22,7 @@ import CyberBackdrop from "./CyberBackdrop"
 import Boundary from "./Boundary"
 import Recap, { isPostGame } from "./sections/Recap"
 import Settings from "./sections/Settings"
-import UpdateBar from "./UpdateBar"
+import UpdateButton from "./UpdateButton"
 import logo from "../assets/logo.png"
 
 /**
@@ -227,7 +227,6 @@ export default function App() {
         />
       </div>
 
-      {s && <UpdateBar s={s} />}
       {showSettings && s && (
         <Settings
           s={s}
@@ -274,6 +273,10 @@ function TitleBar({ s }: { s: AppState | null }) {
       </span>
 
       <div className="no-drag ml-auto flex items-center gap-1">
+        {/* Left of the account, and inside no-drag: the header is a drag
+            region, so a button placed outside this group would silently
+            never fire — the press moves the window instead. */}
+        <UpdateButton s={s} />
         <Account s={s} />
 
         <button
