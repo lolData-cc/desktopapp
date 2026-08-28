@@ -270,6 +270,32 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
   }, [v?.page.keystone, v?.label])
 
   /**
+   * The art for all FIVE, not only the chosen one.
+   *
+   * Each option is a keystone now rather than a word, so every variant needs
+   * its own icon. `load()` inside resolvePage is module-cached, so five calls
+   * cost one fetch and five map lookups — not five round trips.
+   *
+   * ⚠️ Keyed on the keystones themselves, not on `r.variants`. The state is
+   * pushed from the shell on every tick and arrives as a fresh array each time,
+   * so an identity dependency would re-resolve forever.
+   */
+  const keystoneKey = r?.variants.map((x) => x.page.keystone).join(",") ?? ""
+  const [tiles, setTiles] = useState<{ keystone: Perk | null; sub: Style | null }[]>([])
+  useEffect(() => {
+    if (!r) return setTiles([])
+    let alive = true
+    void Promise.all(
+      r.variants.map((x) => resolvePage([x.page.keystone], x.page.primaryStyle, x.page.subStyle))
+    )
+      .then((list) => {
+        if (alive) setTiles(list.map((a) => ({ keystone: a.perks[0] ?? null, sub: a.secondary })))
+      })
+      .catch(() => { if (alive) setTiles([]) })
+    return () => { alive = false }
+  }, [keystoneKey])
+
+  /**
    * "The focus moves onto it" made true of the machine, not only of the picture.
    *
    * ⚠️ Guarded twice, and the guards ARE the feature. During champ select the
@@ -309,24 +335,77 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
           ⚠️ The brighter unchosen label is conditional on the lock, not global:
           it pays for the contrast lost with the ground, and there is still a
           ground before the lock. */}
-      <div className={`flex flex-wrap items-center gap-1.5 ${locked ? "mt-3" : ""}`}>
-        {r.variants.map((variant, i) => (
-          <button
-            key={variant.label}
-            ref={i === r.chosen ? chosenRef : undefined}
-            type="button"
-            onClick={() => window.desktop.chooseRunes(i)}
-            style={{ ["--in-delay" as string]: `${300 + i * 40}ms` }}
-            className={`ds-slot win-btn rounded-[3px] px-2 py-1 text-left ${i === r.chosen ? "bg-jade/[0.13]" : ""}`}
-          >
-            <span className={`block font-jetbrains text-[8.5px] uppercase tracking-[0.14em] ${i === r.chosen ? "text-jade" : locked ? "text-flash/45" : "text-flash/30"}`}>
-              {variant.label}
-            </span>
-            <span className={`block font-chakrapetch text-[11px] font-bold tabular-nums ${i === r.chosen ? "text-flash/85" : locked ? "text-flash/45" : "text-flash/40"}`}>
-              {variant.winrate.toFixed(1)}%
-            </span>
-          </button>
-        ))}
+      {/* ⚠️ A five-column GRID, not a wrapping flex row.
+          The options used to be text-only buttons that each sized to their own
+          label — measured at 60, 47.5, 47.5, 60 and 66.3px, five different
+          widths in a row, which is what made them read as debris rather than as
+          a set. A grid makes the five columns equal by construction, so no
+          label length can ever break the rank again.
+
+          Each option is the keystone it actually is, with the secondary tree
+          small beside it and the words underneath. A rune page is a picture in
+          the client and on the website; it was a word only here. */}
+      <div className={`grid grid-cols-5 gap-1.5 ${locked ? "mt-3" : ""}`}>
+        {r.variants.map((variant, i) => {
+          const tile = tiles[i]
+          const chosen = i === r.chosen
+          return (
+            <button
+              key={variant.label}
+              ref={chosen ? chosenRef : undefined}
+              type="button"
+              onClick={() => window.desktop.chooseRunes(i)}
+              style={{ ["--in-delay" as string]: `${300 + i * 40}ms` }}
+              className={`ds-slot win-btn flex flex-col items-center gap-1.5 rounded-[3px] px-1 py-2 ${chosen ? "bg-jade/[0.13]" : ""}`}
+            >
+              {/* The keystone large, the secondary tree small: the same
+                  hierarchy the client draws, so the page is recognised rather
+                  than read. */}
+              <span className="flex items-center gap-1">
+                {tile?.keystone ? (
+                  <img
+                    src={tile.keystone.icon}
+                    alt=""
+                    title={tile.keystone.name}
+                    className={`h-8 w-8 shrink-0 ${chosen ? "" : "opacity-55"}`}
+                  />
+                ) : (
+                  /* A held space, not nothing: the row must not resettle when
+                     the icons arrive a frame later. */
+                  <span aria-hidden className="h-8 w-8 shrink-0 rounded-full bg-flash/[0.05]" />
+                )}
+                {tile?.sub ? (
+                  <img
+                    src={tile.sub.icon}
+                    alt=""
+                    title={tile.sub.name}
+                    className={`h-3.5 w-3.5 shrink-0 ${chosen ? "opacity-90" : "opacity-40"}`}
+                  />
+                ) : (
+                  <span aria-hidden className="h-3.5 w-3.5 shrink-0" />
+                )}
+              </span>
+
+              {/* Centred, and allowed to wrap: the grid equalises the row's
+                  height, so a two-line label costs alignment nothing — where
+                  truncating would cost the word. */}
+              <span
+                className={`block text-center font-jetbrains text-[8.5px] uppercase leading-[1.35] tracking-[0.12em] ${
+                  chosen ? "text-jade" : locked ? "text-flash/45" : "text-flash/30"
+                }`}
+              >
+                {variant.label}
+              </span>
+              <span
+                className={`block font-chakrapetch text-[11px] font-bold tabular-nums ${
+                  chosen ? "text-flash/85" : locked ? "text-flash/45" : "text-flash/40"
+                }`}
+              >
+                {variant.winrate.toFixed(1)}%
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Furthest from the source, so faintest — a projection dims as it
