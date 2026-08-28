@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld("desktop", {
   keepRecording: (id: string, keep: boolean) => ipcRenderer.invoke("capture:keep", id, keep),
   deleteRecording: (id: string) => ipcRenderer.invoke("capture:delete", id),
   revealRecording: (id: string) => ipcRenderer.invoke("capture:reveal", id),
+  /** Stop the recording of the game in progress, and keep it stopped. */
+  stopGameRecording: () => ipcRenderer.invoke("capture:stop-game"),
+  /** Start recording the game in progress by hand, at any point in it. */
+  startGameRecording: () => ipcRenderer.invoke("capture:start-game"),
   demoCapture: () => ipcRenderer.invoke("capture:demo"),
   // Synchronous, and deliberately the SHELL's answer: how a recording is
   // addressed is the shell's business, and a renderer that spelled the scheme

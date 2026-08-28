@@ -361,6 +361,10 @@ declare global {
       /** Record fifteen seconds now, marked, so the player has something to
        *  open without playing a game first. */
       demoCapture(): Promise<void>
+      /** Stop the recording of the game in progress, and keep it stopped. */
+      stopGameRecording(): Promise<void>
+      /** Start recording the game in progress by hand, at any point in it. */
+      startGameRecording(): Promise<void>
       /** Where to point a <video> at a recording. */
       clipUrl(id: string): string
       /** Cut a moment out of a recording and write it to disk. */

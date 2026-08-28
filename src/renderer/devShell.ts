@@ -491,6 +491,7 @@ const DEV_RUNES = {
 // lock. Anything else you notice on screen is the feature doing its job.
 ;(SCENES.select as Record<string, unknown>).runes = DEV_RUNES
 
+
 SCENES.locked = {
   ...(SCENES.select as object),
   select: {
@@ -658,6 +659,16 @@ SCENES.board = {
     ],
   },
 }
+
+/**
+ * `?state=recording` — the same in-game board while a recording IS running.
+ *
+ * Derived from `board`, so the two scenes differ by exactly one boolean. Both
+ * have to be reachable without queueing: the capture row is the part of this
+ * screen read at a glance, and "does the dot actually change" is not a question
+ * worth a live game to answer.
+ */
+SCENES.recording = { ...(SCENES.board as object), recording: true }
 
 export function installDevShell(): void {
   if ((window as any).desktop) return // running inside Electron — nothing to do

@@ -40,10 +40,58 @@ export default function Scoreboard({ s }: { s: AppState }) {
         theirGold={theirGold}
       />
 
+      <CaptureState s={s} />
+
       <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 gap-x-6 overflow-y-auto pr-1">
         <Side rows={ours} patch={patch} side="ours" />
         <Side rows={theirs} patch={patch} side="theirs" />
       </div>
+    </div>
+  )
+}
+
+/**
+ * Whether this game is being recorded, and the one control that changes it.
+ *
+ * It exists because the app used to decide this in silence. Recording starts
+ * automatically in the first 90 seconds of a game and never afterwards — so an
+ * app opened mid-game, or restarted, records nothing and says nothing, and the
+ * player is left to conclude the feature is broken. A capture that is off should
+ * have to admit it on the same screen the game is on.
+ *
+ * ⚠️ The dot is not a decoration; it is the only part read at a glance during a
+ * game. Jade and beating while recording, hollow and still when not.
+ */
+function CaptureState({ s }: { s: AppState }) {
+  const on = s.recording
+
+  return (
+    <div className="mt-3 flex shrink-0 items-center gap-2.5 border-t border-jade/[0.10] pt-3">
+      <span
+        aria-hidden
+        className={
+          on
+            ? "beat h-[7px] w-[7px] rounded-full bg-jade shadow-[0_0_8px_rgba(0,217,146,0.8)]"
+            : "h-[7px] w-[7px] rounded-full ring-1 ring-flash/25"
+        }
+      />
+      <span className={`font-jetbrains text-[9.5px] uppercase tracking-[0.18em] ${on ? "text-jade" : "text-flash/40"}`}>
+        {on ? "recording" : "not recording"}
+      </span>
+
+      {/* The error earns more room than the state, because it is the only thing
+          here a player can act on — and it is the answer to "why is it off". */}
+      {!on && s.captureError && (
+        <span className="truncate font-jetbrains text-[9px] text-citrine/80">{s.captureError}</span>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void (on ? window.desktop.stopGameRecording() : window.desktop.startGameRecording())}
+        className="win-btn ml-auto h-7 shrink-0 rounded-[3px] px-3 font-chakrapetch text-[11px] font-bold uppercase tracking-[0.12em]"
+      >
+        {on ? "stop" : "record"}
+      </button>
     </div>
   )
 }

@@ -344,6 +344,9 @@ function push(patch: Partial<AppState>): void {
       answeringSince = 0
       recordingStarted = false
       startingRecording = false
+      // A refusal belongs to the game it was made in, not to every game after it.
+      declinedRecording = false
+      liveChampion = { id: null, name: null }
       // ⚠️ And the overlay's whole process goes with it. It has nothing to draw
       // until the next game, and ~90 MB of renderer waiting for that is 90 MB
       // taken from the machine that is about to play one.
@@ -1474,13 +1477,28 @@ async function readGame(): Promise<void> {
    * Once per match, and the flag is what makes it once: this runs every two
    * seconds for the whole game.
    */
-  if (!recordingStarted && !startingRecording && state.settings.capture && stats.gameTime < RECORD_WINDOW) {
+  // ⚠️ `declinedRecording` is tested here and nowhere else, and it is what makes
+  //    the stop button mean anything. Without it the next poll — two seconds
+  //    later — sees no recording, finds itself inside the window, and politely
+  //    starts a new one, so stopping by hand would look simply broken.
+  if (
+    !recordingStarted &&
+    !startingRecording &&
+    !declinedRecording &&
+    state.settings.capture &&
+    stats.gameTime < RECORD_WINDOW
+  ) {
     startingRecording = true
     void startRecording(championId, mine?.championName ?? null).then((ok) => {
       recordingStarted = ok
       startingRecording = false
     })
   }
+
+  // What the manual control needs: the champion this game is being played on,
+  // kept current so a hand-started recording is filed under the right one
+  // rather than under whoever happened to be picked when the app last looked.
+  liveChampion = { id: championId, name: mine?.championName ?? null }
 
   const enemies = await enemyChampions(players ?? [], myTeam)
   void readShop(me, championId, enemies)
@@ -1583,6 +1601,21 @@ async function readScoreboard(
  * a second and a half of an identical one.
  */
 /** Set once the recording is actually RUNNING — not once it has been tried. */
+/**
+ * Stopped by hand, for this game.
+ *
+ * Separate from `recordingStarted` on purpose: that one says "we already tried",
+ * and it is cleared the moment a recording ends. This says "the player said no",
+ * which has to outlive the recording it stopped — otherwise the automatic start
+ * simply undoes the decision on the next poll.
+ *
+ * Cleared where every other per-game flag is, on leaving the game.
+ */
+let declinedRecording = false
+
+/** The champion of the game in progress, for a recording started by hand. */
+let liveChampion: { id: string | null; name: string | null } = { id: null, name: null }
+
 let recordingStarted = false
 /** An attempt is in flight, so a two-second poll does not start a second one. */
 let startingRecording = false
@@ -1876,6 +1909,48 @@ ipcMain.handle("capture:delete", async (_e, id: string) => {
 })
 
 ipcMain.handle("capture:reveal", async (_e, id: string) => { await revealRecording(id) })
+
+/**
+ * Stop the recording of the game in progress, and leave it stopped.
+ *
+ * The flag is the whole point. Ending the recording alone would last about two
+ * seconds: the game clock polls, finds no recording and a game still inside the
+ * opening window, and starts another one — so the button would read as broken
+ * rather than as disobeyed.
+ *
+ * The file already written is kept. Stopping is not discarding, and a player who
+ * wanted the first ten minutes gone would say so with the delete button.
+ */
+ipcMain.handle("capture:stop-game", async () => {
+  declinedRecording = true
+  if (!isRecording()) {
+    push({ recording: false })
+    return
+  }
+  await endRecording()
+  recordingStarted = false
+  push({ recording: false })
+  await pushRecordings()
+})
+
+/**
+ * Start recording the game in progress, by hand, at any point in it.
+ *
+ * ⚠️ Deliberately NOT subject to RECORD_WINDOW. That 90-second limit exists so
+ * the app never *silently* produces a file that begins in the middle of a game
+ * and presents it as the whole one. Asked directly, mid-game, the answer is
+ * different: the player knows what they are starting and when.
+ */
+ipcMain.handle("capture:start-game", async () => {
+  declinedRecording = false
+  if (isRecording() || startingRecording) return
+  startingRecording = true
+  try {
+    recordingStarted = await startRecording(liveChampion.id, liveChampion.name)
+  } finally {
+    startingRecording = false
+  }
+})
 
 /* ── sharing a moment ───────────────────────────────────────────────────── */
 
