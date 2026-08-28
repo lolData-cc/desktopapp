@@ -45,7 +45,6 @@ export default function Player({
   patch,
   onClose,
   inline,
-  stage,
   library,
 }: {
   rec: Recording
@@ -53,15 +52,6 @@ export default function Player({
   startAt?: number
   patch: string
   onClose: () => void
-  /**
-   * What to make fullscreen, when it should be more than the video.
-   *
-   * The match page passes the element holding the player AND the scoreboard, so
-   * going fullscreen there rearranges the two rather than hiding one of them.
-   * Given nothing, the player takes the screen on its own, which is right
-   * everywhere else.
-   */
-  stage?: React.RefObject<HTMLElement | null>
   /**
    * Whether to draw the library controls — keep, and reveal on disk.
    *
@@ -274,7 +264,7 @@ export default function Player({
     // The STAGE when the caller gave one. The match page hands over the element
     // that holds the scoreboard as well, so going fullscreen there rearranges
     // the page rather than covering the half of it you did not ask to hide.
-    const el = stage?.current ?? panel.current
+    const el = panel.current
     if (!el) return
     before.current = el.getBoundingClientRect()
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)

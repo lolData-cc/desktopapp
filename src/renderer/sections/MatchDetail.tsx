@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { championById } from "../../data/champions"
 import Player from "../Player"
 import ShareClip from "../ShareClip"
@@ -39,8 +39,6 @@ export default function MatchDetail({
 }) {
   const clip = recordingFor(s.recordings, match)
   const [sharing, setSharing] = useState(false)
-  /** The element fullscreen takes: the recording AND the scoreboard together. */
-  const stage = useRef<HTMLDivElement>(null)
   const [picked, setPicked] = useState<number | null>(null)
   const [ranks, setRanks] = useState<Record<string, PlayerRank | null>>({})
   const patch = s.patch ?? "16.16.1"
@@ -92,19 +90,17 @@ export default function MatchDetail({
     <div className="flex h-full flex-col">
       <Head match={match} clip={clip} onBack={onBack} />
 
-      {/* ⚠️ This element is the STAGE, and it is what goes fullscreen — not the
-          video. Fullscreen shows one element and its descendants, so making the
-          player fullscreen would have hidden the scoreboard entirely. With both
-          inside, `.match-stage:fullscreen` in index.css can lay them side by
-          side instead: the recording takes the full height on the left, the
-          scoreboard becomes a column on the right. */}
-      <div ref={stage} className="match-stage no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
+      {/* ⚠️ The two halves live in one element so a WIDE WINDOW can put them
+          side by side — see the media query in index.css. Nothing here is tied
+          to fullscreen: the player takes the screen on its own, as it always
+          did, and this is purely a response to how much room the app has. */}
+      <div className="match-stage no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
         {/* ── the recording, first ─────────────────────────────────────── */}
         {clip && (
-          /* ⚠️ THIS is the flex item in fullscreen, not .match-stage-video —
+          /* ⚠️ THIS is the flex item in the wide layout, not .match-stage-video —
              that one is nested a level down. Sizing the inner element instead
-             left this wrapper with no height, so the player collapsed to
-             nothing and fullscreen showed a scoreboard and a black field. */
+             leaves this wrapper with no height and collapses the player to
+             nothing. */
           <div className="match-stage-clip mb-6">
             {/* One group, because these are three things you do to the same
                 file. keep and reveal used to sit inside the player's control
@@ -150,7 +146,7 @@ export default function MatchDetail({
                 already states the video's aspect ratio, so taking the full
                 width just makes the picture bigger; nothing stretches. */}
             <div className="match-stage-video w-full">
-              <Player rec={clip} patch={patch} inline stage={stage} onClose={() => undefined} />
+              <Player rec={clip} patch={patch} inline onClose={() => undefined} />
             </div>
           </div>
         )}

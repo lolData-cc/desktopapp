@@ -927,67 +927,45 @@ body {
      so both draw correctly with nothing further to do here. */
 }
 
-/* ── the match page, made as big as the screen ────────────────────────────
-   Fullscreen shows ONE element and its descendants, which is why the element
-   that goes fullscreen is the stage holding both halves rather than the video:
-   making the player fullscreen hid the scoreboard, and the reason to watch a
-   play back is usually to argue with the numbers beside it.
+/* ── the match page on a wide window ──────────────────────────────────────
+   Maximise the app and the recording moves to the left with the scoreboard
+   beside it, instead of the board sitting a scroll below the video. It is a
+   response to how much room the window has and nothing else — the player's own
+   fullscreen is untouched and still takes the screen on its own.
 
-   ⚠️ The flex items are the stage's DIRECT children — the clip block and the
-   board. Sizing .match-stage-video instead sized an element that is not a flex
-   item, its wrapper kept no height, and the player collapsed to nothing: a
-   fullscreen showing a narrow scoreboard on a black field.
+   ⚠️ The breakpoint is the WINDOW, not the element. The app opens at 1280 and
+   will not go below 1040 (shell/main.ts), so 1500px is comfortably past any
+   size it is given by default and only reached by maximising on a wide screen.
+   Below it nothing changes and the page stacks exactly as before.
 
-   ⚠️ :fullscreen paints its own black backdrop under the element, so the stage
-   states its own ground or the app's near-black sits on a flat black with a
-   visible seam. */
-.match-stage:fullscreen {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 18px;
-  padding: 18px;
-  overflow: hidden;
-  background: var(--liquirice, #040A0C);
-}
+   ⚠️ The flex items are .match-stage's DIRECT children — the clip block and the
+   board. Sizing .match-stage-video instead sizes something that is not a flex
+   item, leaves its wrapper with no height, and collapses the player to nothing. */
+@media (min-width: 1500px) {
+  .match-stage {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 22px;
+  }
 
-/* The recording side: a column of its own, so the three file controls keep
-   their row above and the picture takes every pixel left under them.
-   `min-width: 0` is load-bearing — a flex item defaults to min-width:auto and
-   would refuse to shrink below its content, pushing the board off the edge. */
-.match-stage:fullscreen .match-stage-clip {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0;
-}
+  /* The recording side: its own column, so the keep/file/share row keeps its
+     place above the picture. `min-width: 0` is load-bearing — a flex item
+     defaults to min-width:auto and refuses to shrink below its content, which
+     would push the board off the right edge. */
+  .match-stage-clip {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+    position: sticky;
+    top: 0;
+  }
 
-/* `min-height: 0` for the same reason in the other axis: without it the frame
-   cannot shrink to the space available and overflows the screen instead. */
-.match-stage:fullscreen .match-stage-video {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* ⚠️ The player states its aspect ratio inline, which in a full-height column
-   would leave it short. Height leads here and the ratio follows, so the picture
-   is as tall as the screen allows; the video inside keeps object-contain, so it
-   is never stretched to fill. */
-.match-stage:fullscreen .match-stage-video > * {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto !important;
-}
-
-/* The board becomes a column: fixed width, its own scroll, so a long card
-   cannot stretch the row or narrow the video as you read it. */
-.match-stage:fullscreen .match-stage-board {
-  flex: 0 0 clamp(320px, 26vw, 460px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
+  /* The board takes a column of its own and scrolls with the page. It is given
+     a floor as well as a ceiling so a narrow-ish maximised window cannot squeeze
+     the ten rows into something unreadable. */
+  .match-stage-board {
+    flex: 0 0 clamp(380px, 32%, 560px);
+    min-width: 0;
+  }
 }
