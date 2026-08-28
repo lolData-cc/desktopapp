@@ -463,11 +463,20 @@ export default function Player({
       )}
 
       {/* The moment you are in, named. Stays while the chrome is gone — it is
-          the one thing worth reading mid-fight, and it is not a control. */}
+          the one thing worth reading mid-fight, and it is not a control.
+
+          ⚠️ It steps down when the chrome comes up, and that is a fix rather
+          than a flourish. Both this and the header's identity block were placed
+          at the top left independently: the header is 68px tall with the
+          champion icon at (20, 16), and this sat at (20, 20) — directly on top
+          of it, so opening a replay and hovering put the moment's name across
+          the champion's. It travels on the same 300ms the chrome fades on, so
+          the two move as one gesture instead of two things fighting. */}
       {ready && nearest && (
         <div
-          className="pointer-events-none absolute left-5 top-5 z-20 flex items-center gap-2 px-2.5 py-1"
+          className="moment-tag pointer-events-none absolute left-5 z-20 flex items-center gap-2 px-2.5 py-1"
           style={{
+            top: veil && !drawing ? 76 : 20,
             background: "rgba(4,10,12,0.72)",
             boxShadow: `inset 2px 0 0 0 ${KIND[nearest.kind].colour}`,
           }}

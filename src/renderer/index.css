@@ -1066,9 +1066,15 @@ body {
 }
 .upd-btn { animation-name: upd-arrive; }
 
+/* The moment label steps below the player's chrome while the chrome is up,
+   because both were placed at the top left independently and landed on each
+   other. It rides the same 300ms the chrome fades on. */
+.moment-tag { transition: top 300ms ease; }
+
 @media (prefers-reduced-motion: reduce) {
   /* An available update is a STATE, not a flourish: it still has to appear.
      Only the movement goes. */
   .upd-btn { animation: none; }
   .upd-fill { transition: none; }
+  .moment-tag { transition: none; }
 }
