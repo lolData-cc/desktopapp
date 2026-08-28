@@ -97,7 +97,11 @@ export default function MatchDetail({
       <div ref={stage} className="match-stage no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
         {/* ── the recording, first ─────────────────────────────────────── */}
         {clip && (
-          <div className="mb-6">
+          /* ⚠️ THIS is the flex item in fullscreen, not .match-stage-video —
+             that one is nested a level down. Sizing the inner element instead
+             left this wrapper with no height, so the player collapsed to
+             nothing and fullscreen showed a scoreboard and a black field. */
+          <div className="match-stage-clip mb-6">
             {/* One group, because these are three things you do to the same
                 file. keep and reveal used to sit inside the player's control
                 strip, which put them over the video and a screen away from the
