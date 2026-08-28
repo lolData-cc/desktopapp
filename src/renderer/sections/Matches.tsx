@@ -123,6 +123,7 @@ export default function Matches({ s }: { s: AppState }) {
         <Player
           rec={s.recordings.find((r) => r.id === watching)!}
           patch={s.patch ?? "16.16.1"}
+          library
           onClose={() => setWatching(null)}
         />
       )}

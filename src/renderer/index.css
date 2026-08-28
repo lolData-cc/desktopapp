@@ -926,3 +926,57 @@ body {
      reduced-motion block already kills `.ds-in .ds-rule` / `.ds-in .ds-mark`,
      so both draw correctly with nothing further to do here. */
 }
+
+/* ── the match page, made as big as the screen ────────────────────────────
+   Fullscreen shows ONE element and its descendants, which is why the element
+   that goes fullscreen here is the stage holding both halves rather than the
+   video: making the player fullscreen would have hidden the scoreboard, and
+   the point of watching a play back is usually to argue with the numbers next
+   to it.
+
+   ⚠️ `:fullscreen` paints its own black backdrop UNDER the element, so the
+   stage has to state its own ground or the app's dark green sits on a flat
+   black rectangle with a visible seam. */
+.match-stage:fullscreen {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 18px;
+  padding: 18px;
+  overflow: hidden;
+  background: var(--liquirice, #040A0C);
+}
+
+/* The recording takes the height and whatever width is left. `min-width: 0` is
+   load-bearing: a flex item defaults to min-width:auto and would refuse to
+   shrink below its content, pushing the board off the right edge. */
+.match-stage:fullscreen .match-stage-video {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* ⚠️ The player states its own aspect ratio inline, which would leave it short
+   in a full-height column. Height wins here and the ratio follows from it, so
+   the picture fills the screen vertically and the frame stops being taller
+   than the video inside it. */
+.match-stage:fullscreen .match-stage-video > * {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto !important;
+}
+
+/* The board becomes a column: fixed width, its own scroll, so a long card
+   cannot stretch the row or push the video narrower as you read. */
+.match-stage:fullscreen .match-stage-board {
+  flex: 0 0 clamp(320px, 26vw, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+/* Reduced motion has nothing to do here — the layout is a state, not a
+   transition, and there is no animation between the two shapes. */

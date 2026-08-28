@@ -27,8 +27,14 @@ import PlayerDraw, { type Stroke } from "./PlayerDraw"
  */
 export const RUNUP = 2000
 
-/** How long the interface stays up with the pointer still. */
-const IDLE_MS = 2800
+/**
+ * How long the interface stays up with the pointer still.
+ *
+ * Short on purpose. The controls sit ON the picture, so every millisecond they
+ * outstay the pointer is a millisecond of the thing you came to watch with a
+ * bar across it. 2.8s read as the interface being slow to get out of the way.
+ */
+const IDLE_MS = 900
 
 /** A single click waits this long to see whether a second one is coming. */
 const DOUBLE_MS = 230
@@ -39,12 +45,31 @@ export default function Player({
   patch,
   onClose,
   inline,
+  stage,
+  library,
 }: {
   rec: Recording
   /** Open here, in milliseconds — a kill clicked in the recap. */
   startAt?: number
   patch: string
   onClose: () => void
+  /**
+   * What to make fullscreen, when it should be more than the video.
+   *
+   * The match page passes the element holding the player AND the scoreboard, so
+   * going fullscreen there rearranges the two rather than hiding one of them.
+   * Given nothing, the player takes the screen on its own, which is right
+   * everywhere else.
+   */
+  stage?: React.RefObject<HTMLElement | null>
+  /**
+   * Whether to draw the library controls — keep, and reveal on disk.
+   *
+   * They belong to the FILE, not to the playback, so a page that already offers
+   * them beside its own share button turns them off here rather than showing
+   * the same two actions twice on one screen.
+   */
+  library?: boolean
   /**
    * Render in place rather than over the window.
    *
@@ -78,6 +103,8 @@ export default function Player({
   const [buffered, setBuffered] = useState(0)
   const [chrome, setChrome] = useState(true)
   const [full, setFull] = useState(false)
+  /** The video's true aspect ratio, once the file has told us what it is. */
+  const [shape, setShape] = useState<number | null>(null)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
   const [drawing, setDrawing] = useState(false)
@@ -244,7 +271,10 @@ export default function Player({
   const before = useRef<DOMRect | null>(null)
 
   const fullscreen = useCallback(() => {
-    const el = panel.current
+    // The STAGE when the caller gave one. The match page hands over the element
+    // that holds the scoreboard as well, so going fullscreen there rearranges
+    // the page rather than covering the half of it you did not ask to hide.
+    const el = stage?.current ?? panel.current
     if (!el) return
     before.current = el.getBoundingClientRect()
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
@@ -381,8 +411,10 @@ export default function Player({
          the mode ends. */
       style={{
         ...(drawing ? { cursor: "crosshair" } : null),
-        // Inline it has no fixed edges to stretch to, so the shape is stated.
-        ...(inline ? { aspectRatio: `${rec.width || 16} / ${rec.height || 9}` } : null),
+        // Inline it has no fixed edges to stretch to, so the shape is stated —
+        // from the video's own dimensions once they are known (see
+        // onLoadedMetadata), and only from the recording's until then.
+        ...(inline ? { aspectRatio: `${shape || (rec.width || 16) / (rec.height || 9)}` } : null),
       }}
     >
       <video
@@ -397,6 +429,20 @@ export default function Player({
           setStarted(true)
         }}
         onPause={() => setPlaying(false)}
+        /**
+         * ⚠️ The shape comes from the FILE, not from what we recorded.
+         *
+         * The frame's aspect ratio was built from `rec.width/rec.height` with a
+         * 16:9 fallback. Whenever those disagreed with the encoded video — a
+         * missing dimension, a League window that was not exactly 16:9, an
+         * encoder that rounded to even numbers — object-contain did the honest
+         * thing and letterboxed, which is where the black bars down the sides
+         * came from. The video itself knows, so it is asked.
+         */
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget
+          if (v.videoWidth > 0 && v.videoHeight > 0) setShape(v.videoWidth / v.videoHeight)
+        }}
         onSeeked={() => setSeeking(false)}
         onTimeUpdate={(e) => setAt(e.currentTarget.currentTime)}
         onProgress={(e) => {
@@ -482,7 +528,7 @@ export default function Player({
             things you do to a FILE, in a library — they have no business on a
             screen somebody has made as big as it goes in order to watch it. */}
         <div className="pointer-events-auto ml-auto flex items-center gap-1.5">
-          {!full && (
+          {!full && library && (
           <>
           <Minimal
             label={rec.kept ? "kept" : "keep"}
@@ -566,17 +612,10 @@ export default function Player({
               seeking
             </span>
           )}
-          {/* The system micro-label, in wide-tracked monospace with a morse run
-              leading into it. DS2 marks every component this way — it is the
-              cheapest and most recognisable thing in its whole vocabulary. */}
-          <span className="ml-auto flex items-center gap-2 font-jetbrains text-[8.5px] tracking-[0.26em]" style={{ color: "rgba(255,255,255,0.28)" }}>
-            <i aria-hidden className="flex items-center gap-[3px]">
-              <b className="block h-[2px] w-[2px] bg-white/40" />
-              <b className="block h-[2px] w-[7px] bg-white/25" />
-              <b className="block h-[2px] w-[2px] bg-white/40" />
-            </i>
-            dbl-click fullscreen · ↑↓ moments · d draws
-          </span>
+          {/* The keyboard hints used to sit here: "dbl-click fullscreen · ↑↓
+              moments · d draws". A permanent caption teaching three shortcuts
+              that a person learns once and then reads forever — printed over
+              the video they came to watch. The shortcuts all still work. */}
         </div>
       </div>
     </div>

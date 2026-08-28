@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { championById } from "../../data/champions"
 import Player from "../Player"
 import ShareClip from "../ShareClip"
@@ -39,6 +39,8 @@ export default function MatchDetail({
 }) {
   const clip = recordingFor(s.recordings, match)
   const [sharing, setSharing] = useState(false)
+  /** The element fullscreen takes: the recording AND the scoreboard together. */
+  const stage = useRef<HTMLDivElement>(null)
   const [picked, setPicked] = useState<number | null>(null)
   const [ranks, setRanks] = useState<Record<string, PlayerRank | null>>({})
   const patch = s.patch ?? "16.16.1"
@@ -84,36 +86,64 @@ export default function MatchDetail({
 
   return (
     <div className="flex h-full flex-col">
-      <Head match={match} onBack={onBack} />
+      <Head match={match} clip={clip} onBack={onBack} />
 
-      <div className="no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
+      {/* ⚠️ This element is the STAGE, and it is what goes fullscreen — not the
+          video. Fullscreen shows one element and its descendants, so making the
+          player fullscreen would have hidden the scoreboard entirely. With both
+          inside, `.match-stage:fullscreen` in index.css can lay them side by
+          side instead: the recording takes the full height on the left, the
+          scoreboard becomes a column on the right. */}
+      <div ref={stage} className="match-stage no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
         {/* ── the recording, first ─────────────────────────────────────── */}
         {clip && (
           <div className="mb-6">
-            <div className="mb-2 flex items-baseline gap-3">
+            {/* One group, because these are three things you do to the same
+                file. keep and reveal used to sit inside the player's control
+                strip, which put them over the video and a screen away from the
+                share button they belong beside. */}
+            <div className="mb-2 flex items-baseline gap-2">
               <p className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
                 the recording
               </p>
-              <p className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
-                {Math.round(clip.bytes / 1048576)} MB
-                {clip.fps > 0 ? ` · ${clip.fps}fps` : ""} ·{" "}
-                {clip.highlights.filter((h) => h.kind === "kill").length} kills
-              </p>
+              <button
+                type="button"
+                title={
+                  clip.kept
+                    ? "Let this one age out with the rest"
+                    : "Keep this one — the size limit stops counting it, so it is never discarded"
+                }
+                onClick={() => void window.desktop.keepRecording(clip.id, !clip.kept)}
+                className={`ml-auto win-btn h-7 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] ${
+                  clip.kept ? "text-jade" : "text-flash/45"
+                }`}
+              >
+                {clip.kept ? "kept" : "keep"}
+              </button>
+              <button
+                type="button"
+                title="Show the file on disk"
+                onClick={() => void window.desktop.revealRecording(clip.id)}
+                className="win-btn h-7 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/45"
+              >
+                file
+              </button>
               <button
                 type="button"
                 onClick={() => setSharing(true)}
-                className="ml-auto win-btn h-7 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/45"
+                className="win-btn h-7 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/45"
               >
                 share a moment
               </button>
             </div>
-            <div className="mx-auto w-full max-w-[880px]">
-              <Player rec={clip} patch={patch} inline onClose={() => undefined} />
+            <div className="match-stage-video mx-auto w-full max-w-[880px]">
+              <Player rec={clip} patch={patch} inline stage={stage} onClose={() => undefined} />
             </div>
           </div>
         )}
 
         {/* ── the scoreboard ───────────────────────────────────────────── */}
+        <div className="match-stage-board">
         {!board ? (
           <p className="font-chakrapetch text-[12.5px] text-flash/30">
             The client did not give up the rest of this game's scoreboard.
@@ -144,6 +174,7 @@ export default function MatchDetail({
         )}
 
         {chosen && <Card p={chosen} patch={patch} match={match} rank={chosen.riotId ? ranks[chosen.riotId] ?? null : null} onClose={() => setPicked(null)} />}
+        </div>
       </div>
 
       {sharing && clip && <ShareClip rec={clip} s={s} onClose={() => setSharing(false)} />}
@@ -153,7 +184,19 @@ export default function MatchDetail({
 
 /* ── the header ──────────────────────────────────────────────────────────── */
 
-function Head({ match, onBack }: { match: Match; onBack: () => void }) {
+function Head({
+  match,
+  clip,
+  onBack,
+}: {
+  match: Match
+  /** The recording, when this game has one — its size, rate and kill count
+   *  belong on the same line as the queue and the length, because they are the
+   *  same kind of fact about the same game. On their own line they read as a
+   *  second heading for a second thing. */
+  clip: ReturnType<typeof recordingFor>
+  onBack: () => void
+}) {
   const mins = Math.max(1, match.durationSeconds / 60)
   const kda = match.deaths === 0 ? match.kills + match.assists : (match.kills + match.assists) / match.deaths
 
@@ -212,6 +255,15 @@ function Head({ match, onBack }: { match: Match; onBack: () => void }) {
 
       <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.18em] text-flash/30">
         {queueName(match.queueId, match.gameMode)} · {mmss(match.durationSeconds)} · {timeAgo(match.playedAt)}
+        {clip && (
+          <span className="text-flash/20">
+            {" · "}
+            {Math.round(clip.bytes / 1048576)} MB
+            {clip.fps > 0 ? ` · ${clip.fps} fps` : ""}
+            {" · "}
+            {clip.highlights.filter((h) => h.kind === "kill").length} kills
+          </span>
+        )}
       </p>
 
       <p className="ml-auto font-chakrapetch text-[15px] font-bold tabular-nums">

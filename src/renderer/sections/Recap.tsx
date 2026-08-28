@@ -286,6 +286,7 @@ export default function Recap({
           rec={clip}
           startAt={watchFrom}
           patch={s.patch ?? "16.16.1"}
+          library
           onClose={() => setWatchFrom(null)}
         />
       )}
