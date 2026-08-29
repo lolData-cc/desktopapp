@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react"
-import { CDN, CDRAGON, isPremium, planBadge, type AppState } from "./types"
+import { CDN, CDRAGON, isPremium, planBadge, type AppState, type SectionId } from "./types"
 import { Attached, Waiting } from "./sections/Overview"
 /**
  * ⚠️ Everything except the Overview is fetched when it is first opened.
@@ -37,7 +37,6 @@ import logo from "../assets/logo.png"
  * the app, because a menu that mixes navigation with departure makes you read
  * every item before clicking.
  */
-type SectionId = "overview" | "build" | "matches" | "stats" | "ai" | "settings"
 
 /**
  * The rail, and what is no longer on it.
@@ -145,7 +144,12 @@ export default function App() {
    * numbers, which is a document like every other section and belongs beside
    * the menu rather than under it. The recap is a document too.
    */
-  const scene = section === "overview" && !s?.scoreboard && !showRecap
+  // ⚠️ `client === "attached"` is part of this now. The Overview is a SCENE
+  // because it composes a totem against a screen-sized watermark; detached
+  // there is neither, and the standby screen is a document. So it gets the
+  // column the app already reserves for documents, and the backdrop stops
+  // painting behind it — which is also what keeps it clear of the floating nav.
+  const scene = section === "overview" && s?.client === "attached" && !s?.scoreboard && !showRecap
 
   return (
     <div className="relative flex h-full flex-col bg-liquirice text-flash">
@@ -191,7 +195,7 @@ export default function App() {
                 <Attached s={s} />
               )
             ) : (
-              <Waiting />
+              <Waiting s={s} />
             )
           ) : !s ? null : section === "build" ? (
             editing ? (

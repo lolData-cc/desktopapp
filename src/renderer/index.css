@@ -1079,34 +1079,69 @@ body {
   .moment-tag { transition: none; }
 }
 
-/* The standby mark breathes: the client connection really is retrying every
-   two seconds, and a still dot beside "no client" reads as a fault light
-   rather than as listening. */
-@keyframes waitPulse {
-  0%, 100% { opacity: 0.85; transform: scale(1); }
-  50%      { opacity: 0.35; transform: scale(0.82); }
-}
-.wait-pulse { animation: waitPulse 2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .wait-pulse { animation: none; }
+/* ── standby: the no-client screen ────────────────────────────────────────
+   A document, not a scene. There is no panel here on purpose: DsPanel has no
+   plate, so anything placed behind it competes with its light — which is what
+   the two previous attempts at this screen both did. */
+
+/* .ds-in is kept ONLY as the trigger for its staggered child rules. Its own
+   28px slide is cancelled: a page does not arrive from the right, and a
+   transform on the root would become the containing block for the absolutely
+   positioned spine and head. Same precedent as .lock-projection. */
+.standby.ds-in { animation-name: none; }
+
+/* LONGHANDS. The child rules are `.ds-in .ds-head` at (0,2,0); a shorthand
+   here would replace them outright and silently delete the whole stagger. */
+.standby.ds-in .ds-rail { animation-delay: 220ms; animation-duration: 300ms; }
+.standby.ds-in .ds-mark { animation-delay: 420ms; }
+
+/* The top rule arrives from the page edge inward. Safe to use the shorthand:
+   this element carries no ds-* class. */
+.standby-run {
+  animation: ds-rule 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: right center;
 }
 
-/* A light crossing the standby panel every few seconds. It lives INSIDE the
-   panel because DsPanel has no plate: anything placed behind it shows
-   through the glow and competes with it. Screen-blended so it adds to the
-   light instead of laying a band over it, and it reaches zero at both ends
-   so it never draws an edge. */
-@keyframes waitScan {
-  0%       { transform: translateX(-120%); opacity: 0; }
-  12%, 58% { opacity: 1; }
-  100%     { transform: translateX(420%); opacity: 0; }
+/* ⚠️ Not ds-rule: that is a scaleX, and a scaleX on a 1px-wide vertical line
+   is invisible. */
+@keyframes standby-spine-draw {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
 }
-.wait-scan {
-  left: 0;
+.standby-spine {
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(0, 217, 146, 0.3) 0%, rgba(0, 217, 146, 0.3) 58%, rgba(0, 217, 146, 0) 100%);
+  animation: standby-spine-draw 420ms cubic-bezier(0.16, 1, 0.3, 1) 440ms both;
+  transform-origin: top center;
+}
+
+/* The poll, made visible: a bead leaves the mark every two seconds — the real
+   retry interval in src/lcu/connection.ts — runs down the spine, and gets no
+   answer. The stillness between beads is the point.
+
+   ⚠️ TRANSFORM, never background-position. A percentage translateY resolves
+   against the element's OWN height, and the element is inset:0 on its track, so
+   the bead crosses any column height with no measurement. */
+.standby-ping {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 217, 146, 0), rgba(0, 217, 146, 0.55), rgba(0, 217, 146, 0)) no-repeat;
+  background-size: 1px 46px;
   mix-blend-mode: screen;
-  background: linear-gradient(90deg, transparent, rgba(0, 217, 146, 0.055), transparent);
-  animation: waitScan 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: standby-ping 2s linear infinite;
 }
+@keyframes standby-ping {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  48%  { opacity: 0; }
+  52%  { opacity: 0.9; }
+  94%  { opacity: 0.9; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+
 @media (prefers-reduced-motion: reduce) {
-  .wait-scan { animation: none; opacity: 0; }
+  /* The screen still has to appear — only the movement goes, and the ping with
+     it: a bead crossing forever is the one thing here that never settles. */
+  .standby-run, .standby-spine { animation: none; }
+  .standby-ping { animation: none; opacity: 0; }
 }

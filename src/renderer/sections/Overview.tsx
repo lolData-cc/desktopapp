@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react"
 import { resolvePage, type Perk, type Style } from "../../data/perks"
 import { CDN, type AppState } from "../types"
 import Scoreboard from "./Scoreboard"
-import DsPanel from "../DsPanel"
 
 /** Our own emblems, at the CDN ROOT — the same path the summoner page uses. */
 const RANKS = "https://cdn2.loldata.cc/ranks"
@@ -26,60 +25,312 @@ const PHASE_COPY: Record<string, { title: string; sub: string }> = {
 /**
  * The client is not running.
  *
- * ⚠️ NOTHING GOES BEHIND THIS PANEL. DsPanel is not a translucent card over a
- * background — it has no plate at all: a soft radial glow, two hairlines and a
- * rhombus, "no edge to notice, because there is no edge". A screen-sized word
- * behind it (which is what the attached states use, and what this tried first)
- * shows straight THROUGH the glow, and the two fight over the same space. The
- * panel is lit, so anything under it is competing with the light rather than
- * sitting behind it.
+ * This screen used to be a card in the middle of a dark rectangle, apologising.
+ * It is a DOCUMENT now: one lit spine down the left, and a short manifest of
+ * what this installation will do the moment League opens — each line true of
+ * the app right now, each with the one control that changes it.
  *
- * So the whole state belongs to the panel, and the atmosphere is built from the
- * panel's own vocabulary instead of imported from behind it.
+ * The reasoning, because it is the third attempt and the first two were wrong:
  *
- * ⚠️ CENTRED, which is also load-bearing. The navigation is not a sidebar: it
- * is `absolute inset-y-0 left-0 z-20 w-[196px]` floating OVER a full-width
- * content area, so anything rendered at its natural left edge slides underneath.
- * Measured at 928px wide before this: 168 of the card's 460 pixels were behind
- * the nav. Every other state on this screen centres for the same reason, which
- * is why this needs no magic left padding to be kept in step with the nav.
+ * ⚠️ There is no panel. DsPanel has no plate — a soft radial glow, two
+ * hairlines and a rhombus, "no edge to notice, because there is no edge" — so
+ * anything placed behind it shows through and competes with its light. That was
+ * attempt one (a screen-sized word behind it) and attempt two (a light sweeping
+ * inside it). The fix here is structural rather than compositional: nothing is
+ * behind anything, because there is nothing to be behind.
+ *
+ * ⚠️ Every row is a promise about the NEXT game, read off state the app really
+ * holds with the client shut. Nothing is invented and no number is a
+ * placeholder: the HUD scale is parsed from League's on-disk config at launch,
+ * the recording settings and library are local, the build profiles are on disk.
+ * When `s` is null — the moment before the first state arrives — the rows are
+ * not rendered at all, because unread state must never be printed as fact.
+ *
+ * ⚠️ The rows are READ, not pressed. An earlier version hung a control off
+ * each one — preview the overlay, run a 15-second test recording, jump to
+ * settings — and that is a developer's console, not a shipped app's empty
+ * state. The only buttons left are the two things a person genuinely does here
+ * and nowhere else: install a waiting update, and sign in. Everything else is
+ * one click away in the navigation already.
+ *
+ * ⚠️ At most ONE citrine mark on the screen, chosen by a single expression. Two
+ * would make a manifest read as a fault screen, which is the opposite of what
+ * this is.
  */
-export function Waiting() {
+export function Waiting({ s }: { s: AppState | null }) {
+  // The library reports 0 bytes until it is asked. The same one-liner Matches,
+  // Preferences and Recap all use.
+  useEffect(() => {
+    void window.desktop.listRecordings()
+  }, [])
+
+  const u = s?.update
+  const updating =
+    s?.canUpdate && u && (u.state === "available" || u.state === "downloading" || u.state === "ready")
+      ? u
+      : null
+
+  /**
+   * ⚠️ One expression, not three conditions. Citrine is this app's warning
+   * colour, and a page wearing it twice reads as broken rather than as ready.
+   */
+  const alert: "capture" | "update" | null = s?.captureError
+    ? "capture"
+    : updating && updating.state !== "downloading"
+      ? "update"
+      : null
+
+  const armed = s?.builds.filter((b) => b.enabled).length ?? 0
+
   return (
-    <div className="relative grid h-full place-items-center">
-      <DsPanel className="rise w-full max-w-[460px]" eyebrow="standby">
-        <div className="relative overflow-hidden px-8 py-11">
-          {/* The one moving thing: a light that crosses the panel every few
-              seconds and is gone. It says "listening" from inside the panel's
-              own surface, where a word behind it could only say it by fighting
-              the glow. Screen-blended, so it ADDS to the light rather than
-              laying a band across it. */}
-          <span aria-hidden className="wait-scan pointer-events-none absolute inset-y-0 w-1/3" />
+    <div className="standby ds-in relative flex h-full flex-col pl-[26px]">
+      {/* ── the head: DsPanel's corner, mirrored. The rule arrives along the
+             top and turns DOWN into the spine, so the page has a source rather
+             than a frame. ⚠️ Fixed 60x14 and never stretched. */}
+      <svg
+        aria-hidden
+        width="60"
+        height="14"
+        viewBox="0 0 60 14"
+        className="absolute left-0 top-0 overflow-visible"
+        style={{ filter: "drop-shadow(0 0 6px #00d99255)" }}
+      >
+        <path
+          className="ds-rail"
+          d="M 60 2 L 12 2 L 1 13"
+          pathLength={1}
+          strokeDasharray={1}
+          fill="none"
+          stroke="#00d992"
+          strokeWidth="1"
+          strokeLinejoin="round"
+          opacity="0.75"
+        />
+        {/* Rotation on the <g>, scale on the <rect>: an animated transform
+            REPLACES the attribute rather than composing with it. */}
+        <g transform="rotate(45 12 2)">
+          <rect className="ds-mark" x="8.5" y="-1.5" width="7" height="7" fill="#00d992" opacity="0.9" />
+        </g>
+      </svg>
 
-          <div className="relative flex items-center gap-2.5">
-            {/* It is genuinely listening — the connection retries every two
-                seconds — so the mark breathes rather than sitting still. A
-                static dot beside "no client" would read as a fault light. */}
-            <span aria-hidden className="wait-pulse relative flex h-[7px] w-[7px] shrink-0">
-              <span className="absolute inset-0 rotate-45 bg-jade" />
-            </span>
-            <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.3em] text-jade/50">
-              no client
-            </p>
-          </div>
+      {/* The long run, dying before the right edge: a line that terminates in
+          nothing cannot read as the top of a box. */}
+      <span
+        aria-hidden
+        className="standby-run absolute left-[60px] right-0 top-[2px] h-px"
+        style={{ background: "linear-gradient(90deg, rgba(0,217,146,0.50), rgba(0,217,146,0))" }}
+      />
 
-          <h1 className="relative mt-2.5 font-chakrapetch text-[30px] font-bold leading-none tracking-tight">
-            Open League
-          </h1>
-          <span aria-hidden className="relative mt-4 block h-px w-full bg-jade/[0.16]" />
-          <p className="relative mt-3 max-w-[38ch] font-chakrapetch text-[13px] leading-relaxed text-flash/40">
-            This attaches on its own the moment the client is running. Nothing to press.
+      {/* The spine, and the poll made visible: a bead leaves the mark every two
+          seconds — the real retry interval — runs down, and gets no answer. */}
+      <span aria-hidden className="standby-spine absolute bottom-0 left-0 top-[14px] w-px">
+        <span className="standby-ping" />
+      </span>
+
+      <div className="pt-[18px]">
+        <p className="ds-eyebrow font-jetbrains text-[9.5px] uppercase tracking-[0.3em] text-jade/50">
+          no client · retrying every 2s
+        </p>
+        <h1 className="ds-head mt-2 font-chakrapetch text-[30px] font-bold leading-none tracking-tight text-flash/90">
+          Ready when League is
+        </h1>
+      </div>
+
+      {s && (
+        <>
+          {/* The frame that makes every row below honest: these are promises
+              about the next game, not a report on this one. */}
+          <p className="ds-late mt-8 font-jetbrains text-[9px] uppercase tracking-[0.28em] text-flash/25">
+            when the game starts
           </p>
-        </div>
-      </DsPanel>
+
+          <div className="mt-4 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+            {updating && (
+              <Line
+                i={0}
+                mark={updating.state === "downloading" ? "standing" : alert === "update" ? "alert" : "on"}
+                title={
+                  updating.state === "ready"
+                    ? `v${updating.next} is waiting to install`
+                    : updating.state === "downloading"
+                      ? `v${updating.next} is downloading`
+                      : `v${updating.next} is ready to download`
+                }
+                truth={
+                  updating.state === "ready"
+                    ? "restarting now costs nothing — no game is running"
+                    : updating.state === "downloading"
+                      ? `${updating.percent}%`
+                      : `you have v${updating.version}`
+                }
+                citrine={alert === "update"}
+              >
+                {/* Downloading gets no control: a status is not something to
+                    press, and a disabled button still reads as one taken away. */}
+                {updating.state === "ready" && (
+                  <Act onClick={() => window.desktop.installUpdate()}>restart</Act>
+                )}
+                {updating.state === "available" && (
+                  <Act onClick={() => void window.desktop.downloadUpdate()}>download</Act>
+                )}
+              </Line>
+            )}
+
+            {!s.account && (
+              <Line
+                i={1}
+                mark="standing"
+                title="lolData account"
+                truth="signed out · sign in to use lolData AI and your plan"
+                note="Opens your browser. This app never asks for a password."
+              >
+                <Act onClick={() => void window.desktop.signIn()}>sign in</Act>
+              </Line>
+            )}
+
+            <Line
+              i={2}
+              mark={s.hud.source ? "on" : "standing"}
+              title="Notices land on your HUD"
+              truth={
+                s.hud.source
+                  ? `scale ${s.hud.scale.toFixed(2)} · read from your client config`
+                  : "default scale · no client config found yet"
+              }
+            />
+
+            <Line
+              i={3}
+              mark={s.captureError ? "alert" : s.settings.capture ? "on" : "standing"}
+              title="Your games record themselves"
+              truth={
+                s.captureError
+                  ? s.captureError
+                  : s.settings.capture
+                    ? `on · ${s.settings.captureFps} fps · ${gbOf(s.storage.recordings)} kept${
+                        s.settings.captureBudgetGb === null ? " · no limit" : ` of ${s.settings.captureBudgetGb} GB`
+                      }`
+                    : "off · nothing is recorded"
+              }
+              citrine={!!s.captureError}
+            />
+
+            <Line
+              i={4}
+              mark={s.builds.length ? "on" : "standing"}
+              title={`Item notices for ${s.builds.length} champion${s.builds.length === 1 ? "" : "s"}`}
+              truth={
+                s.builds.length
+                  ? `${armed} armed · ${s.builds.length - armed} muted`
+                  : "nothing saved yet · import from the site, or lock a champion in"
+              }
+            />
+          </div>
+        </>
+      )}
+
+      <div className="relative mt-auto shrink-0 pt-8">
+        {/* DsPanel's descending ticks stood on their end, so the spine visibly
+            runs out instead of stopping. */}
+        <svg aria-hidden width="9" height="34" className="ds-late absolute -left-[26px] top-8">
+          <path
+            d="M 0.5 0 L 5 0 M 0.5 14 L 3.5 14 M 0.5 28 L 2.5 28"
+            stroke="rgba(0,217,146,0.15)"
+            strokeWidth="1"
+            fill="none"
+          />
+        </svg>
+        <p className="ds-late max-w-[54ch] font-chakrapetch text-[13px] leading-relaxed text-flash/35">
+          The League client is not running. The app attaches by itself the moment it is — you do not
+          have to come back here.
+        </p>
+      </div>
     </div>
   )
 }
+
+/** Bytes as the library reports them. Mirrors the formatter Preferences uses. */
+const gbOf = (bytes: number) =>
+  bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`
+
+/** One promise about the next game, hanging off the spine. */
+function Line({
+  i,
+  mark,
+  title,
+  truth,
+  note,
+  citrine,
+  children,
+}: {
+  i: number
+  mark: "on" | "standing" | "alert"
+  title: string
+  truth: string
+  note?: string
+  citrine?: boolean
+  children?: React.ReactNode
+}) {
+  const colour = mark === "alert" ? "#FFB615" : "#00d992"
+  return (
+    <div
+      className="ds-row relative grid min-h-[70px] grid-cols-[1fr_auto] items-center gap-6"
+      style={{ animationDelay: `${420 + Math.min(i, 6) * 45}ms` }}
+    >
+      {/* The branch off the spine. Rows are separated by SPACE, never a rule —
+          a rule between them would draw the box this page does not have. */}
+      <span aria-hidden className="absolute -left-[26px] top-1/2 h-px w-[12px] bg-jade/25" />
+      <svg
+        aria-hidden
+        width="12"
+        height="12"
+        className="absolute -left-[13px] top-1/2 -mt-[6px] overflow-visible"
+        style={mark === "standing" ? undefined : { filter: `drop-shadow(0 0 6px ${colour}73)` }}
+      >
+        <g transform="rotate(45 6 6)">
+          <rect
+            x="2.5"
+            y="2.5"
+            width="7"
+            height="7"
+            fill={mark === "standing" ? "none" : colour}
+            stroke={mark === "standing" ? "rgba(0,217,146,0.40)" : undefined}
+            strokeWidth={mark === "standing" ? 1 : undefined}
+          />
+        </g>
+      </svg>
+
+      <div className="min-w-0">
+        <p className="font-chakrapetch text-[15px] font-bold leading-tight text-flash/85">{title}</p>
+        <p
+          className={`mt-1 truncate font-jetbrains text-[9.5px] uppercase tracking-[0.16em] ${
+            citrine ? "text-citrine/70" : "text-flash/35"
+          }`}
+          title={truth}
+        >
+          {truth}
+        </p>
+        {note && (
+          <p className="mt-1 font-jetbrains text-[8.5px] leading-relaxed text-flash/25">{note}</p>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5">{children}</div>
+    </div>
+  )
+}
+
+
+/** The loud one. ⚠️ At most one of these on the screen at a time. */
+const Act = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="act-btn h-7 shrink-0 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em]"
+  >
+    {children}
+  </button>
+)
 
 /** "DIAMOND" -> "Diamond". The API shouts its tiers; a card should not. */
 const title = (t: string) => t.charAt(0) + t.slice(1).toLowerCase()
