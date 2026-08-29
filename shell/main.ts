@@ -1283,8 +1283,8 @@ async function readLoading(): Promise<void> {
       })
     )
 
-  const allies = await resolve(roster.allies)
-  const enemies = await resolve(roster.enemies)
+  const allies = seatFive(await resolve(roster.allies), roster.allies)
+  const enemies = seatFive(await resolve(roster.enemies), roster.enemies)
   pendingBoard = { allies, enemies }
   paintBoard()
   console.log("[loading] allies: %s | enemies: %s",
@@ -1294,6 +1294,61 @@ async function readLoading(): Promise<void> {
   // Everything else comes after, because the cards are already useful and the
   // lookups take a second.
   await enrich(allies, roster.allies, enemies, roster.enemies)
+}
+
+/**
+ * A row of exactly FIVE, with streamer-mode cards where the client gave us
+ * nobody.
+ *
+ * ⚠️ The count is not cosmetic — it decides the geometry. The overlay lays a
+ * row out from how many cards it has and CENTRES it, so a team of four is drawn
+ * as four centred cards over the game's five. Every badge then sits half a card
+ * to the side of the champion it describes: the rank under Sett belonged to
+ * somebody else. Missing players did not leave a gap, they silently shifted the
+ * whole row.
+ *
+ * Riot withholds those players entirely: measured on a live game, the gameflow
+ * session listed four per team and the 2999 API returned the other two with an
+ * EMPTY riot id. There is no name, no tag and no puuid, so nothing can be looked
+ * up — which is exactly what a streamer-mode card says.
+ *
+ * ⚠️ Seated by the client's own slot number when every player has a distinct
+ * one, because the gap has to be left WHERE IT IS. Appending the placeholders at
+ * the end would keep the row five wide and still hand the third card's rank to
+ * the fourth player.
+ */
+function seatFive(players: LoadingPlayer[], entries: RosterEntry[]): LoadingPlayer[] {
+  const blank = (): LoadingPlayer => ({
+    name: "-",
+    championId: null,
+    championKey: 0,
+    rank: null,
+    hidden: true,
+    otp: false,
+    filled: false,
+    pro: null,
+  })
+
+  if (players.length >= 5) return players
+
+  const slots = entries.map((e) => e.slot)
+  const usable =
+    slots.length === players.length &&
+    slots.every((n) => n !== null && n >= 1 && n <= 5) &&
+    new Set(slots).size === slots.length
+
+  const row: LoadingPlayer[] = Array.from({ length: 5 }, blank)
+  if (usable) {
+    players.forEach((p, i) => { row[(slots[i] as number) - 1] = p })
+  } else {
+    // No trustworthy slot numbers: keep the order the client gave and let the
+    // blanks fall at the end. The row is the right WIDTH either way, which is
+    // what stops the layout shifting; only which card is blank may be wrong.
+    players.forEach((p, i) => { row[i] = p })
+  }
+  console.log("[loading] seated %d of 5 (slots %s, %s)",
+    players.length, slots.join("/") || "none", usable ? "by slot" : "in order")
+  return row
 }
 
 /**

@@ -32,6 +32,10 @@ export type RosterEntry = {
   name: string
   tag: string
   puuid: string
+  /** The client's own slot number for this player within the team, when it
+   *  gives one. Needed because a team can come back with FEWER than five and
+   *  the gap has to be left where it actually is. */
+  slot: number | null
 }
 
 export type Phase =
@@ -248,6 +252,7 @@ export class LcuConnection {
       name: p?.gameName ?? p?.summonerName ?? "",
       tag: p?.tagLine ?? "",
       puuid: String(p?.puuid ?? ""),
+      slot: Number.isFinite(p?.teamParticipantId) ? Number(p.teamParticipantId) : null,
     })
 
     const mine = one.some((p: any) => p?.puuid && p.puuid === myPuuid)
