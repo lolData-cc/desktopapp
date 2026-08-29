@@ -23,22 +23,61 @@ const PHASE_COPY: Record<string, { title: string; sub: string }> = {
   EndOfGame:       { title: "Game over",       sub: "reading the result" },
 }
 
+/**
+ * The client is not running.
+ *
+ * ⚠️ NOTHING GOES BEHIND THIS PANEL. DsPanel is not a translucent card over a
+ * background — it has no plate at all: a soft radial glow, two hairlines and a
+ * rhombus, "no edge to notice, because there is no edge". A screen-sized word
+ * behind it (which is what the attached states use, and what this tried first)
+ * shows straight THROUGH the glow, and the two fight over the same space. The
+ * panel is lit, so anything under it is competing with the light rather than
+ * sitting behind it.
+ *
+ * So the whole state belongs to the panel, and the atmosphere is built from the
+ * panel's own vocabulary instead of imported from behind it.
+ *
+ * ⚠️ CENTRED, which is also load-bearing. The navigation is not a sidebar: it
+ * is `absolute inset-y-0 left-0 z-20 w-[196px]` floating OVER a full-width
+ * content area, so anything rendered at its natural left edge slides underneath.
+ * Measured at 928px wide before this: 168 of the card's 460 pixels were behind
+ * the nav. Every other state on this screen centres for the same reason, which
+ * is why this needs no magic left padding to be kept in step with the nav.
+ */
 export function Waiting() {
   return (
-    <DsPanel className="rise w-full max-w-[460px]" eyebrow="standby">
-      <div className="px-8 py-11">
-      <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.3em] text-jade/50">
-        no client
-      </p>
-      <h1 className="mt-2.5 font-chakrapetch text-[30px] font-bold leading-none tracking-tight">
-        Open League
-      </h1>
-      <span aria-hidden className="mt-4 block h-px w-full bg-jade/[0.16]" />
-      <p className="mt-3 max-w-[38ch] font-chakrapetch text-[13px] leading-relaxed text-flash/40">
-        This attaches on its own the moment the client is running. Nothing to press.
-      </p>
-      </div>
-    </DsPanel>
+    <div className="relative grid h-full place-items-center">
+      <DsPanel className="rise w-full max-w-[460px]" eyebrow="standby">
+        <div className="relative overflow-hidden px-8 py-11">
+          {/* The one moving thing: a light that crosses the panel every few
+              seconds and is gone. It says "listening" from inside the panel's
+              own surface, where a word behind it could only say it by fighting
+              the glow. Screen-blended, so it ADDS to the light rather than
+              laying a band across it. */}
+          <span aria-hidden className="wait-scan pointer-events-none absolute inset-y-0 w-1/3" />
+
+          <div className="relative flex items-center gap-2.5">
+            {/* It is genuinely listening — the connection retries every two
+                seconds — so the mark breathes rather than sitting still. A
+                static dot beside "no client" would read as a fault light. */}
+            <span aria-hidden className="wait-pulse relative flex h-[7px] w-[7px] shrink-0">
+              <span className="absolute inset-0 rotate-45 bg-jade" />
+            </span>
+            <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.3em] text-jade/50">
+              no client
+            </p>
+          </div>
+
+          <h1 className="relative mt-2.5 font-chakrapetch text-[30px] font-bold leading-none tracking-tight">
+            Open League
+          </h1>
+          <span aria-hidden className="relative mt-4 block h-px w-full bg-jade/[0.16]" />
+          <p className="relative mt-3 max-w-[38ch] font-chakrapetch text-[13px] leading-relaxed text-flash/40">
+            This attaches on its own the moment the client is running. Nothing to press.
+          </p>
+        </div>
+      </DsPanel>
+    </div>
   )
 }
 

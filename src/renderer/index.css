@@ -1078,3 +1078,35 @@ body {
   .upd-fill { transition: none; }
   .moment-tag { transition: none; }
 }
+
+/* The standby mark breathes: the client connection really is retrying every
+   two seconds, and a still dot beside "no client" reads as a fault light
+   rather than as listening. */
+@keyframes waitPulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.82); }
+}
+.wait-pulse { animation: waitPulse 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .wait-pulse { animation: none; }
+}
+
+/* A light crossing the standby panel every few seconds. It lives INSIDE the
+   panel because DsPanel has no plate: anything placed behind it shows
+   through the glow and competes with it. Screen-blended so it adds to the
+   light instead of laying a band over it, and it reaches zero at both ends
+   so it never draws an edge. */
+@keyframes waitScan {
+  0%       { transform: translateX(-120%); opacity: 0; }
+  12%, 58% { opacity: 1; }
+  100%     { transform: translateX(420%); opacity: 0; }
+}
+.wait-scan {
+  left: 0;
+  mix-blend-mode: screen;
+  background: linear-gradient(90deg, transparent, rgba(0, 217, 146, 0.055), transparent);
+  animation: waitScan 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wait-scan { animation: none; opacity: 0; }
+}
