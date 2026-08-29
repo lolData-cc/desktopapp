@@ -75,6 +75,18 @@ export default function Matches({ s }: { s: AppState }) {
     return all
   }, [matches, s.recordings, only])
 
+  /**
+   * Whether to name the account on each row.
+   *
+   * Shown only when this machine has actually seen more than one. On a computer
+   * with a single account the name is the same on every row — a column of
+   * identical words, which is noise rather than information.
+   */
+  const manyAccounts = useMemo(
+    () => new Set((matches ?? []).map((m) => m.account?.puuid).filter(Boolean)).size > 1,
+    [matches]
+  )
+
   const detail = open !== null ? (matches ?? []).find((m) => m.gameId === open) : null
   if (detail) return <MatchDetail s={s} match={detail} onBack={() => setOpen(null)} />
 
@@ -113,6 +125,7 @@ export default function Matches({ s }: { s: AppState }) {
               clip={clip}
               patch={s.patch}
               index={i}
+              account={manyAccounts ? (m.account?.name ?? null) : null}
               onOpen={() => setOpen(m.gameId)}
             />
           ))
@@ -242,12 +255,15 @@ function Row({
   clip,
   patch,
   index,
+  account,
   onOpen,
 }: {
   m: Match
   clip: Recording | null
   patch: string | null
   index: number
+  /** The account that played it, or null when naming it would say nothing. */
+  account: string | null
   onOpen: () => void
 }) {
   const [slug, setSlug] = useState<string | null>(null)
@@ -313,6 +329,13 @@ function Row({
           <p className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/25">
             {m.remake ? "remake" : timeAgo(m.playedAt)} · {mmss(m.durationSeconds)}
           </p>
+          {account && (
+            /* In jade, because it answers a different question from the two
+               lines above it: not what this game was, but who played it. */
+            <p className="truncate font-jetbrains text-[9px] uppercase tracking-[0.14em] text-jade/45">
+              {account}
+            </p>
+          )}
         </div>
 
         {/**

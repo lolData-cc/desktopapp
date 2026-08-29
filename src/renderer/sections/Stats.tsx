@@ -60,6 +60,20 @@ export default function Stats({ s }: { s: AppState }) {
   const rows = useMemo(() => tally(s.matches ?? []), [s.matches])
   const [open, setOpen] = useState<number | null>(null)
 
+  /**
+   * How many accounts this machine has seen, and how far back it goes.
+   *
+   * These figures are the COMPUTER's, not an account's — every account signed
+   * in here contributes, and the record starts when the app was installed
+   * because that is the first game it could witness. Saying so is the point:
+   * a win rate over an unstated set of games is a number nobody can check.
+   */
+  const scope = useMemo(() => {
+    const accounts = new Set(matches.map((m) => m.account?.puuid).filter(Boolean)).size
+    const oldest = matches.length ? Math.min(...matches.map((m) => m.playedAt)) : 0
+    return { accounts, oldest }
+  }, [matches])
+
   if (!s.matches) return <Note>Reading your match history…</Note>
   if (!rows.length) return <Note>No completed games yet — remakes do not count towards this.</Note>
 
@@ -77,7 +91,9 @@ export default function Stats({ s }: { s: AppState }) {
       <div className="flex shrink-0 items-baseline gap-3">
         <h2 className="font-chakrapetch text-[22px] font-bold leading-none">Stats</h2>
         <p className="font-jetbrains text-[9.5px] uppercase tracking-[0.18em] text-flash/30">
-          your last {games} completed {games === 1 ? "game" : "games"}
+          {games} completed {games === 1 ? "game" : "games"} on this pc
+          {scope.accounts > 1 ? ` · ${scope.accounts} accounts` : ""}
+          {scope.oldest ? ` · since ${new Date(scope.oldest).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}
         </p>
       </div>
 

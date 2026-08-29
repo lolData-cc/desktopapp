@@ -32,7 +32,8 @@ import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type
          chosenAll, runesBackfilledFor, markRunesBackfilled,
          readSettings, writeSettings, DEFAULT_SETTINGS, type AppSettings } from "./prefs"
 import { askAi, type ChatMessage } from "../src/data/ai"
-import { recentMatches, rankedSummary, type Match, type RankedSummary } from "../src/lcu/history"
+import { recentMatches, rankedSummary, type RankedSummary } from "../src/lcu/history"
+import { mergeMatches, type ArchivedMatch } from "./matchArchive"
 import { linkFromArgv, linkKind, parseAuthLink, parseBuildLink, parseRuneLink, PROTOCOL } from "../src/lcu/deepLink"
 import { liveGameStats, liveEvents, livePlayers, liveActivePlayerName, liveOwnPurse,
          type GameEvent, type PlayerSlot } from "../src/live/client"
@@ -58,7 +59,7 @@ export type AppState = {
   ranked: RankedSummary | null
   /** Recent games, read from the client rather than from our own API: local,
    *  instant, and needing no account. */
-  matches: Match[] | null
+  matches: ArchivedMatch[] | null
   phase: Phase | null
   patch: string | null
   select: {
@@ -360,7 +361,7 @@ function push(patch: Partial<AppState>): void {
       // The recording ends with the game, not with the app. The result is
       // stamped first, while we still know which game it was.
       if (state.recording) {
-        const mine = state.matches?.[0]
+        const mine = newestMine()
         if (mine && mine.championId === state.lastPlayed?.championKey) setResult(mine.win)
         void endRecording()
         push({ recording: false })
@@ -542,7 +543,7 @@ function awaitMatch(tries = 8): void {
 
   const attempt = async (left: number) => {
     await readProfile()
-    const got = state.matches?.[0]?.championId ?? -1
+    const got = newestMine()?.championId ?? -1
     if (got === want) {
       console.log("[recap] history caught up: champion %d", got)
       return
@@ -560,14 +561,37 @@ function awaitMatch(tries = 8): void {
   void attempt(tries)
 }
 
+/**
+ * The newest game played by the account signed in RIGHT NOW.
+ *
+ * ⚠️ NOT `state.matches[0]`. That list is the machine's archive and spans
+ * every account ever signed in here, so its first entry can belong to a
+ * different one — which would stamp a recording with someone else's result and
+ * tell the recap that history had caught up when it had not.
+ */
+function newestMine(): ArchivedMatch | undefined {
+  const me = state.summoner?.puuid
+  return state.matches?.find((m) => !m.account || !me || m.account.puuid === me)
+}
+
 async function readProfile(): Promise<void> {
   const summoner = state.summoner
   if (!summoner?.puuid) return
 
-  const [ranked, matches] = await Promise.all([
+  const [ranked, fresh] = await Promise.all([
     rankedSummary(lcu).catch(() => null),
     recentMatches(lcu, summoner.puuid, 20).catch(() => []),
   ])
+
+  // The client only ever reports the account signed in right now. Folding each
+  // read into the machine's archive is what makes the Matches and Stats tabs a
+  // property of this COMPUTER rather than of whoever is logged in.
+  const matches = await mergeMatches(fresh, {
+    name: summoner.name,
+    tag: summoner.tag,
+    puuid: summoner.puuid,
+  }).catch(() => fresh)
+
   push({ ranked, matches })
 }
 

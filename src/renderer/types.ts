@@ -144,6 +144,9 @@ export const CDRAGON = "https://raw.communitydragon.org/latest"
 export type Champion = { slug: string; key: number; name: string }
 
 export type Match = {
+  /** Which account played it. Absent on games archived before the app
+   *  started stamping them, and on a live read that has not been merged. */
+  account?: { name: string; tag: string; puuid: string } | null
   gameId: number
   playedAt: number
   durationSeconds: number
