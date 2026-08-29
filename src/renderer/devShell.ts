@@ -502,6 +502,7 @@ const DEV_RUNES = {
   chosen: 0,
   remembered: false,
   pageName: "loldata · Nami",
+  anyRole: false,
   variants: [
       { label: "popular", games: 48213, winrate: 51.8, share: 62,
         page: { keystone: 8214, primaryStyle: 8200, primary: [8214, 8226, 8210, 8237],
@@ -716,6 +717,13 @@ SCENES.updating = {
   ...(SCENES.select as object),
   update: { state: "downloading", version: "0.0.6", next: "0.0.7", percent: 42 },
 }
+// Il campione preso in un ruolo per cui non esistono pagine: l'API risponde
+// con sample=0 e il pannello ripiega sulle pagine di tutti i ruoli.
+SCENES.anyrole = {
+  ...(SCENES.locked as object),
+  runes: { ...DEV_RUNES, anyRole: true },
+}
+
 SCENES.updated = {
   ...(SCENES.select as object),
   update: { state: "ready", version: "0.0.6", next: "0.0.7" },

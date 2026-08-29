@@ -141,6 +141,10 @@ export type AppState = {
      *  so the interface can say so instead of looking arbitrary. */
     remembered: boolean
     pageName: string
+    /** True when the picked role has no pages of its own and these are the
+     *  champion's across every role — the panel says so rather than passing
+     *  them off as a read on the lane. */
+    anyRole: boolean
   } | null
   /** What happened the last time the player asked to import it. */
   runeImport:
@@ -508,6 +512,7 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
       chosen: found >= 0 ? found : 0,
       remembered: found >= 0,
       pageName: pageName(champion.name, state.patch ?? ""),
+      anyRole: suggestion.anyRole,
     },
     runeImport: { state: "idle" },
   })

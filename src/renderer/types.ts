@@ -243,6 +243,9 @@ export type AppState = {
     chosen: number
     remembered: boolean
     pageName: string
+    /** These are the champion's pages across every role, because the role
+     *  picked has none of its own. */
+    anyRole: boolean
   } | null
   runeImport:
     | { state: "idle" }

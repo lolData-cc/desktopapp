@@ -410,9 +410,19 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
 
       {/* Furthest from the source, so faintest — a projection dims as it
           travels, and the ranking of the type says which end it is at. */}
-      <p className="ds-late mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30">
+      <p
+        className="ds-late mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30"
+        title={
+          r.anyRole
+            ? "This role has no pages of its own, so these are the champion's across every role"
+            : undefined
+        }
+      >
         {r.remembered && r.chosen !== 0 && <span className="text-jade/70">your last choice · </span>}
         {v.share >= 1 ? `${Math.round(v.share)}% of games` : "rarely played"} · {v.games.toLocaleString()} games
+        {/* Said, not hidden. These pages are a weaker answer than a lane-specific
+            one, and the panel that shows them has to admit which it is holding. */}
+        {r.anyRole && <span className="text-citrine/70"> · all roles</span>}
       </p>
 
       <div className="mt-3 flex items-center gap-4">
