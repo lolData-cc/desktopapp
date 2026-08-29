@@ -12,6 +12,8 @@ import { execFile, spawn } from "node:child_process"
 import { buildFile, distFile, shellFile } from "./paths"
 import { join, resolve } from "node:path"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { LcuConnection, type Phase, type RosterEntry } from "../src/lcu/connection"
 import { championById, championByName, currentPatch, type Champion } from "../src/data/champions"
 import { configureOverlay, showOverlay, hideOverlay, sendOverlay, destroyOverlay,
@@ -3042,6 +3044,66 @@ ipcMain.on("overlay:demo-recal", () => {
  * with its own client connection — so the second one forwards the link to the
  * first and exits.
  */
+/**
+ * Another lolData already running, of ANY build — or null.
+ *
+ * ⚠️ Electron's own single-instance lock is keyed on the app's IDENTITY, and a
+ * development build has a different one from the installed app. So the two do
+ * not see each other and both start, both attach to the client, and both arm
+ * the recorder on the same game.
+ *
+ * That is not a tidiness problem. It cost a real game: a dev build left running
+ * beside the installed app during a match leaked itself out of memory until
+ * Windows raised RADAR_PRE_LEAK_64 and the machine stopped taking input.
+ *
+ * So the claim is a file in the system temp directory — one path for every
+ * build — holding the pid.
+ *
+ * ⚠️ The pid is CHECKED, not trusted. `process.kill(pid, 0)` sends no signal
+ * and only asks whether the process exists; without that a crash would leave a
+ * stale file that bricks every future launch, which is a far worse bug than the
+ * one this prevents.
+ */
+const CLAIM = join(tmpdir(), "loldata-instance.pid")
+
+function otherInstance(): number | null {
+  let pid = 0
+  try {
+    pid = Number(readFileSync(CLAIM, "utf8").trim())
+  } catch {
+    return null // no claim on file
+  }
+  if (!pid || pid === process.pid) return null
+
+  try {
+    // Signal 0 sends nothing; it only asks whether the process is there.
+    process.kill(pid, 0)
+    return pid
+  } catch (e) {
+    // ⚠️ EPERM means the process EXISTS and simply is not ours to signal, so it
+    // still holds the claim. Treating every throw as "gone" — which this did at
+    // first — lets a second copy start beside a running one, which is the whole
+    // thing being prevented. Only ESRCH, or an unreadable file, means free.
+    return (e as NodeJS.ErrnoException)?.code === "EPERM" ? pid : null
+  }
+}
+
+function claimInstance(): void {
+  try {
+    writeFileSync(CLAIM, String(process.pid), "utf8")
+  } catch {
+    // A claim we cannot write is not worth failing to start over.
+  }
+}
+
+function releaseInstance(): void {
+  try {
+    if (Number(readFileSync(CLAIM, "utf8").trim()) === process.pid) unlinkSync(CLAIM)
+  } catch {
+    // Never let tidying up stop the app from quitting.
+  }
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   // Quit, and do NOTHING else. app.quit() does not stop whenReady from firing
@@ -3051,6 +3113,22 @@ if (!gotLock) {
   // delete-and-create cycles racing over one rune page.
   app.quit()
 } else {
+  const other = otherInstance()
+  if (other !== null) {
+    // Said out loud rather than dying quietly: an app that vanishes when you
+    // double-click it is indistinguishable from a broken one.
+    dialog.showErrorBox(
+      "lolData is already running",
+      `Another copy of lolData (process ${other}) is already open.
+
+` +
+        "Two copies attach to the League client and both arm the recorder on the " +
+        "same game, so this one will close. Quit the other one first if you meant " +
+        "to start this build."
+    )
+    app.exit(0)
+  }
+  claimInstance()
   app.on("second-instance", (_e, argv) => {
     console.log("[link] second-instance argv=%s", JSON.stringify(argv))
     // ⚠️ BRING THE APP BACK FIRST. This handler used to do nothing but read the
@@ -3174,6 +3252,8 @@ app.on("before-quit", () => {
   destroyOverlay()
   globalShortcut.unregisterAll()
 })
+
+app.on("will-quit", releaseInstance)
 
 app.on("window-all-closed", () => {
   lcu.stop()
