@@ -291,6 +291,26 @@ let win: BrowserWindow | null = null
  */
 const alive = (w: BrowserWindow | null): w is BrowserWindow => !!w && !w.isDestroyed()
 
+/**
+ * Put the app back in front of the person asking for it.
+ *
+ * ⚠️ Recreates the window when there is none. A quit that dies halfway, or
+ * anything that destroys the window without ending the process, leaves an
+ * instance that still holds the single-instance lock and can never be seen
+ * again — every later launch is swallowed by the lock and answered with
+ * nothing. Restoring is not enough on its own; there has to be something to
+ * restore.
+ */
+function surface(): void {
+  if (!alive(win)) {
+    createWindow()
+    return
+  }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
 function push(patch: Partial<AppState>): void {
   const before = state.phase
   state = { ...state, ...patch }
@@ -3030,6 +3050,13 @@ if (!gotLock) {
 } else {
   app.on("second-instance", (_e, argv) => {
     console.log("[link] second-instance argv=%s", JSON.stringify(argv))
+    // ⚠️ BRING THE APP BACK FIRST. This handler used to do nothing but read the
+    // link, which made a second launch look like a broken app: the lock stops
+    // the new instance, the running one shows nothing, and clicking the icon
+    // again does nothing at all. Found on a machine where the app had been
+    // sitting in four windowless processes — 353 MB of it — with no way to get
+    // it back short of the task manager.
+    surface()
     void handleLink(linkFromArgv(argv))
   })
   // macOS delivers it as an event instead of an argument.
