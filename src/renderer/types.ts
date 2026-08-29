@@ -250,10 +250,11 @@ export type AppState = {
     chosen: number
     remembered: boolean
     pageName: string
-    /** These are the champion's pages across every role, because the role
-     *  picked has none of its own. */
-    anyRole: boolean
   } | null
+  /** The role we have NO rune data for, when that is why there are no pages.
+   *  ⚠️ The panel must say this instead of showing another lane's runes:
+   *  those are advice somebody acts on. */
+  runeGap: string | null
   runeImport:
     | { state: "idle" }
     | { state: "working" }

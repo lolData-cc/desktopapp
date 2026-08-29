@@ -142,11 +142,11 @@ export type AppState = {
      *  so the interface can say so instead of looking arbitrary. */
     remembered: boolean
     pageName: string
-    /** True when the picked role has no pages of its own and these are the
-     *  champion's across every role — the panel says so rather than passing
-     *  them off as a read on the lane. */
-    anyRole: boolean
   } | null
+  /** The role we have NO rune data for, when that is why there are no pages.
+   *  ⚠️ The panel must say this instead of showing another lane's runes:
+   *  those are advice somebody acts on. */
+  runeGap: string | null
   /** What happened the last time the player asked to import it. */
   runeImport:
     | { state: "idle" }
@@ -254,6 +254,7 @@ let state: AppState = {
   gold: null,
   levelHint: null,
   runes: null,
+  runeGap: null,
   runeImport: { state: "idle" },
   account: null,
   update: { state: "idle", version: app.getVersion() },
@@ -513,13 +514,15 @@ let runeFetch: AbortController | null = null
 
 async function readRunes(champion: Champion | null, role: string | null): Promise<void> {
   runeFetch?.abort()
-  if (!champion) return push({ runes: null, runeImport: { state: "idle" } })
+  if (!champion) return push({ runes: null, runeGap: null, runeImport: { state: "idle" } })
 
   const ctl = new AbortController()
   runeFetch = ctl
   const suggestion = await championRunes(champion.key, champion.name, role, ctl.signal).catch(() => null)
   if (ctl.signal.aborted) return
-  if (!suggestion) return push({ runes: null, runeImport: { state: "idle" } })
+  // No pages for this role. Say WHICH role, so the panel can explain itself
+  // instead of going blank — and never borrow another lane's runes.
+  if (!suggestion) return push({ runes: null, runeGap: role, runeImport: { state: "idle" } })
 
   // Matched by the runes themselves, not by position: variant order is a
   // popularity ranking and it moves between patches, so a stored index would
@@ -533,8 +536,8 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
       chosen: found >= 0 ? found : 0,
       remembered: found >= 0,
       pageName: pageName(champion.name, state.patch ?? ""),
-      anyRole: suggestion.anyRole,
     },
+    runeGap: null,
     runeImport: { state: "idle" },
   })
 }

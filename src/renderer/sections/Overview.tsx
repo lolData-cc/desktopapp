@@ -606,7 +606,31 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
     return () => window.clearTimeout(id)
   }, [locked])
 
-  if (!r || !v) return null
+  /**
+   * No pages for the lane that was actually picked.
+   *
+   * ⚠️ This says so instead of borrowing another lane's runes. The version
+   * before this fell back to the champion's pages across every role, and the
+   * first real pick it met was Twisted Fate TOP — whose sample is zero, so it
+   * offered his 399,190 MID games and recommended Arcane Comet to somebody about
+   * to play top. A rune page is advice you act on; a quiet provenance label at
+   * the bottom of the card cannot carry that.
+   */
+  if (!r || !v) {
+    if (!s.runeGap) return null
+    return (
+      <div className={locked ? "" : "mt-6 border-t border-jade/[0.12] pt-5"}>
+        <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.28em] text-citrine/60">
+          runes · no {s.runeGap.toLowerCase()} data
+        </p>
+        <p className="mt-2 max-w-[46ch] font-chakrapetch text-[12px] leading-relaxed text-flash/45">
+          Nobody plays {s.select?.champion?.name ?? "this champion"} here often enough to read a
+          page from. We will not hand you another lane's runes — they would be wrong in a way
+          that costs you the game.
+        </p>
+      </div>
+    )
+  }
   const imp = s.runeImport
 
   const body = (
@@ -700,19 +724,9 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
 
       {/* Furthest from the source, so faintest — a projection dims as it
           travels, and the ranking of the type says which end it is at. */}
-      <p
-        className="ds-late mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30"
-        title={
-          r.anyRole
-            ? "This role has no pages of its own, so these are the champion's across every role"
-            : undefined
-        }
-      >
+      <p className="ds-late mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30">
         {r.remembered && r.chosen !== 0 && <span className="text-jade/70">your last choice · </span>}
         {v.share >= 1 ? `${Math.round(v.share)}% of games` : "rarely played"} · {v.games.toLocaleString()} games
-        {/* Said, not hidden. These pages are a weaker answer than a lane-specific
-            one, and the panel that shows them has to admit which it is holding. */}
-        {r.anyRole && <span className="text-citrine/70"> · all roles</span>}
       </p>
 
       <div className="mt-3 flex items-center gap-4">

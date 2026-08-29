@@ -717,11 +717,12 @@ SCENES.updating = {
   ...(SCENES.select as object),
   update: { state: "downloading", version: "0.0.6", next: "0.0.7", percent: 42 },
 }
-// Il campione preso in un ruolo per cui non esistono pagine: l'API risponde
-// con sample=0 e il pannello ripiega sulle pagine di tutti i ruoli.
-SCENES.anyrole = {
+// Il ruolo scelto non ha dati: nessuna pagina, e il pannello lo dichiara
+// invece di prestare le rune di un'altra lane.
+SCENES.norunes = {
   ...(SCENES.locked as object),
-  runes: { ...DEV_RUNES, anyRole: true },
+  runes: null,
+  runeGap: "top",
 }
 
 SCENES.updated = {
