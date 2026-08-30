@@ -225,6 +225,18 @@
             const tick = setInterval(() => {
               peak.game = Math.max(peak.game, read(anGame))
               peak.voice = Math.max(peak.voice, read(anVoice))
+              /**
+               * ⚠️ REPORTED AS THEY GO, not handed over at the end.
+               *
+               * A game ends by its WINDOW CLOSING, and the desktop capture dies
+               * with it — "the target source has been closed", which arrives as
+               * `capture:failed` and finishes the recording on the spot. The
+               * clean `capture:stop` path, where these used to be collected,
+               * therefore almost never runs in real use: every recording came
+               * back with no peaks, and the player refused the second rail
+               * because it could not tell a working channel from a silent one.
+               */
+              ipcRenderer.send("capture:peaks", peak)
             }, 2000)
             meters = { peak, tick }
           } else {
@@ -378,6 +390,11 @@
           width: settings.width ?? 0,
           height: settings.height ?? 0,
           fps: Math.round(settings.frameRate ?? 0),
+          // ⚠️ What was actually BUILT, which is not always what was asked for:
+          // a missing process or a refused stream falls back to the mix, and a
+          // recording that claimed "split" while holding one mixed track would
+          // send the player looking for a channel that is not there.
+          layout: meters ? "split" : "stereo",
           audio: stream.getAudioTracks().length,
         }
       }

@@ -392,7 +392,19 @@ export async function beginRecording(
   return true
 }
 
-ipcMain.on("capture:started", (_e, info: { width: number; height: number; fps: number; audio: number; mimeType: string }) => {
+/**
+ * The running peak on each channel, as the recorder measures it.
+ *
+ * ⚠️ Kept up to date rather than collected at the end, because the end is not a
+ * place this code reliably reaches: a game finishes by its window closing, the
+ * desktop capture dies with it, and the recording is finished from the FAILURE
+ * path. Anything gathered only on a clean stop is, in practice, never gathered.
+ */
+ipcMain.on("capture:peaks", (_e, peaks: { game: number; voice: number }) => {
+  if (current) current.audioPeaks = peaks
+})
+
+ipcMain.on("capture:started", (_e, info: { width: number; height: number; fps: number; audio: number; mimeType: string; layout?: "split" | "stereo" }) => {
   if (current) {
     /**
      * ⚠️ The clock starts HERE, not when we asked.
@@ -403,6 +415,13 @@ ipcMain.on("capture:started", (_e, info: { width: number; height: number; fps: n
      * puts every jump the same half-second late, for the whole game.
      */
     current.startedAt = Date.now()
+    /**
+     * ⚠️ The layout the recorder BUILT, replacing the one the plan predicted.
+     * A missing process or a refused stream falls back to the mix, and a
+     * recording that claimed "split" while holding one mixed track sends the
+     * player looking for a channel that is not there.
+     */
+    if (info.layout) current.audioLayout = info.layout
     current.width = info.width
     current.height = info.height
     current.fps = info.fps

@@ -116,18 +116,26 @@ export default function Player({
   const [levels, setLevels] = useState<Record<Channel, number>>({ game: 1, voice: 1 })
 
   /**
-   * ⚠️ Offered only when the recording SAYS it has two programmes AND both of
-   * them were actually heard. `audioPeaks` is measured off the signal at record
-   * time precisely because a loopback capture aimed at the wrong process is
-   * live silence rather than an error — and a slider for a channel that holds
-   * nothing is worse than no slider at all.
+   * ⚠️ TWO DIFFERENT QUESTIONS, and tying them to one condition was a real bug:
+   * the recording played with everything hard right.
+   *
+   * A "split" file holds the game in its LEFT channel and Discord in its RIGHT.
+   * Played as ordinary stereo that is not a mix, it is two mono programmes in
+   * two ears — and if one of them is silent, everything comes out of one
+   * speaker. So the channels must be pulled apart and re-centred WHENEVER the
+   * file is split, whatever the peaks say. That is not a feature; it is the
+   * only way the file is listenable at all.
+   *
+   * Whether to OFFER the extra rails is the second question, and that one does
+   * depend on both channels holding something: a loopback capture aimed at the
+   * wrong process is live silence rather than an error, so a rail for an empty
+   * channel would be a control over nothing.
    */
-  const hasSplit =
-    rec.audioLayout === "split" &&
-    (rec.audioPeaks?.game ?? 0) > 0 &&
-    (rec.audioPeaks?.voice ?? 0) > 0
+  const isSplit = rec.audioLayout === "split"
+  const bothHeard =
+    (rec.audioPeaks?.game ?? 0) > 0 && (rec.audioPeaks?.voice ?? 0) > 0
 
-  const splitAudio = useSplitAudio(video, window.desktop.clipUrl(rec.id), hasSplit)
+  const splitAudio = useSplitAudio(video, window.desktop.clipUrl(rec.id), isSplit)
   const [drawing, setDrawing] = useState(false)
   /**
    * Whether playback has ever been started.
@@ -668,7 +676,9 @@ export default function Player({
           muted={muted}
           volume={volume}
           channels={
-            splitAudio.live
+            // ⚠️ The graph runs for every split file; the RAILS appear only when
+            // there are two programmes to balance.
+            splitAudio.live && bothHeard
               ? { levels, set: (ch, v) => setLevels((s) => ({ ...s, [ch]: v })) }
               : null
           }
