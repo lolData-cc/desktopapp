@@ -94,15 +94,33 @@ export type AppSettings = {
   capture: boolean
 
   /**
-   * What audio goes into the recording.
+   * What the MACHINE contributes to the recording.
    *
-   * ⚠️ "system" is EVERYTHING the machine plays — game, Discord, music, all
-   * mixed into one track. Per-application audio is not separable here: the
-   * loopback Chromium exposes is a single mix, and splitting it needs Windows'
-   * process-loopback through native code. Offering "game only" or "Discord
-   * only" would be a switch that quietly did something else.
+   * "system" is everything it plays, mixed into one track. "split" keeps the
+   * game and Discord apart in one stereo track — see shell/audioSplit.ts.
+   *
+   * ⚠️ THE MICROPHONE IS NOT IN HERE ANY MORE. It used to be, as "mic" and
+   * "both", and that made two independent questions into one list: choosing to
+   * record the game and Discord separately also meant choosing to drop your own
+   * voice, silently, because there was no member of the list that said both. A
+   * voice and a machine are two sources, and they get a switch each.
    */
-  captureAudio: "none" | "system" | "mic" | "both" | "split"
+  captureAudio: "none" | "system" | "split"
+  /** Record your own microphone alongside whatever the machine contributes. */
+  captureMic: boolean
+  /**
+   * Which microphone, by `deviceId`.
+   *
+   * ⚠️ Null means "whatever Windows calls the default", which is what everyone
+   * gets until they say otherwise — and it is the only value that survives the
+   * device being unplugged. A stored id that no longer exists is treated the
+   * same way: the recorder falls back to the default rather than recording
+   * nothing, because a silent voice track is not obviously broken.
+   */
+  captureMicDevice: string | null
+  /** Gain on the microphone, 0–2. Above 1 is amplification, which a quiet
+   *  headset mic against game audio very often needs. */
+  captureMicVolume: number
   /**
    * How much disk the automatic recordings may use, in gigabytes — or null for
    * no limit at all.
@@ -140,6 +158,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   loadingBoard: true,
   capture: false,
   captureAudio: "system",
+  captureMic: false,
+  captureMicDevice: null,
+  captureMicVolume: 1,
   // ~19 games at 1080p — close to what the old ten-game rule cost, with room.
   captureBudgetGb: 25,
   captureFps: 30,
@@ -246,17 +267,33 @@ export async function markRunesBackfilled(champion: string): Promise<void> {
   await persist(store)
 }
 
+/**
+ * Settings as this version understands them.
+ *
+ * ⚠️ The microphone LEFT `captureAudio`, so two of its old members no longer
+ * exist — and a stored file still holds them. Left alone, `"both"` would fall
+ * through every branch that asks what to record and quietly become silence:
+ * the worst kind of migration bug, because the setting still READS as chosen.
+ * They are translated into the pair of switches that replaced them.
+ */
+function migrate(s: Partial<AppSettings>): Partial<AppSettings> {
+  const legacy = s.captureAudio as unknown as string | undefined
+  if (legacy === "mic") return { ...s, captureAudio: "none", captureMic: true }
+  if (legacy === "both") return { ...s, captureAudio: "system", captureMic: true }
+  return s
+}
+
 /** Defaults filled in on read, so a file from an older version does not read
  *  as "every new feature off". */
 export async function readSettings(): Promise<AppSettings> {
-  return { ...DEFAULT_SETTINGS, ...((await load()).settings ?? {}) }
+  return { ...DEFAULT_SETTINGS, ...migrate((await load()).settings ?? {}) }
 }
 
 export async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const store = await load()
   store.settings = { ...(store.settings ?? {}), ...patch }
   await persist(store)
-  return { ...DEFAULT_SETTINGS, ...store.settings }
+  return { ...DEFAULT_SETTINGS, ...migrate(store.settings) }
 }
 
 export async function readSession(): Promise<Session | null> {

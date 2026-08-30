@@ -642,6 +642,10 @@ const BASE = {
     loadingBoard: true,
     capture: true,
     captureAudio: "system",
+    // Exercises the microphone controls in the dev preview.
+    captureMic: true,
+    captureMicDevice: null,
+    captureMicVolume: 1.2,
     captureBudgetGb: 25,
     captureFps: 30,
     objectiveNotices: true,

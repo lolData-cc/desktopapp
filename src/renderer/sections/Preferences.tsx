@@ -128,8 +128,6 @@ const AUDIO: { value: AppSettings["captureAudio"]; label: string; note: string }
     label: "System",
     note: "Everything the machine plays — game, Discord, music — as one track.",
   },
-  { value: "mic", label: "Microphone", note: "Your voice only." },
-  { value: "both", label: "Both", note: "System and microphone, mixed into one track." },
   {
     value: "split",
     label: "Game + Discord",
@@ -262,6 +260,8 @@ function CaptureTab({
               native module; the audio Chromium exposes is one mix. A "game
               only" option here would be a switch that quietly did something
               else. */}
+          <MicSettings v={v} set={set} />
+
           {/* ⚠️ Said plainly, and said DIFFERENTLY on a machine that cannot do
               it. The capture underneath is Windows 11's per-process loopback;
               no consumer Windows 10 build has the API. An option that is
@@ -803,3 +803,117 @@ export function Toggle({
     </button>
   )
 }
+
+/**
+ * The microphone: whether, which one, and how loud.
+ *
+ * ⚠️ SEPARATE FROM THE LIST ABOVE, and that is the fix rather than the feature.
+ * The voice used to be two members of that list — "Microphone" and "Both" — so
+ * "record my voice" and "record the machine" were one question, and the answer
+ * that meant BOTH of them and kept Discord separate did not exist. Choosing
+ * "Game + Discord" silently dropped the player's own voice.
+ */
+function MicSettings({
+  v,
+  set,
+}: {
+  v: AppSettings
+  set: (patch: Partial<AppSettings>) => void
+}) {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  const [asked, setAsked] = useState(false)
+
+  useEffect(() => {
+    if (!v.captureMic) return
+    let alive = true
+
+    const list = async () => {
+      const all = await navigator.mediaDevices.enumerateDevices().catch(() => [])
+      const ins = all.filter((d) => d.kind === "audioinput")
+      if (alive) setDevices(ins)
+      return ins
+    }
+
+    void list().then(async (ins) => {
+      /**
+       * ⚠️ Device LABELS are empty until microphone permission has been granted
+       * once — the list comes back with ids and blank names, which is a dropdown
+       * of indistinguishable rows. Asking for a stream and immediately stopping
+       * it is what unlocks them, and it is done once, only after the player has
+       * turned the microphone on: opening a settings page should not take a
+       * microphone.
+       */
+      if (asked || ins.some((d) => d.label)) return
+      setAsked(true)
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null)
+      s?.getTracks().forEach((t) => t.stop())
+      if (alive) void list()
+    })
+
+    return () => { alive = false }
+  }, [v.captureMic, asked])
+
+  return (
+    <div className="mt-3">
+      <Toggle
+        on={!!v.captureMic}
+        onChange={(on) => set({ captureMic: on })}
+        label="Record my microphone"
+        note="Mixed into the recording alongside whatever the machine plays. Your voice is captured only while a game is being recorded, and never on its own."
+      />
+
+      {v.captureMic && (
+        <div className="mt-3 space-y-3 pl-1">
+          <div>
+            <p className="mb-1.5 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
+              device
+            </p>
+            {/* ⚠️ A real <select>. The platform's own list scrolls, filters by
+                typing and works from the keyboard — all of which a bespoke
+                dropdown would have to rebuild, and would rebuild worse. */}
+            <select
+              value={v.captureMicDevice ?? ""}
+              onChange={(e) => set({ captureMicDevice: e.target.value || null })}
+              className="w-full rounded-[3px] px-2.5 py-2 font-chakrapetch text-[12.5px] text-flash/80"
+              style={{ background: "rgba(215,216,217,0.03)", boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.14)" }}
+            >
+              {/* The default is a real choice and the one that survives a
+                  headset being unplugged, so it is first and it is named. */}
+              <option value="">System default</option>
+              {devices.map((d, i) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Input ${i + 1}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <p className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
+                level
+              </p>
+              {/* ⚠️ Says what it IS, not where the handle is. Above 100% is
+                  amplification, and a headset mic against game audio very often
+                  needs it — so the scale goes there and admits it. */}
+              <p className="font-jetbrains text-[10px] tabular-nums text-flash/45">
+                {Math.round((v.captureMicVolume ?? 1) * 100)}%
+              </p>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.05}
+              value={v.captureMicVolume ?? 1}
+              aria-label="Microphone level"
+              onChange={(e) => set({ captureMicVolume: Number(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+

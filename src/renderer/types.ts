@@ -149,7 +149,17 @@ export type AppSettings = {
   /** "split" keeps the game and Discord apart in one stereo track — see
    *  shell/audioSplit.ts. It falls back to "system" on any machine or moment
    *  that cannot do it, so a recording is never lost to it. */
-  captureAudio: "none" | "system" | "mic" | "both" | "split"
+  captureAudio: "none" | "system" | "split"
+  /** Record your own voice alongside whatever the machine contributes.
+   *  ⚠️ Independent of the above: it used to be two members of that list,
+   *  which made "Game + Discord" silently drop the microphone. */
+  captureMic: boolean
+  /** Which input, by deviceId. Null is the system default, and is what a stored
+   *  id falls back to once that device is gone. */
+  captureMicDevice: string | null
+  /** 0-2. Above 1 is amplification, which a headset mic against game audio very
+   *  often needs. */
+  captureMicVolume: number
   /** Gigabytes of automatic recordings to keep, or null for no limit. */
   captureBudgetGb: number | null
   /** Frames per second to record at. */

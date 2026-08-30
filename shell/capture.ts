@@ -290,7 +290,10 @@ ipcMain.on("capture:failed", (_e, message: string) => {
 export async function beginRecording(
   settings: {
     capture: boolean
-    captureAudio: "none" | "system" | "mic" | "both" | "split"
+    captureAudio: "none" | "system" | "split"
+    captureMic?: boolean
+    captureMicDevice?: string | null
+    captureMicVolume?: number
     captureBudgetGb?: number | null
     captureFps?: number
   },
@@ -365,6 +368,14 @@ export async function beginRecording(
     // What the machine can actually do, which is not always what was asked
     // for: Windows 10, or Discord simply not running, both land on "stereo".
     layout: plan.layout,
+    // ⚠️ Sent whatever the layout is. The microphone is a separate source from
+    // whatever the machine contributes, and bundling the two into one enum is
+    // exactly what made "Game + Discord" silently drop the player's voice.
+    mic: {
+      on: !!settings.captureMic,
+      deviceId: settings.captureMicDevice ?? null,
+      volume: typeof settings.captureMicVolume === "number" ? settings.captureMicVolume : 1,
+    },
     fps,
     /**
      * ⚠️ Scaled with the frame rate, not fixed.

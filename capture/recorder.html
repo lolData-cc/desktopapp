@@ -46,6 +46,7 @@
       let mixer = null
       let meters = null
       let lastPeaks = null
+      let micInGraph = null
       let recorder = null
       let stream = null
       /** Chunks read but not yet handed to the shell. */
@@ -53,7 +54,7 @@
 
       const pick = () => CODECS.find((t) => MediaRecorder.isTypeSupported(t)) ?? ""
 
-      async function start({ sourceId, audio, layout, fps, bitrate }) {
+      async function start({ sourceId, audio, layout, fps, bitrate, mic }) {
         await stop()
 
         // The graph that mixes the microphone into the system audio, when both
@@ -63,9 +64,13 @@
         // ⚠️ In split mode the system MIX is exactly what we do not want: the
         // whole point is two programmes kept apart, and the mix is both of them
         // already blended past separating.
+        micInGraph = null
         const split = layout === "split"
         const wantsSystem = !split && (audio === "system" || audio === "both")
-        const wantsMic = audio === "mic" || audio === "both"
+        // ⚠️ INDEPENDENT of `audio` now. It used to be two members of that
+        // list, which made "record my voice" and "record the machine" one
+        // question with no answer that meant both.
+        const wantsMic = !!mic?.on
 
         // The desktop video track, and the system mix alongside it when asked.
         // ⚠️ Loopback audio has to be requested in the SAME getUserMedia call as
@@ -162,6 +167,34 @@
 
             const anGame = arm(game, 0)
             const anVoice = arm(voice, 1)
+
+            /**
+             * ⚠️ YOUR OWN VOICE JOINS THE CHAT CHANNEL, and it has to join the
+             * graph HERE rather than through the mixing path below. That path
+             * folds whatever audio tracks the stream already has into one
+             * destination - which would collapse the stereo track this just
+             * built, and the two programmes with it.
+             *
+             * Chat rather than centred: turning the chat rail down in the replay
+             * should quieten the conversation, and your half of a conversation
+             * is part of it. Centred it would be the one voice you cannot lower
+             * while lowering the others.
+             */
+            if (wantsMic) {
+              try {
+                const own = await navigator.mediaDevices.getUserMedia({
+                  audio: mic?.deviceId ? { deviceId: { ideal: mic.deviceId } } : true,
+                })
+                const g = ctx.createGain()
+                g.gain.value = typeof mic?.volume === "number" ? mic.volume : 1
+                ctx.createMediaStreamSource(own).connect(g)
+                g.connect(merger, 0, 1)
+                micInGraph = own
+              } catch (e) {
+                ipcRenderer.send("capture:warn", "microphone unavailable: " + String(e).slice(0, 120))
+              }
+            }
+
             merger.connect(dest)
 
             // Electron's default autoplay policy does not require a gesture, but
@@ -172,7 +205,14 @@
             }
 
             dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t))
-            mixer = { ctx, mic: new MediaStream([...game.getTracks(), ...voice.getTracks()]) }
+            mixer = {
+              ctx,
+              mic: new MediaStream([
+                ...game.getTracks(),
+                ...voice.getTracks(),
+                ...(micInGraph ? micInGraph.getTracks() : []),
+              ]),
+            }
 
             const buf = new Uint8Array(anGame.fftSize)
             const peak = { game: 0, voice: 0 }
@@ -199,12 +239,22 @@
           }
         }
 
-        if (wantsMic) {
+        if (wantsMic && !micInGraph) {
           // A separate call, because a microphone is a real device and cannot
           // ride the desktop constraint. Failure here is not fatal: a recording
           // without your voice beats no recording.
           try {
-            const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+            /**
+             * ⚠️ `ideal`, not `exact`. A stored device id outlives the device:
+             * headsets get unplugged, and Windows renumbers them. `exact` would
+             * throw and the game would record with no voice at all, which is a
+             * failure that looks exactly like success. `ideal` falls back to
+             * the default input, which is what the player had before they ever
+             * opened this setting.
+             */
+            const micStream = await navigator.mediaDevices.getUserMedia({
+              audio: mic?.deviceId ? { deviceId: { ideal: mic.deviceId } } : true,
+            })
 
             /**
              * ⚠️ MIXED, not added as a second track.
@@ -228,7 +278,18 @@
 
             const sys = new MediaStream(stream.getAudioTracks())
             if (sys.getAudioTracks().length) ctx.createMediaStreamSource(sys).connect(dest)
-            ctx.createMediaStreamSource(mic).connect(dest)
+
+            /**
+             * ⚠️ The voice gets a GAIN and the machine does not, deliberately.
+             * A headset microphone against game audio is usually the quiet one,
+             * and the only fix a player has otherwise is Windows' own mixer —
+             * so this goes above 1. The machine's level is whatever the machine
+             * played; changing that would be rewriting the game's own mix.
+             */
+            const voice = ctx.createGain()
+            voice.gain.value = typeof mic?.volume === "number" ? mic.volume : 1
+            ctx.createMediaStreamSource(micStream).connect(voice)
+            voice.connect(dest)
 
             // The originals leave the stream; the mix takes their place.
             stream.getAudioTracks().forEach((t) => stream.removeTrack(t))
@@ -237,7 +298,7 @@
             // ⚠️ Kept alive for the recording, and closed with it: an
             // AudioContext that goes out of scope is collected, and the mix
             // stops without a word.
-            mixer = { ctx, mic }
+            mixer = { ctx, mic: micStream }
           } catch (e) {
             ipcRenderer.send("capture:warn", "microphone unavailable: " + String(e).slice(0, 120))
           }
