@@ -75,18 +75,6 @@ export default function Matches({ s }: { s: AppState }) {
     return all
   }, [matches, s.recordings, only])
 
-  /**
-   * Whether to name the account on each row.
-   *
-   * Shown only when this machine has actually seen more than one. On a computer
-   * with a single account the name is the same on every row — a column of
-   * identical words, which is noise rather than information.
-   */
-  const manyAccounts = useMemo(
-    () => new Set((matches ?? []).map((m) => m.account?.puuid).filter(Boolean)).size > 1,
-    [matches]
-  )
-
   const detail = open !== null ? (matches ?? []).find((m) => m.gameId === open) : null
   if (detail) return <MatchDetail s={s} match={detail} onBack={() => setOpen(null)} />
 
@@ -125,7 +113,7 @@ export default function Matches({ s }: { s: AppState }) {
               clip={clip}
               patch={s.patch}
               index={i}
-              account={manyAccounts ? (m.account?.name ?? null) : null}
+              account={m.account?.name ?? null}
               onOpen={() => setOpen(m.gameId)}
             />
           ))

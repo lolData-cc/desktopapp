@@ -108,10 +108,24 @@ type RawGame = {
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0)
 
 /** Riot's lane vocabulary is not the one the rest of the app speaks. */
+/**
+ * ⚠️ The client says SUPPORT, not DUO_SUPPORT.
+ *
+ * This looked only for the DUO_* vocabulary, which the current client does not
+ * use: read live from a real history, the pairs are BOTTOM/CARRY, NONE/SUPPORT,
+ * TOP/SOLO, JUNGLE/NONE. So every support came back with no role at all, and a
+ * player with no role has no lane opponent either — the empty rhombus on those
+ * rows was this, not missing data.
+ *
+ * Both spellings are accepted because only one of them was ever measured, and
+ * the older one costs nothing to keep.
+ */
 function readRole(t: { lane?: string; role?: string } | undefined): string | null {
   const lane = t?.lane
-  if (!lane || lane === "NONE") return t?.role === "DUO_SUPPORT" ? "SUPPORT" : null
-  if (lane === "BOTTOM") return t?.role === "DUO_SUPPORT" ? "SUPPORT" : "BOTTOM"
+  const role = t?.role
+  const isSupport = role === "DUO_SUPPORT" || role === "SUPPORT"
+  if (!lane || lane === "NONE") return isSupport ? "SUPPORT" : null
+  if (lane === "BOTTOM") return isSupport ? "SUPPORT" : "BOTTOM"
   if (lane === "JUNGLE" || lane === "MIDDLE" || lane === "TOP") return lane
   return null
 }
@@ -240,7 +254,7 @@ const hasSmite = (p: NonNullable<RawGame["participants"]>[number]) =>
  * know", which is true and cheap; a confident wrong champion is the app lying
  * about a game the player was in and remembers.
  */
-function opponentOf(
+export function opponentOf(
   g: RawGame,
   me: NonNullable<RawGame["participants"]>[number]
 ): { championId: number; role: string | null } | null {
@@ -260,7 +274,31 @@ function opponentOf(
 
   const laners = them.filter((p) => !hasSmite(p))
   const match = laners.find((p) => readRole(p.timeline) === role)
-  return match ? { championId: num(match.championId), role } : null
+  if (match) return { championId: num(match.championId), role }
+
+  /**
+   * Nobody on the other side claims my lane — which is common, not an edge
+   * case, because Riot's own timeline mislabels laners.
+   *
+   * Measured on a real solo-queue game: I was TOP/SOLO, and the enemy top was
+   * recorded as lane JUNGLE with no Smite while their actual jungler carried
+   * it. No enemy read TOP at all, so the lane opponent came back null on every
+   * game like it.
+   *
+   * ⚠️ Only when EXACTLY ONE candidate is left. A player whose lane the data
+   * lost reads as JUNGLE-without-Smite or as nothing; if one enemy is in that
+   * state and my lane is missing from their side, they are mine by elimination.
+   * If two are, the answer is a coin toss — and a confident wrong champion is
+   * the app lying about a game the player remembers, so it stays null.
+   */
+  const lost = laners.filter((p) => {
+    const r = readRole(p.timeline)
+    return r === null || r === "JUNGLE"
+  })
+  const only = lost[0]
+  if (lost.length === 1 && only) return { championId: num(only.championId), role }
+
+  return null
 }
 
 function toMatch(g: RawGame, puuid: string): Match | null {
