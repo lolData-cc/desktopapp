@@ -43,7 +43,15 @@ jobs:
 
       # Typechecked here rather than trusted: `bun run build` transpiles and
       # does not typecheck, so without this a type error ships.
-      - run: bunx tsc --noEmit -p tsconfig.json
+      #
+      # ⚠️ `bun run typecheck`, NOT `tsc -p tsconfig.json`. There are two bodies
+      # of code here with two contracts: the app's own, checked strictly, and
+      # the tree lifted byte-for-byte from the website, checked under the rules
+      # it was written to. The strict config follows imports into the copy and
+      # reports ~54 complaints about array indexing that are configuration
+      # differences rather than defects — running it alone would fail every
+      # release. See scripts/typecheck.ts.
+      - run: bun run typecheck
 
       - name: Package and publish
         # Publishes only for a tag; a manual run builds and proves nothing is
