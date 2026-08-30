@@ -9,10 +9,12 @@ import { mmss, type Highlight } from "./types"
  * eleven moments that mattered can be reached without hunting, so the thing
  * that shows where they are gets the care.
  *
- * ⚠️ Shape carries the meaning, not just colour. A kill points UP and is
- * filled; a death points DOWN and is hollow. Colour agrees with the shape but
+ * ⚠️ Shape carries the meaning, not just colour. A kill is crossed swords, a
+ * death is a golem's face, an assist is a dot. Colour agrees with the shape but
  * is never the only thing saying it — a red tick and a green tick are the same
- * tick to a red-green colourblind player, and this app has a lot of both.
+ * tick to a red-green colourblind player, and this app has a lot of both, and
+ * two triangles that differed only in which way up they were asked more of a
+ * glance than a glance gives.
  *
  * The words live in the card that appears on hover. Cramming "kill" into
  * seventeen pixels produced a letter in a box, which is what a marker looks
@@ -314,13 +316,57 @@ function Mark({
   // Room to click that the drawn shape does not need: the head is eight pixels
   // and the target is twenty-two, which is the difference between a bar you
   // can use and one you fight.
+  /**
+   * ⚠️ Drawn for FOURTEEN PIXELS, and checked at that size rather than at the
+   * size it is comfortable to draw at. Everything here is authored in the
+   * 14-unit box the <svg> below sets, centred on (7,7); a detail that survives
+   * at 72px and dies at 14 is a detail that does not exist.
+   */
   const glyph = useMemo(() => {
+    // The most numerous thing on the bar and the least worth stopping for, so
+    // it stays the quietest mark there is.
     if (assist) return <circle cx="7" cy="7" r="2.6" fill={colour} opacity="0.75" />
+
     if (down)
       return (
-        <path d="M2 3.5 L12 3.5 L7 11.5 Z" fill="none" stroke={colour} strokeWidth="1.6" strokeLinejoin="round" />
+        <>
+          {/* A golem's head: a heavy brow, a slot of dark, and a wide blocky
+              jaw under it. The gap between the two is what makes it read as
+              machine rather than bone — plates that were assembled, not a
+              skull that grew. */}
+          <path d="M2.5 5.5 L4.3 2.4 L9.7 2.4 L11.5 5.5 Z" fill={colour} />
+          <path
+            d="M3.4 6.6 L10.6 6.6 L10.6 9.6 L9 11.7 L5 11.7 L3.4 9.6 Z"
+            fill="none"
+            stroke={colour}
+            strokeWidth="1.15"
+            strokeLinejoin="round"
+          />
+          {/* ⚠️ The eyes are LIT, not coloured, and they are the reason this
+              still reads at fourteen pixels: two bright points under a heavy
+              brow are a face long before the outline around them is legible. */}
+          <g style={{ filter: `drop-shadow(0 0 2.5px ${colour})` }}>
+            <rect x="4.5" y="7.4" width="1.9" height="1.7" fill="#fff5f7" />
+            <rect x="7.6" y="7.4" width="1.9" height="1.7" fill="#fff5f7" />
+          </g>
+        </>
       )
-    return <path d="M7 2.5 L12 10.5 L2 10.5 Z" fill={colour} stroke={colour} strokeWidth="1.4" strokeLinejoin="round" />
+
+    return (
+      <>
+        {/* Two blades, and the crossguards that stop an X reading as a
+            multiplication sign. Filled rather than outlined: at this size an
+            outlined blade is two hairlines a pixel apart, which is a smudge. */}
+        <path d="M11.9 1.6 L12.4 3.4 L4.6 11.9 L3.1 10.5 Z" fill={colour} />
+        <path d="M2.1 1.6 L1.6 3.4 L9.4 11.9 L10.9 10.5 Z" fill={colour} opacity="0.92" />
+        <path
+          d="M2 8.2 L5.4 11.6 M12 8.2 L8.6 11.6"
+          stroke={colour}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </>
+    )
   }, [assist, down, colour])
 
   // 22px clears a 14px glyph with room to spare, which is what "these are two
