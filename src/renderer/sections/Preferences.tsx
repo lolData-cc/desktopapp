@@ -1,3 +1,10 @@
+import { ChevronDown } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/ui/dropdown-menu"
 import { useEffect, useState } from "react"
 import { CDN, type AppSettings, type AppState, type Recording } from "../types"
 
@@ -805,6 +812,84 @@ export function Toggle({
 }
 
 /**
+ * Which microphone, in this app's own clothes.
+ *
+ * ⚠️ NOT a native <select>. On Windows that is a white system menu with a
+ * white field, and it landed in the middle of a dark panel looking like a
+ * dialog from another program. The site solves the same problem in its player
+ * search — the region switcher — and this is that control: a quiet trigger that
+ * lights on hover, a chevron that turns, and a dark sheet with a jade tick down
+ * the left of the chosen row.
+ *
+ * ⚠️ The tick is a BORDER, not only a tint. A colour alone is the one thing a
+ * red-green colourblind player cannot read, and this app has a lot of both.
+ */
+function MicPicker({
+  devices,
+  chosen,
+  onPick,
+}: {
+  devices: MediaDeviceInfo[]
+  chosen: string | null
+  onPick: (id: string | null) => void
+}) {
+  const name = (d: MediaDeviceInfo, i: number) => d.label || `Input ${i + 1}`
+  const here = devices.findIndex((d) => d.deviceId === chosen)
+  const label = chosen && here >= 0 ? name(devices[here]!, here) : "System default"
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="group flex w-full items-center gap-2 rounded-[3px] px-2.5 py-2 text-left outline-none transition-colors"
+        style={{ background: "rgba(215,216,217,0.03)", boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.14)" }}
+      >
+        <span className="min-w-0 flex-1 truncate font-chakrapetch text-[12.5px] text-flash/75 transition-colors group-hover:text-flash">
+          {label}
+        </span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-flash/40 transition-transform duration-200 group-data-[state=open]:rotate-180 group-data-[state=open]:text-jade" />
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        align="start"
+        sideOffset={6}
+        className="max-h-[260px] min-w-[240px] overflow-y-auto rounded-md border border-jade/20 bg-black/90 p-1 backdrop-blur-xl"
+      >
+        {/* The default is a real choice, and the only one that survives the
+            device being unplugged — so it is first and it is named. */}
+        <MicRow label="System default" active={!chosen} onPick={() => onPick(null)} />
+        {devices.map((d, i) => (
+          <MicRow
+            key={d.deviceId}
+            label={name(d, i)}
+            active={d.deviceId === chosen}
+            onPick={() => onPick(d.deviceId)}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const MicRow = ({
+  label,
+  active,
+  onPick,
+}: {
+  label: string
+  active: boolean
+  onPick: () => void
+}) => (
+  <DropdownMenuItem
+    onClick={onPick}
+    className={`cursor-pointer truncate rounded-[3px] border-l-2 px-3 py-1.5 font-chakrapetch text-[11.5px] transition-colors focus:bg-jade/10 focus:text-jade ${
+      active ? "border-jade bg-jade/[0.08] text-jade" : "border-transparent text-flash/55 hover:border-jade/30"
+    }`}
+  >
+    {label}
+  </DropdownMenuItem>
+)
+
+/**
  * The microphone: whether, which one, and how loud.
  *
  * ⚠️ SEPARATE FROM THE LIST ABOVE, and that is the fix rather than the feature.
@@ -863,33 +948,23 @@ function MicSettings({
       />
 
       {v.captureMic && (
-        <div className="mt-3 space-y-3 pl-1">
-          <div>
+        // ⚠️ Side by side, half each. Stacked, the device sat on a full-width
+        // row it did not need — a name is short — while the level got a strip
+        // so wide that a five-percent step moved the handle a hair.
+        <div className="mt-3 grid grid-cols-2 gap-4 pl-1">
+          <div className="min-w-0">
             <p className="mb-1.5 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
               device
             </p>
-            {/* ⚠️ A real <select>. The platform's own list scrolls, filters by
-                typing and works from the keyboard — all of which a bespoke
-                dropdown would have to rebuild, and would rebuild worse. */}
-            <select
-              value={v.captureMicDevice ?? ""}
-              onChange={(e) => set({ captureMicDevice: e.target.value || null })}
-              className="w-full rounded-[3px] px-2.5 py-2 font-chakrapetch text-[12.5px] text-flash/80"
-              style={{ background: "rgba(215,216,217,0.03)", boxShadow: "inset 0 0 0 1px rgba(0,217,146,0.14)" }}
-            >
-              {/* The default is a real choice and the one that survives a
-                  headset being unplugged, so it is first and it is named. */}
-              <option value="">System default</option>
-              {devices.map((d, i) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Input ${i + 1}`}
-                </option>
-              ))}
-            </select>
+            <MicPicker
+              devices={devices}
+              chosen={v.captureMicDevice ?? null}
+              onPick={(id) => set({ captureMicDevice: id })}
+            />
           </div>
 
-          <div>
-            <div className="mb-1.5 flex items-baseline justify-between">
+          <div className="min-w-0">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2">
               <p className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
                 level
               </p>
@@ -900,6 +975,11 @@ function MicSettings({
                 {Math.round((v.captureMicVolume ?? 1) * 100)}%
               </p>
             </div>
+            {/* ⚠️ The track is DRAWN, because this app strips `appearance` from
+                every input in its base layer — which is what the Explorer
+                needed and what left this control as a bare handle floating on
+                nothing. The jade run is a gradient stop at the current value,
+                since a range input has no fill of its own. */}
             <input
               type="range"
               min={0}
@@ -908,8 +988,20 @@ function MicSettings({
               value={v.captureMicVolume ?? 1}
               aria-label="Microphone level"
               onChange={(e) => set({ captureMicVolume: Number(e.target.value) })}
-              className="w-full"
+              className="mic-level w-full"
+              style={{
+                background: `linear-gradient(90deg, #00d992 0%, #00d992 ${
+                  ((v.captureMicVolume ?? 1) / 2) * 100
+                }%, rgba(215,216,217,0.14) ${((v.captureMicVolume ?? 1) / 2) * 100}%, rgba(215,216,217,0.14) 100%)`,
+              }}
             />
+            {/* 100% is the only number on this scale with a meaning of its own:
+                everything above it is amplification. */}
+            <div className="mt-1 flex justify-between font-jetbrains text-[8px] uppercase tracking-[0.14em] text-flash/20">
+              <span>off</span>
+              <span>100%</span>
+              <span>200%</span>
+            </div>
           </div>
         </div>
       )}

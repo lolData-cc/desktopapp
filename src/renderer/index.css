@@ -1290,3 +1290,30 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .cy-wait span[class*="bg-flash"] { animation: none; }
 }
+
+/* The microphone level.
+   ⚠️ The track is drawn here because the base layer strips `appearance` from
+   every input — which is what the ported Explorer needed, and what left this
+   control as a handle floating on nothing. The FILL comes from an inline
+   gradient at the current value, since a range input has no fill of its own. */
+.mic-level {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.mic-level::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 5px;
+  height: 15px;
+  border-radius: 1px;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(0, 217, 146, 0.6);
+  cursor: pointer;
+}
+.mic-level:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px rgba(0, 217, 146, 0.6);
+}
