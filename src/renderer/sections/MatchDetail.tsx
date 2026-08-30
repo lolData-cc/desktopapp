@@ -96,6 +96,7 @@ export default function MatchDetail({
           to fullscreen: the player takes the screen on its own, as it always
           did, and this is purely a response to how much room the app has. */}
       <div className="match-stage no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
+        <div className="match-stage-row">
         {/* ── the recording, first ─────────────────────────────────────── */}
         {clip && (
           /* ⚠️ THIS is the flex item in the wide layout, not .match-stage-video —
@@ -188,14 +189,18 @@ export default function MatchDetail({
         {chosen && <Card p={chosen} patch={patch} match={match} rank={chosen.riotId ? ranks[chosen.riotId] ?? null : null} onClose={() => setPicked(null)} />}
         </div>
 
-      </div>
+        </div>
 
-      {/* ⚠️ OUTSIDE .match-stage, and that is the whole point. At wide widths
-          that element is a flex ROW — dropping this inside it made the panel a
-          third column beside the video and the board instead of a band under
-          them, and the recording shrank to a thumbnail to make room. It sits
-          after the row, so the layout above it is untouched. */}
-      <MatchInsights board={board} chosen={chosen} patch={patch} />
+        {/* ⚠️ After the ROW but still inside the SCROLLER.
+            .match-stage is both at once — it is the element with overflow-y and
+            the element the wide-window media query turns into a flex row — and
+            that pulled this band two ways. Inside it, the band became a third
+            column and squashed the video to a thumbnail. Outside it, the band
+            sat still while the stage scrolled underneath, pinned to the bottom
+            of the window. The row is its own element now, so the band is simply
+            the next thing down the page. */}
+        <MatchInsights board={board} chosen={chosen} patch={patch} />
+      </div>
 
       {sharing && clip && <ShareClip rec={clip} s={s} onClose={() => setSharing(false)} />}
     </div>

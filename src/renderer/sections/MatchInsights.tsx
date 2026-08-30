@@ -66,6 +66,46 @@ export default function MatchInsights({
   )
 }
 
+/**
+ * The shell every card here wears: a mark, a label, and one rule that leaves the
+ * words and dies into nothing.
+ *
+ * ⚠️ Not a bordered box. Four borders around each of five cards is a grid of
+ * boxes, and the eye has to enter every one of them; the rule and the mark say
+ * "a new thing starts here" with a tenth of the ink. The same figure the panels
+ * elsewhere in this app are built from.
+ */
+function Panel({
+  label,
+  children,
+  className = "",
+}: {
+  label: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={`relative rounded-[3px] bg-[rgba(6,12,14,0.42)] px-4 pb-4 pt-3.5 ${className}`}>
+      <div className="flex items-center gap-2">
+        <svg aria-hidden width="7" height="7" viewBox="0 0 7 7" className="shrink-0 overflow-visible">
+          <g transform="rotate(45 3.5 3.5)">
+            <rect x="0.8" y="0.8" width="5.4" height="5.4" fill="#00d992" opacity="0.85" />
+          </g>
+        </svg>
+        <p className="whitespace-nowrap font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/35">
+          {label}
+        </p>
+        <span
+          aria-hidden
+          className="h-px flex-1"
+          style={{ background: "linear-gradient(90deg, rgba(0,217,146,0.28), rgba(0,217,146,0))" }}
+        />
+      </div>
+      {children}
+    </section>
+  )
+}
+
 /* ── the three charts ────────────────────────────────────────────────────── */
 
 /**
@@ -90,9 +130,8 @@ function Bars({
   const top = pick(rows[0] ?? ({ damage: 0 } as MatchPlayer)) || 1
 
   return (
-    <div className="rounded-[3px] border border-jade/[0.10] bg-[rgba(6,12,14,0.5)] p-4">
-      <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/30">{label}</p>
-      <div className="mt-3 space-y-[5px]">
+    <Panel label={label}>
+      <div className="mt-3.5 space-y-[6px]">
         {rows.map((p) => {
           const v = pick(p)
           const mine = chosen ? p.participantId === chosen.participantId : p.isMe
@@ -132,7 +171,7 @@ function Bars({
           )
         })}
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -192,9 +231,8 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
   const wr = games ? Math.round((profile.wins / games) * 1000) / 10 : null
 
   return (
-    <div className="rounded-[3px] border border-jade/[0.10] bg-[rgba(6,12,14,0.5)] p-4">
-      <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/30">the player</p>
-      <p className="mt-2 truncate font-chakrapetch text-[17px] font-bold leading-none text-flash/90">
+    <Panel label="the player">
+      <p className="mt-3 truncate font-chakrapetch text-[19px] font-bold leading-none text-flash/90">
         {profile.name}
         <span className="text-flash/35">#{profile.tag}</span>
       </p>
@@ -227,7 +265,7 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
           )}
         </Fact>
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -287,8 +325,8 @@ function ChampionCard({ chosen, patch }: { chosen: MatchPlayer | null; patch: st
   const kda = chosen.deaths > 0 ? (chosen.kills + chosen.assists) / chosen.deaths : chosen.kills + chosen.assists
 
   return (
-    <div className="rounded-[3px] border border-jade/[0.10] bg-[rgba(6,12,14,0.5)] p-4">
-      <div className="flex items-center gap-2.5">
+    <Panel label="this game vs the champion's average">
+      <div className="mt-3.5 flex items-center gap-2.5">
         <img
           src={`${CDN}/img/champion/${chosen.championId}.png`}
           alt=""
@@ -296,10 +334,7 @@ function ChampionCard({ chosen, patch }: { chosen: MatchPlayer | null; patch: st
           onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden" }}
         />
         <div className="min-w-0">
-          <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/30">
-            this game vs the champion's average
-          </p>
-          <p className="truncate font-chakrapetch text-[14px] font-bold leading-tight text-flash/85">
+          <p className="truncate font-chakrapetch text-[15px] font-bold leading-tight text-flash/85">
             {chosen.name}
             {chosen.role ? <span className="text-flash/35"> · {chosen.role.toLowerCase()}</span> : null}
           </p>
@@ -329,7 +364,7 @@ function ChampionCard({ chosen, patch }: { chosen: MatchPlayer | null; patch: st
           </p>
         </div>
       )}
-    </div>
+    </Panel>
   )
 }
 
@@ -395,8 +430,7 @@ const Fact = ({ label, children }: { label: string; children: React.ReactNode })
 )
 
 const Empty = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-[3px] border border-jade/[0.10] bg-[rgba(6,12,14,0.5)] p-4">
-    <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/30">{title}</p>
-    <p className="mt-2 font-chakrapetch text-[12px] leading-relaxed text-flash/35">{children}</p>
-  </div>
+  <Panel label={title}>
+    <p className="mt-3 font-chakrapetch text-[12.5px] leading-relaxed text-flash/30">{children}</p>
+  </Panel>
 )

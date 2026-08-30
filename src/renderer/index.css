@@ -942,7 +942,7 @@ body {
    board. Sizing .match-stage-video instead sizes something that is not a flex
    item, leaves its wrapper with no height, and collapses the player to nothing. */
 @media (min-width: 1700px) {
-  .match-stage {
+  .match-stage-row {
     display: flex;
     flex-direction: row;
     /* ⚠️ STRETCH, not flex-start. The two columns are one object seen from two
