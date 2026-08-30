@@ -1,4 +1,26 @@
 @tailwind base;
+
+/**
+ * ⚠️ THE BROWSER'S OWN CHROME, REMOVED. This is the rule the website has and
+ * this app did not, and its absence is what made the ported Explorer look
+ * "super white": a bare <input> renders with the platform's white field and a
+ * grey inset border, and a bare <button> with its own border and fill. The site
+ * strips all four elements down to nothing and lets the classes on each one do
+ * the styling, so its components carry no defence against defaults — they never
+ * needed one.
+ *
+ * ⚠️ In the BASE layer, which is the lowest of the three, so every utility on
+ * every element still wins over it. This takes the default away; it does not
+ * take a decision away from anything that has made one.
+ */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    @apply appearance-none border-0 bg-transparent outline-none;
+  }
+}
 @tailwind components;
 @tailwind utilities;
 
