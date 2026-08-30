@@ -62,6 +62,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 ]
 
 const DISCORD = "https://discord.gg/loldata"
+const X_ACCOUNT = "https://x.com/loldatacc"
 
 /** Phases that mean the next game has genuinely started, and the last one's
  *  recap should stand down. */
@@ -243,14 +244,6 @@ export default function App() {
           }}
         />
       )}
-      {/* ⚠️ The status strip is gone. It reported the client state and the
-          patch on a permanent bar — two facts the player either already knows
-          or does not need, holding a full row of the window for the whole
-          session. The client state is now the WATERMARK on the Overview, at
-          the size of the screen, which is a better home for it than a
-          footnote. What is left is the version, because it is the one thing
-          someone reads out when something is wrong. */}
-      <Version s={s} />
     </div>
   )
 }
@@ -301,6 +294,28 @@ function TitleBar({ s }: { s: AppState | null }) {
       <span className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/25">
         desktop
       </span>
+      {/* Beside the name it belongs to, rather than floating in a corner of
+          whatever page happens to be open. It is what someone reads out when
+          something is wrong, so it should sit where the app introduces
+          itself. */}
+      {s?.update?.version && (
+        <span className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/[0.22]">
+          v{s.update.version}
+        </span>
+      )}
+
+      {/* WARNING: centred by absolute position, not by a flex spacer. The two
+          sides of this bar change width on their own - the account name, the
+          update button appearing - and anything centred BETWEEN them drifts
+          every time one of them does. */}
+      <div className="no-drag absolute inset-y-0 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
+        <Social href={DISCORD} label="lolData on Discord">
+          <DiscordMark />
+        </Social>
+        <Social href={X_ACCOUNT} label="lolData on X">
+          <XMark />
+        </Social>
+      </div>
 
       <div className="no-drag ml-auto flex items-center gap-1">
         {/* Left of the account, and inside no-drag: the header is a drag
@@ -557,20 +572,6 @@ function Rail({
         }
       />
 
-      {/* ⚠️ Not a plate. Discord LEAVES the app, and giving it the same shape
-          as the places you stay makes you read every item before clicking. A
-          departure should look like one. */}
-      <button
-        type="button"
-        onClick={() => window.desktop.openExternal(DISCORD)}
-        className="pointer-events-auto mt-2 flex items-center gap-2 pl-3 pr-2 py-1.5 text-left opacity-40 transition-opacity hover:opacity-90"
-      >
-        <DiscordMark />
-        <span className="font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/70">
-          discord
-        </span>
-        <span className="font-jetbrains text-[9px] text-flash/40">↗</span>
-      </button>
     </nav>
   )
 }
@@ -710,25 +711,47 @@ function Plate({
 
 function DiscordMark() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden className="shrink-0 fill-flash/30 group-hover:fill-flash/55">
+    <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden className="shrink-0 fill-flash/35 transition-colors group-hover:fill-jade">
       <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a15 15 0 0 1 4.3 2.2 18.6 18.6 0 0 0-15 0A15 15 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.7 8.9-.1 13.2.3 17.5a19.9 19.9 0 0 0 6 3l.7-1.1a13 13 0 0 1-2-1c.2-.1.3-.2.5-.3a14.2 14.2 0 0 0 12.1 0l.5.3a13 13 0 0 1-2 1l.7 1.1a19.9 19.9 0 0 0 6-3c.5-5-.8-9.2-2.5-13.1ZM8.1 14.9c-1.2 0-2.1-1.1-2.1-2.4 0-1.3 1-2.4 2.1-2.4 1.2 0 2.2 1.1 2.2 2.4 0 1.3-1 2.4-2.2 2.4Zm7.8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4 1.2 0 2.2 1.1 2.2 2.4 0 1.3-1 2.4-2.2 2.4Z" />
     </svg>
   )
 }
 
 /**
- * The app's version, floating in a corner.
+ * A place we are, that is not in here.
  *
- * Not a bar: a bar claims a row of the window for the whole session, and this
- * earns a corner.
+ * WARNING: a mark and nothing else. These sat in the rail as a labelled row,
+ * among the sections you STAY in, so every item had to be read before it could
+ * be clicked. In the bar, with no word on them, they read as what they are -
+ * somewhere else - and the rail is left saying only where you can go inside
+ * the app. The name is on the tooltip for anyone who needs it.
  */
-function Version({ s }: { s: AppState | null }) {
-  const v = s?.update?.version
-  if (!v) return null
-
+function Social({
+  href,
+  label,
+  children,
+}: {
+  href: string
+  label: string
+  children: React.ReactNode
+}) {
   return (
-    <span className="pointer-events-none absolute bottom-3 right-4 z-20 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/[0.18]">
-      v{v}
-    </span>
+    <button
+      type="button"
+      onClick={() => window.desktop.openExternal(href)}
+      title={label}
+      aria-label={label}
+      className="group grid h-7 w-7 place-items-center rounded-[3px] transition-colors"
+    >
+      {children}
+    </button>
+  )
+}
+
+function XMark() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden className="shrink-0 fill-flash/35 transition-colors group-hover:fill-jade">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
   )
 }

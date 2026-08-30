@@ -942,7 +942,29 @@ body {
    board. Sizing .match-stage-video instead sizes something that is not a flex
    item, leaves its wrapper with no height, and collapses the player to nothing. */
 @media (min-width: 1700px) {
+  /* ⚠️ The row is sized by ITS OWN content and takes no share of what is
+     left over. That is the whole fix for the picture jumping: it used to be
+     `flex: 1`, so its height was "the page minus whatever is below", and the
+     card below changes height the moment you click a different player — the
+     video grew 16px and widened ~28 every time a profile started loading, and
+     shrank back when it arrived. Sized by the scoreboard, which is the same ten
+     rows in every game, nothing underneath can move it again.
+
+     The picture can be sized off a height it does not itself define, because
+     the SCOREBOARD gives the row a definite one; asked to size itself, it would
+     collapse (`calc(100% - ...)` against an auto height is circular). */
+  /* ⚠️ MAXIMISED ONLY, which is the whole point of this block. The page is
+     asked to hold still — no scrollbar, the picture and the scoreboard ending
+     together — and that is only possible when there is room for it. In a
+     restored window there is not, so the stage stays what it is everywhere
+     else: an ordinary column you scroll. */
+  .match-stage {
+    display: flex;
+    flex-direction: column;
+  }
+
   .match-stage-row {
+    flex: 0 0 auto;
     display: flex;
     flex-direction: row;
     /* ⚠️ STRETCH, not flex-start. The two columns are one object seen from two
@@ -958,51 +980,94 @@ body {
      place above the picture. `min-width: 0` is load-bearing — a flex item
      defaults to min-width:auto and refuses to shrink below its content, which
      would push the board off the right edge. */
+  /* ⚠️ The picture follows the HEIGHT now, not the width, and that inversion
+     is what lets four things be true at once: no page scrollbar, a scoreboard
+     that shows all ten rows without scrolling, the two ending on the same line,
+     and no empty strips beside the video.
+
+     Sized by width, a 16:9 box came out 518 tall against ten rows wanting 644,
+     and something had to give — dead space under the video, or a scrolling
+     board, or bars at the sides. Sized by height it simply takes the width its
+     ratio asks for (644 tall wants 1145 wide) and the board takes the rest. */
   .match-stage-clip {
-    flex: 1 1 auto;
+    /* The strip of controls over the picture, as ONE number: the row below
+       subtracts exactly this, so the two can never drift apart. */
+    --stage-head: 36px;
+    flex: 0 1 auto;
     min-width: 0;
     margin-bottom: 0;
-    position: sticky;
-    top: 0;
+    display: flex;
+    flex-direction: column;
   }
 
-  /* The board takes a column of its own and scrolls with the page. It is given
-     a floor as well as a ceiling so a narrow-ish maximised window cannot squeeze
-     the ten rows into something unreadable. */
+  .match-stage-clip .match-stage-head {
+    height: var(--stage-head);
+    margin-bottom: 0;
+    align-items: center;
+  }
+
+  /* ⚠️ The height is what sizes this, NOT the width — `width: auto` +
+     `aspect-ratio` turns a resolved height into a width, and that is also the
+     only way the column around it learns how wide the picture wants to be. Sized
+     by flex instead, the column measured the picture as 340px while it drew
+     itself 900 wide, and it ran underneath the scoreboard. The percentage is
+     taken off the WHOLE column, so the control strip has to come back out of it
+     or the picture hangs exactly that far below the board. */
+  .match-stage-clip .match-stage-video {
+    flex: 0 1 auto;
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+    width: auto;
+    height: calc(100% - var(--stage-head));
+  }
+
+  /* The board takes the column the picture leaves - and it is what SIZES the
+     row. Ten rows and two headings is the same shape in every game, so a row
+     built on it does not move; the picture then takes its height from the row,
+     and the band below takes what is left. Nothing measures the band, which is
+     why nothing in the band can push the picture around. */
   .match-stage-board {
-    /* A whole row wants ~880px: portrait, spells, crest, a 164px name, the KDA,
-     two bars, CS, vision and seven items. No column that also leaves room for
-     a video is going to be 880 wide, so three of them stand down instead —
-     see .row-roomy below. What is left comes to ~630. */
-    /* MEASURED, not guessed: the visible children come to 526px, the five gaps
-       to 60 and the padding to 24 — 610px for a row with six items. A
-       percentage alone gives less than that at the low end of the breakpoint,
-       so the floor is fixed and the percentage only lets it grow. */
-    flex: 0 0 clamp(620px, 38%, 720px);
-    min-width: 0;
-
-    /* ⚠️ The board must not DRIVE the row's height, only follow it.
-
-       The recording is a 16:9 box — 518 tall at this column width — while ten
-       rows want ~644. With plain stretch the taller one wins, so the row became
-       644 and the video sat in it with 90px of dead space beneath: "the player
-       is shorter than the scoreboard". Making the picture taller would mean
-       cropping it or putting the side bars back, both already rejected.
-
-       So its content is taken out of flow (the inner element is absolute), which
-       leaves this box contributing nothing. `stretch` then gives it exactly the
-       height the picture set, and the rows scroll inside it.
-
-       ⚠️ NOT `height: 0; min-height: 100%`, which was the first attempt: the
-       percentage resolves against a height that depends on this element, and the
-       board collapsed to zero and vanished off the screen. */
-    position: relative;
+    /* The floor stops a narrow-ish maximised window from squeezing ten rows
+       into something unreadable. */
+    flex: 1 1 auto;
+    min-width: 560px;
   }
 
-  .match-stage-board > .match-stage-board-inner {
-    position: absolute;
-    inset: 0;
-    overflow-y: auto;
+  /* WARNING: 564px of rows in a 543px box, and 40 of those 564 were margin -
+     one gap between the teams, and one hanging under the last row with nothing
+     below it. The trailing one is dead space in a column that is not allowed to
+     scroll, so it goes, and tightening the real gap gives back the last four. */
+  .match-stage-board-inner > * {
+    margin-bottom: 12px;
+  }
+
+  .match-stage-board-inner > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* WARNING: the rows tighten in THIS layout only. Ten of them at the page's
+     normal spacing want more height than a 16:9 picture beside them can give,
+     and the alternatives were all worse: a scrollbar inside the scoreboard, a
+     tenth row cut in half, or dead space under the video. */
+  .match-stage-board .board-row {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  /* The remainder, whatever it is - one box the three cards stretch into. Its
+     height stops depending on which of them is tallest, so a card that is
+     loading, empty or full all take exactly the same space, and clicking
+     through the scoreboard stops resizing the page. */
+  /* WARNING: sized by its CONTENT, never by what is left over. Pinned to the
+     remainder it looked stable and was quietly cutting all three cards - the
+     bars lost their bottom rows and the player card lost its last-10 strip.
+     What stops the card resizing as a profile arrives is that every state of it
+     is built to the same height (see MatchInsights), not a height imposed here.
+
+     The gap above is tightened for the same reason the rows below are: this is
+     the layout that has to fit a whole page into one screen. */
+  .match-stage-band {
+    margin-top: 16px;
   }
 
   /* ⚠️ The row already had responsive rules — `lg:block` on the bars,
@@ -1181,4 +1246,19 @@ body {
 .cy-spin svg { animation: cySpin 1.15s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite; transform-origin: center; }
 @media (prefers-reduced-motion: reduce) {
   .cy-spin svg { animation-duration: 3s; animation-timing-function: linear; }
+}
+
+/* The placeholder blocks breathe, so a card being read is never mistaken for a
+   card that came back empty. */
+@keyframes cy-wait {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.cy-wait span[class*="bg-flash"] {
+  animation: cy-wait 1.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cy-wait span[class*="bg-flash"] { animation: none; }
 }

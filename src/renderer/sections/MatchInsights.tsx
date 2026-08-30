@@ -14,13 +14,22 @@
  */
 import { useEffect, useState } from "react"
 import { CDN, type MatchPlayer } from "../types"
+import { championById } from "../../data/champions"
 
 const API = "https://api2.loldata.cc"
 
+/** Our own emblems, at the CDN ROOT rather than under a patch. The same image
+ *  and the same path the overlay and the summoner page use — one rank must not
+ *  look like two different things across our own products. */
+const RANKS = `${CDN}/ranks`
+
 /** Answers keyed by riot id, because clicking back and forth between two
  *  players must not re-ask for either of them. */
+/** ⚠️ Versioned. Bumping this retires every entry written by an older
+ *  shape, which is what a module-level cache surviving a reload cannot do on
+ *  its own. */
+const PROFILE_SHAPE = 2
 const profileCache = new Map<string, Profile | null>()
-const champCache = new Map<string, ChampCore | null>()
 
 type Recent = { champion: string; win: boolean }
 
@@ -37,13 +46,37 @@ type Profile = {
   recent: Recent[]
 }
 
-type ChampCore = {
-  avgKDA: number
-  avgCS: number
-  avgDamage: number
-  avgGold: number
-  winrate: number
-  gamesAnalyzed: number
+
+/**
+ * ids → ddragon slugs, for the whole board at once.
+ *
+ * ⚠️ Champion pictures live under a PATCH and are keyed by slug:
+ * `/<patch>/img/champion/Lillia.png`. Both charts here asked for
+ * `/img/champion/<numeric id>.png`, which is not a path this CDN has — every
+ * icon 404'd and `onError` hid the evidence, so the bars simply had no
+ * champions and nothing said why. The join has to happen before the request.
+ */
+function useSlugs(ids: number[]): Map<number, string> {
+  const [slugs, setSlugs] = useState<Map<number, string>>(new Map())
+  const key = ids.join(",")
+
+  useEffect(() => {
+    let alive = true
+    void Promise.all(
+      ids.map((id) =>
+        championById(id)
+          .then((c) => [id, c?.slug] as const)
+          .catch(() => [id, undefined] as const)
+      )
+    ).then((pairs) => {
+      if (!alive) return
+      setSlugs(new Map(pairs.filter((p): p is readonly [number, string] => !!p[1])))
+    })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  return slugs
 }
 
 export default function MatchInsights({
@@ -58,17 +91,14 @@ export default function MatchInsights({
   if (!board?.length) return null
 
   return (
-    <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-      <Bars board={board} chosen={chosen} label="damage dealt" pick={(p) => p.damage} />
-      <Bars board={board} chosen={chosen} label="damage taken" pick={(p) => p.damageTaken} />
+    <div className="match-stage-band mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <Bars board={board} chosen={chosen} patch={patch} label="damage dealt" pick={(p) => p.damage} />
+      <Bars board={board} chosen={chosen} patch={patch} label="damage taken" pick={(p) => p.damageTaken} />
       {/* The profile takes the third column. Gold was the weakest of the three
           charts — it tracks damage and CS closely enough to be a third drawing
           of the same thing — and a card about the player is worth more there. */}
-      <ProfileCard chosen={chosen} />
+      <ProfileCard chosen={chosen} patch={patch} />
 
-      <div className="xl:col-span-3">
-        <ChampionCard chosen={chosen} patch={patch} />
-      </div>
     </div>
   )
 }
@@ -86,14 +116,26 @@ function Panel({
   label,
   children,
   className = "",
+  solid = false,
+  behind,
 }: {
   label: React.ReactNode
   children: React.ReactNode
   className?: string
+  /** An opaque plate instead of the translucent one — for the one card that
+   *  carries artwork of its own and would otherwise show the page through it. */
+  solid?: boolean
+  /** Painted under the contents, inside the clip. */
+  behind?: React.ReactNode
 }) {
   return (
-    <section className={`relative rounded-[3px] bg-[rgba(6,12,14,0.42)] px-4 pb-4 pt-3.5 ${className}`}>
-      <div className="flex items-center gap-2">
+    <section
+      className={`relative overflow-hidden rounded-[3px] px-4 pb-4 pt-3.5 ${
+        solid ? "bg-[#050b0d]" : "bg-[rgba(6,12,14,0.42)]"
+      } ${className}`}
+    >
+      {behind}
+      <div className="relative flex items-center gap-2">
         <svg aria-hidden width="7" height="7" viewBox="0 0 7 7" className="shrink-0 overflow-visible">
           <g transform="rotate(45 3.5 3.5)">
             <rect x="0.8" y="0.8" width="5.4" height="5.4" fill="#00d992" opacity="0.85" />
@@ -108,7 +150,7 @@ function Panel({
           style={{ background: "linear-gradient(90deg, rgba(0,217,146,0.28), rgba(0,217,146,0))" }}
         />
       </div>
-      {children}
+      <div className="relative">{children}</div>
     </section>
   )
 }
@@ -125,14 +167,17 @@ function Panel({
 function Bars({
   board,
   chosen,
+  patch,
   label,
   pick,
 }: {
   board: MatchPlayer[]
   chosen: MatchPlayer | null
+  patch: string
   label: string
   pick: (p: MatchPlayer) => number
 }) {
+  const slugs = useSlugs(board.map((p) => p.championId))
   const rows = [...board].sort((a, b) => pick(b) - pick(a))
   const top = pick(rows[0] ?? ({ damage: 0 } as MatchPlayer)) || 1
 
@@ -144,13 +189,18 @@ function Bars({
           const mine = chosen ? p.participantId === chosen.participantId : p.isMe
           return (
             <div key={p.participantId} className="flex items-center gap-2">
-              <img
-                src={`${CDN}/img/champion/${p.championId}.png`}
-                alt=""
-                loading="lazy"
-                className="h-[18px] w-[18px] shrink-0 rounded-[2px]"
-                onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden" }}
-              />
+              {/* Drawn as an empty square until the slug is known, so the ten
+                  bars do not shift sideways the moment the names arrive. */}
+              {slugs.get(p.championId) ? (
+                <img
+                  src={`${CDN}/${patch}/img/champion/${slugs.get(p.championId)}.png`}
+                  alt=""
+                  loading="lazy"
+                  className="h-[18px] w-[18px] shrink-0 rounded-[2px]"
+                />
+              ) : (
+                <span className="h-[18px] w-[18px] shrink-0 rounded-[2px] bg-flash/[0.04]" />
+              )}
               <span className="relative block h-[10px] flex-1 overflow-hidden rounded-[1px] bg-flash/[0.05]">
                 <span
                   className="absolute inset-y-0 left-0 rounded-[1px]"
@@ -184,18 +234,29 @@ function Bars({
 
 /* ── who you clicked ─────────────────────────────────────────────────────── */
 
-function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
+function ProfileCard({ chosen, patch }: { chosen: MatchPlayer | null; patch: string }) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
   const riot = chosen?.riotId ?? null
+  const slug = useSlugs(chosen ? [chosen.championId] : []).get(chosen?.championId ?? 0)
 
   useEffect(() => {
     if (!riot) return setProfile(undefined)
-    const hit = profileCache.get(riot)
+    const hit = profileCache.get(`${PROFILE_SHAPE}:${riot}`)
     if (hit !== undefined) return setProfile(hit)
 
     let alive = true
     setProfile(undefined)
+    // ⚠️ A riotId WITHOUT a tag cannot be looked up. The client builds it as
+    // `${game}#${tag}` only when it has both and falls back to the bare name
+    // otherwise (src/lcu/history.ts), so half of these ids arrive tagless — and
+    // firing the request anyway sends `tag: undefined` and gets a card that
+    // silently stays empty instead of one that says why.
     const [name, tag] = riot.split("#")
+    if (!tag) {
+      profileCache.set(`${PROFILE_SHAPE}:${riot}`, null)
+      setProfile(null)
+      return
+    }
     // Two requests, one card. The profile answers "who is this" and the history
     // answers "what have they been playing"; neither endpoint carries the other.
     void Promise.all([
@@ -232,11 +293,11 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
               recent,
             }
           : null
-        profileCache.set(riot, p)
+        profileCache.set(`${PROFILE_SHAPE}:${riot}`, p)
         if (alive) setProfile(p)
       })
       .catch(() => {
-        profileCache.set(riot, null)
+        profileCache.set(`${PROFILE_SHAPE}:${riot}`, null)
         if (alive) setProfile(null)
       })
 
@@ -251,69 +312,115 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
   if (!riot) return <Empty title={chosen.name}>Riot does not publish this account.</Empty>
   if (profile === undefined)
     return (
-      <Panel label="the player">
-        <div className="mt-6 flex flex-col items-center gap-3 pb-3">
-          <Spinner />
-          <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/25">
-            reading {chosen.name}
-          </p>
-        </div>
-      </Panel>
+      <Card slug={slug} label="the player">
+        <Waiting name={chosen.name} />
+      </Card>
     )
   if (!profile) return <Empty title={chosen.name}>No profile for this account.</Empty>
 
   const games = profile.wins + profile.losses
   const wr = games ? Math.round((profile.wins / games) * 1000) / 10 : null
 
+  // "DIAMOND II" -> "diamond", which is the emblem's filename. WARNING: the
+  // tier is taken apart from the division on purpose - Master has no division,
+  // so the label and the file cannot be the same string.
+  const tier =
+    profile.rank && !/unranked/i.test(profile.rank)
+      ? (profile.rank.trim().split(/\s+/)[0] ?? "").toLowerCase()
+      : null
+
   return (
-    <Panel label="the player">
+    <Card slug={slug} label="the player">
       <p className="mt-3 truncate font-chakrapetch text-[19px] font-bold leading-none text-flash/90">
         {profile.name}
         <span className="text-flash/35">#{profile.tag}</span>
       </p>
 
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-        <Fact label="rank">
-          {profile.rank ?? "unranked"}
-          {profile.lp !== null && profile.rank ? (
-            <span className="ml-1.5 font-jetbrains text-[10px] text-flash/40">{profile.lp} LP</span>
-          ) : null}
-        </Fact>
-        {/* ⚠️ Ranked season totals, which is what the endpoint returns — not
-            "last 10 games". Saying the wrong thing about a real number is
-            worse than saying less about it. */}
-        <Fact label="ranked this season">
-          {games ? `${games} games` : "none"}
-        </Fact>
-        <Fact label="win rate">
-          {wr === null ? "—" : <span className={wr >= 50 ? "text-jade" : "text-[#ff6286]"}>{wr}%</span>}
-        </Fact>
-        <Fact label="record">
-          {games ? (
-            <>
-              <span className="text-jade/80">{profile.wins}W</span>
-              <span className="text-flash/30"> · </span>
-              <span className="text-[#ff6286]/80">{profile.losses}L</span>
-            </>
-          ) : (
-            "—"
-          )}
-        </Fact>
+      {/* The rank, as a shape before it is a word. WARNING: no request for a
+          player without one - cdn2/ranks has no unranked.png, so asking would
+          be a guaranteed 404 on every hidden account. */}
+      <div className="mt-3.5 flex items-center gap-2.5">
+        {tier ? (
+          <img
+            src={`${RANKS}/${tier}.png`}
+            alt=""
+            className="h-10 w-10 shrink-0 object-contain"
+            style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.85))" }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }}
+          />
+        ) : (
+          <span className="grid h-10 w-10 shrink-0 place-items-center">
+            <span aria-hidden className="block h-2 w-2 rotate-45 bg-flash/10" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate font-chakrapetch text-[15px] font-bold uppercase leading-none tracking-wide text-flash/85">
+            {profile.rank ?? "unranked"}
+          </p>
+          <p className="mt-1.5 font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
+            {profile.lp !== null && tier ? `${profile.lp} LP` : "no ranked ladder"}
+          </p>
+        </div>
+      </div>
+
+      {/* WARNING: the win rate is the headline, not a cell in a grid. It was
+          one of four equal facts and could not be found at a glance, which is
+          the only reason anybody reads this card. The rest is its caption. */}
+      <div className="mt-4 border-t border-flash/[0.06] pt-3.5">
+        {wr === null ? (
+          <p className="font-chakrapetch text-[13px] text-flash/35">No ranked games this season.</p>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2.5">
+              <p
+                className="font-chakrapetch text-[34px] font-bold leading-none tabular-nums"
+                style={{ color: wr >= 50 ? "#00d992" : "#ff6286" }}
+              >
+                {wr}
+                <span className="text-[17px]">%</span>
+              </p>
+              <p className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-flash/30">
+                win rate
+              </p>
+              <span className="ml-auto whitespace-nowrap font-jetbrains text-[10px] tabular-nums">
+                <span className="text-jade/85">{profile.wins}W</span>
+                <span className="text-flash/20"> · </span>
+                <span className="text-[#ff6286]/85">{profile.losses}L</span>
+              </span>
+            </div>
+
+            {/* The same number as a length, so it reads without being parsed. */}
+            <span className="mt-2.5 block h-[5px] overflow-hidden rounded-[1px] bg-[#ff6286]/25">
+              <span className="block h-full rounded-[1px] bg-jade" style={{ width: `${wr}%` }} />
+            </span>
+
+            {/* WARNING: ranked season totals, which is what the endpoint
+                returns - NOT "last 10 games". Saying the wrong thing about a
+                real number is worse than saying less about it. */}
+            <p className="mt-2 font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-flash/25">
+              {games} ranked games this season
+            </p>
+          </>
+        )}
       </div>
 
       {/* Their last ranked games, newest first. The border carries the result,
           so the row reads as a streak at a glance rather than as ten pictures
           that each have to be decoded. */}
-      {profile.recent.length > 0 && (
-        <>
-          <p className="mt-4 font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-flash/25">
-            last {profile.recent.length} ranked
+      {/* WARNING: defensive on `recent`. The cache is module-level and outlives
+          a hot reload, so an entry written before this field existed comes back
+          without it - and `undefined.length` throws, taking the whole card down
+          rather than just the row. */}
+      {(profile.recent?.length ?? 0) > 0 && (
+        <div className="mt-4 border-t border-flash/[0.06] pt-3">
+          <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-flash/25">
+            last {profile.recent!.length} ranked
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {profile.recent.map((r, i) => (
+            {profile.recent!.map((r, i) => (
               <img
                 key={`${r.champion}-${i}`}
-                src={`${CDN}/img/champion/${r.champion}.png`}
+                src={`${CDN}/${patch}/img/champion/${r.champion}.png`}
                 alt={r.champion}
                 title={`${r.champion} — ${r.win ? "win" : "loss"}`}
                 loading="lazy"
@@ -330,162 +437,126 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
               />
             ))}
           </div>
-        </>
-      )}
-    </Panel>
-  )
-}
-
-/* ── how that game went, for that champion ───────────────────────────────── */
-
-function ChampionCard({ chosen, patch }: { chosen: MatchPlayer | null; patch: string }) {
-  void patch
-  const [core, setCore] = useState<ChampCore | null | undefined>(undefined)
-  const key = chosen ? `${chosen.championId}:${chosen.role ?? ""}` : null
-
-  useEffect(() => {
-    if (!chosen || !key) return setCore(undefined)
-    const hit = champCache.get(key)
-    if (hit !== undefined) return setCore(hit)
-
-    let alive = true
-    setCore(undefined)
-    void fetch(`${API}/api/champion/stats`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        championId: chosen.championId,
-        champion: undefined,
-        queueId: 420,
-        role: chosen.role === "SUPPORT" ? "UTILITY" : chosen.role,
-        patch: null,
-        region: null,
-        tier: null,
-        opponents: null,
-      }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: any) => {
-        const c: ChampCore | null = d?.core
-          ? {
-              avgKDA: Number(d.core.avgKDA) || 0,
-              avgCS: Number(d.core.avgCS) || 0,
-              avgDamage: Number(d.core.avgDamage) || 0,
-              avgGold: Number(d.core.avgGold) || 0,
-              winrate: Number(d.core.winrate) || 0,
-              gamesAnalyzed: Number(d.core.gamesAnalyzed) || 0,
-            }
-          : null
-        champCache.set(key, c)
-        if (alive) setCore(c)
-      })
-      .catch(() => {
-        champCache.set(key, null)
-        if (alive) setCore(null)
-      })
-
-    return () => { alive = false }
-  }, [key])
-
-  if (!chosen) return <Empty title="champion">Click a row to compare that game.</Empty>
-
-  const kda = chosen.deaths > 0 ? (chosen.kills + chosen.assists) / chosen.deaths : chosen.kills + chosen.assists
-
-  return (
-    <Panel label="this game vs the champion's average">
-      <div className="mt-3.5 flex items-center gap-2.5">
-        <img
-          src={`${CDN}/img/champion/${chosen.championId}.png`}
-          alt=""
-          className="h-8 w-8 rounded-[2px] ring-1 ring-inset ring-jade/15"
-          onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden" }}
-        />
-        <div className="min-w-0">
-          <p className="truncate font-chakrapetch text-[15px] font-bold leading-tight text-flash/85">
-            {chosen.name}
-            {chosen.role ? <span className="text-flash/35"> · {chosen.role.toLowerCase()}</span> : null}
-          </p>
-        </div>
-      </div>
-
-      {core === undefined ? (
-        <p className="mt-4 font-jetbrains text-[10px] uppercase tracking-[0.18em] text-flash/25">
-          reading the champion's numbers…
-        </p>
-      ) : !core ? (
-        <p className="mt-4 font-jetbrains text-[10px] uppercase tracking-[0.18em] text-flash/25">
-          no aggregate for this champion and role
-        </p>
-      ) : (
-        <div className="mt-4 space-y-2.5">
-          {/* ⚠️ A row is drawn only when there IS an average to draw it against.
-              The endpoint returns 0 for measures it has not aggregated for a
-              champion and role, and 0.00 rendered as "the average" is a number
-              the app does not have, printed as though it did. */}
-          <Against label="kda" mine={kda} avg={core.avgKDA} fmt={(n) => n.toFixed(2)} />
-          <Against label="cs" mine={chosen.creepScore} avg={core.avgCS} fmt={(n) => String(Math.round(n))} />
-          <Against label="damage" mine={chosen.damage} avg={core.avgDamage} fmt={(n) => `${(n / 1000).toFixed(1)}k`} />
-          <Against label="gold" mine={chosen.goldEarned} avg={core.avgGold} fmt={(n) => `${(n / 1000).toFixed(1)}k`} />
-          <p className="pt-1 font-jetbrains text-[8.5px] uppercase tracking-[0.18em] text-flash/20">
-            average over {core.gamesAnalyzed.toLocaleString()} games · {core.winrate.toFixed(1)}% win rate
-          </p>
         </div>
       )}
-    </Panel>
+    </Card>
   )
 }
 
 /**
- * One measure against the champion's average.
+ * The player's plate: opaque, with the champion they played standing in it.
  *
- * ⚠️ The bar is the RATIO, capped at twice the average. Without a cap one
- * forty-minute game makes every other row a stub; with one, "twice the average"
- * is simply where the bar ends and the number still says the truth.
+ * WARNING: SOLID, unlike its two neighbours. The other cards are translucent
+ * because there is nothing behind them worth seeing; this one has artwork of
+ * its own, and a translucent plate would let the page show through the picture
+ * and turn both into noise.
+ *
+ * WARNING: the art is a WATERMARK, which means it has to lose every argument
+ * with the text. It sits at the right, is masked away toward the words, and is
+ * held far enough down in opacity that it reads as the card's material rather
+ * than as an image placed on it - splash art is bright in places and black in
+ * others, and either extreme will eat a label that shares its space.
  */
-function Against({
+const Card = ({
+  slug,
   label,
-  mine,
-  avg,
-  fmt,
+  children,
 }: {
+  slug: string | undefined
   label: string
-  mine: number
-  avg: number
-  fmt: (n: number) => string
-}) {
-  // Nothing to compare against: the row does not appear at all.
-  if (!(avg > 0)) return null
+  children: React.ReactNode
+}) => (
+  <Panel
+    label={label}
+    solid
+    behind={
+      slug ? (
+        <span aria-hidden className="pointer-events-none absolute inset-0">
+          <img
+            src={`${CDN}/img/champion/centered/${slug}_0.jpg`}
+            alt=""
+            className="absolute inset-y-0 right-0 h-full w-[78%] object-cover"
+            style={{
+              opacity: 0.24,
+              maskImage: "linear-gradient(90deg, transparent 0%, #000 55%)",
+              WebkitMaskImage: "linear-gradient(90deg, transparent 0%, #000 55%)",
+            }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }}
+          />
+          {/* The plate's own colour, brought back up over the art from the
+              left, so the column of numbers never sits on a bright patch. */}
+          <span
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(90deg, #050b0d 34%, rgba(5,11,13,0) 100%)" }}
+          />
+        </span>
+      ) : null
+    }
+  >
+    {children}
+  </Panel>
+)
 
-  const ratio = mine / avg
-  const pct = Math.min(100, (ratio / 2) * 100)
-  const better = ratio >= 1
+/**
+ * The card while it is being read.
+ *
+ * WARNING: this is built to the SAME height as the finished card, block for
+ * block - a name, a rank, a headline number with its bar, and the strip of
+ * recent games. Before, it was a spinner in an otherwise empty card, so the
+ * card grew the instant a profile arrived and the champion painted behind it,
+ * drawn at the card's full height, visibly zoomed on every click.
+ *
+ * The circle stays: it is the one thing that says "this is not the answer yet".
+ * The blocks underneath are inert placeholders and are never mistaken for data
+ * because none of them carries a number.
+ */
+const Waiting = ({ name }: { name: string }) => (
+  <div className="cy-wait">
+    <p className="mt-3 font-chakrapetch text-[19px] font-bold leading-none text-transparent">
+      <span className="rounded-[2px] bg-flash/[0.07]">reading account</span>
+    </p>
 
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className="w-[52px] shrink-0 font-jetbrains text-[9px] uppercase tracking-[0.18em] text-flash/30">
-        {label}
+    <div className="mt-3.5 flex items-center gap-2.5">
+      <span className="grid h-10 w-10 shrink-0 place-items-center">
+        <Spinner />
       </span>
-      <span className="relative block h-[10px] flex-1 overflow-hidden rounded-[1px] bg-flash/[0.05]">
-        {/* Where the average sits, so the bar has something to be measured
-            against rather than being a length on its own. */}
-        <span aria-hidden className="absolute inset-y-0 left-1/2 w-px bg-flash/20" />
-        <span
-          className="absolute inset-y-0 left-0 rounded-[1px]"
-          style={{
-            width: `${Math.max(2, pct)}%`,
-            background: better ? "rgba(0,217,146,0.55)" : "rgba(215,216,217,0.22)",
-          }}
-        />
-      </span>
-      <span className={`w-[54px] shrink-0 text-right font-jetbrains text-[10px] tabular-nums ${better ? "text-jade" : "text-flash/45"}`}>
-        {fmt(mine)}
-      </span>
-      <span className="w-[54px] shrink-0 text-right font-jetbrains text-[9px] tabular-nums text-flash/25">
-        {fmt(avg)}
-      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-chakrapetch text-[15px] font-bold uppercase leading-none tracking-wide text-transparent">
+          <span className="rounded-[2px] bg-flash/[0.07]">rank</span>
+        </p>
+        <p className="mt-1.5 truncate font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/25">
+          reading {name}
+        </p>
+      </div>
     </div>
-  )
-}
+
+    <div className="mt-4 border-t border-flash/[0.06] pt-3.5">
+      <div className="flex items-baseline gap-2.5">
+        <p className="font-chakrapetch text-[34px] font-bold leading-none text-transparent">
+          <span className="rounded-[2px] bg-flash/[0.07]">00.0%</span>
+        </p>
+        <p className="font-jetbrains text-[9px] uppercase tracking-[0.22em] text-transparent">
+          <span className="rounded-[2px] bg-flash/[0.05]">win rate</span>
+        </p>
+      </div>
+      <span className="mt-2.5 block h-[5px] rounded-[1px] bg-flash/[0.05]" />
+      <p className="mt-2 font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-transparent">
+        <span className="rounded-[2px] bg-flash/[0.05]">000 ranked games this season</span>
+      </p>
+    </div>
+
+    <div className="mt-4 border-t border-flash/[0.06] pt-3">
+      <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-transparent">
+        <span className="rounded-[2px] bg-flash/[0.05]">last 10 ranked</span>
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {Array.from({ length: 10 }, (_, i) => (
+          <span key={i} className="block h-7 w-7 rounded-[3px] bg-flash/[0.05]" />
+        ))}
+      </div>
+    </div>
+  </div>
+)
 
 /**
  * The loading circle: an arc that runs, not a solid ring that spins.
@@ -495,7 +566,7 @@ function Against({
  * that travels and dies — and it belongs here without needing a library.
  */
 const Spinner = () => (
-  <span aria-hidden className="cy-spin relative block h-9 w-9">
+  <span aria-hidden className="cy-spin relative block h-8 w-8">
     <svg viewBox="0 0 36 36" className="h-full w-full">
       <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(0,217,146,0.12)" strokeWidth="1.5" />
       <circle
@@ -508,13 +579,6 @@ const Spinner = () => (
 )
 
 /* ── shared bits ─────────────────────────────────────────────────────────── */
-
-const Fact = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <div>
-    <p className="font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-flash/25">{label}</p>
-    <p className="mt-1 font-chakrapetch text-[13px] font-bold leading-none text-flash/80">{children}</p>
-  </div>
-)
 
 const Empty = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <Panel label={title}>

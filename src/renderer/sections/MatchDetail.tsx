@@ -95,6 +95,8 @@ export default function MatchDetail({
           side by side — see the media query in index.css. Nothing here is tied
           to fullscreen: the player takes the screen on its own, as it always
           did, and this is purely a response to how much room the app has. */}
+      {/* ⚠️ No scrollbar on this page at all. It is a column that fits: the
+          row takes what is left after the band, and neither overflows. */}
       <div className="match-stage no-bar mt-4 min-h-0 flex-1 overflow-y-auto">
         <div className="match-stage-row">
         {/* ── the recording, first ─────────────────────────────────────── */}
@@ -108,7 +110,7 @@ export default function MatchDetail({
                 file. keep and reveal used to sit inside the player's control
                 strip, which put them over the video and a screen away from the
                 share button they belong beside. */}
-            <div className="mb-2 flex items-baseline gap-2">
+            <div className="match-stage-head mb-2 flex items-baseline gap-2">
               <p className="font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/30">
                 the recording
               </p>
@@ -469,7 +471,7 @@ function Row({
     <button
       type="button"
       onClick={onPick}
-      className="flex w-full items-center gap-3 py-2 pl-3 pr-3 text-left transition-colors"
+      className="board-row flex w-full items-center gap-3 py-2 pl-3 pr-3 text-left transition-colors"
       style={{
         background: picked
           ? "rgba(0,217,146,0.09)"
