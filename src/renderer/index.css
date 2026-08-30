@@ -964,7 +964,13 @@ body {
   }
 
   .match-stage-row {
-    flex: 0 0 auto;
+    /* ⚠️ GROWS, but is never sized by what is below it. It takes the height
+       the scoreboard needs and then any that is left over, so a maximised
+       window has no dead strip under the cards - the picture uses it. That is
+       only safe because every state of every card below is now the same
+       height: when the band cannot change, neither can what the row is given,
+       and the video stopped resizing on every click. */
+    flex: 1 1 auto;
     display: flex;
     flex-direction: row;
     /* ⚠️ STRETCH, not flex-start. The two columns are one object seen from two

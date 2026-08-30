@@ -304,19 +304,29 @@ function ProfileCard({ chosen, patch }: { chosen: MatchPlayer | null; patch: str
     return () => { alive = false }
   }, [riot])
 
-  if (!chosen) return <Empty title="player">Click a row to read that player.</Empty>
+  if (!chosen) return <Empty title="player">No player on this board.</Empty>
   // ⚠️ No riot id is a DIFFERENT state from "still loading", and it used to be
   // shown as the latter — a card that says "reading their profile" forever.
   // Riot withholds the identity of some players entirely; that is the answer,
   // not a delay.
-  if (!riot) return <Empty title={chosen.name}>Riot does not publish this account.</Empty>
+  if (!riot)
+    return (
+      <Card slug={slug} label="the player">
+        <Waiting name={chosen.name} say="riot does not publish this account" />
+      </Card>
+    )
   if (profile === undefined)
     return (
       <Card slug={slug} label="the player">
         <Waiting name={chosen.name} />
       </Card>
     )
-  if (!profile) return <Empty title={chosen.name}>No profile for this account.</Empty>
+  if (!profile)
+    return (
+      <Card slug={slug} label="the player">
+        <Waiting name={chosen.name} say="no profile for this account" />
+      </Card>
+    )
 
   const games = profile.wins + profile.losses
   const wr = games ? Math.round((profile.wins / games) * 1000) / 10 : null
@@ -510,22 +520,30 @@ const Card = ({
  * The blocks underneath are inert placeholders and are never mistaken for data
  * because none of them carries a number.
  */
-const Waiting = ({ name }: { name: string }) => (
+const Waiting = ({ name, say }: { name: string; say?: string }) => (
   <div className="cy-wait">
-    <p className="mt-3 font-chakrapetch text-[19px] font-bold leading-none text-transparent">
-      <span className="rounded-[2px] bg-flash/[0.07]">reading account</span>
+    <p
+      className={`mt-3 truncate font-chakrapetch text-[19px] font-bold leading-none ${
+        say ? "text-flash/70" : "text-transparent"
+      }`}
+    >
+      <span className={say ? "" : "rounded-[2px] bg-flash/[0.07]"}>{say ? name : "reading account"}</span>
     </p>
 
     <div className="mt-3.5 flex items-center gap-2.5">
       <span className="grid h-10 w-10 shrink-0 place-items-center">
-        <Spinner />
+        {/* ⚠️ Something stands here in EVERY state, because this shape is what
+            keeps all of them the same height. A card that is still reading and
+            one that has nothing to report are the same size, so the band they
+            sit in never changes and the picture above it never moves. */}
+        {say ? <span aria-hidden className="block h-2 w-2 rotate-45 bg-flash/12" /> : <Spinner />}
       </span>
       <div className="min-w-0 flex-1">
         <p className="font-chakrapetch text-[15px] font-bold uppercase leading-none tracking-wide text-transparent">
           <span className="rounded-[2px] bg-flash/[0.07]">rank</span>
         </p>
         <p className="mt-1.5 truncate font-jetbrains text-[9px] uppercase tracking-[0.2em] text-flash/25">
-          reading {name}
+          {say ?? `reading ${name}`}
         </p>
       </div>
     </div>

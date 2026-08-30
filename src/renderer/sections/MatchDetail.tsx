@@ -85,7 +85,22 @@ export default function MatchDetail({
     }
   }, [board])
 
-  const chosen = board?.find((p) => p.participantId === picked) ?? null
+  /**
+   * Who the cards below are about.
+   *
+   * ⚠️ FALLS BACK TO YOU, and is therefore never nothing. It began as the
+   * clicked row and only that, so the page opened on a card saying "click a
+   * row" — asking for a click before showing anything, when the one player it
+   * could always name without being told is the one whose recording this is.
+   *
+   * It doubles as the fix for the empty space under the scoreboard: that card
+   * is the tallest of the three, and while it was empty it was also the
+   * shortest, so the band it sits in gave back height nothing else claimed.
+   *
+   * Clicking the row that is already shown clears the selection, which now
+   * lands back on you rather than on nothing.
+   */
+  const chosen = board?.find((p) => p.participantId === picked) ?? board?.find((p) => p.isMe) ?? null
 
   return (
     <div className="flex h-full flex-col">
@@ -172,7 +187,7 @@ export default function MatchDetail({
               patch={patch}
               peak={peak}
               ranks={ranks}
-              picked={picked}
+              picked={chosen?.participantId ?? null}
               onPick={setPicked}
             />
             <Side
@@ -183,7 +198,7 @@ export default function MatchDetail({
               patch={patch}
               peak={peak}
               ranks={ranks}
-              picked={picked}
+              picked={chosen?.participantId ?? null}
               onPick={setPicked}
             />
           </>
