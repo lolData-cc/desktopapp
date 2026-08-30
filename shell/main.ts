@@ -562,28 +562,65 @@ const POST_GAME_PHASES = new Set(["WaitingForStats", "PreEndOfGame", "EndOfGame"
  */
 let awaiting: ReturnType<typeof setTimeout> | null = null
 
+/**
+ * Wait for the client to publish the game that just ended.
+ *
+ * ⚠️ TWO WINDOWS, because two things are waiting and they want different
+ * patience.
+ *
+ * The RECAP wants an answer while the player still cares — eight tries, four
+ * seconds apart. If the verdict is not there in half a minute the moment has
+ * passed and it says nothing rather than arriving late.
+ *
+ * The ARCHIVE has no such deadline; it only has to see the game eventually. And
+ * Riot routinely takes minutes: reported by a player whose game was missing from
+ * Matches, and confirmed against the client's OWN history, which did not have it
+ * either while the phase was still EndOfGame. Giving up at 32 seconds meant a
+ * game could be lost for good — close the client after that and nothing ever
+ * reads it again.
+ *
+ * So the fast window keeps its old behaviour and a slow one follows it: every
+ * thirty seconds for ten minutes, stopping the moment the game appears. It is
+ * one local request each time, at a client that is sitting idle.
+ */
+const SLOW_EVERY_MS = 30_000
+const SLOW_FOR = 20
+
 function awaitMatch(tries = 8): void {
   if (awaiting) clearTimeout(awaiting)
   const want = state.lastPlayed?.championKey ?? 0
 
-  const attempt = async (left: number) => {
+  const attempt = async (left: number, slow: number) => {
     await readProfile()
     const got = newestMine()?.championId ?? -1
     if (got === want) {
       console.log("[recap] history caught up: champion %d", got)
       return
     }
-    if (!want || left <= 0) {
-      // Said out loud, because the recap's fallback for "no match" used to be
-      // indistinguishable from a real defeat.
-      console.log("[recap] history did NOT catch up: wanted %d, newest is %d — no verdict",
-        want, got)
+    if (!want) {
+      console.log("[recap] nothing to wait for — no verdict")
       return
     }
-    awaiting = setTimeout(() => void attempt(left - 1), 4000)
+    if (left > 0) {
+      awaiting = setTimeout(() => void attempt(left - 1, slow), 4000)
+      return
+    }
+    if (left === 0) {
+      // Said out loud, because the recap's fallback for "no match" used to be
+      // indistinguishable from a real defeat. The verdict gives up here; the
+      // archive does not.
+      console.log("[recap] history did NOT catch up in %ds: wanted %d, newest is %d — no verdict",
+        tries * 4, want, got)
+    }
+    if (slow > 0) {
+      awaiting = setTimeout(() => void attempt(-1, slow - 1), SLOW_EVERY_MS)
+      return
+    }
+    console.log("[archive] gave up waiting for game %d after %d minutes",
+      want, Math.round((SLOW_FOR * SLOW_EVERY_MS) / 60000))
   }
 
-  void attempt(tries)
+  void attempt(tries, SLOW_FOR)
 }
 
 /**
