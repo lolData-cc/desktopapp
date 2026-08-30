@@ -299,7 +299,7 @@ function Wash({
   return (
     <div
       ref={box}
-      className="clip-arrive pointer-events-none absolute -top-[30px] z-10 flex items-baseline whitespace-nowrap py-1.5"
+      className="clip-arrive pointer-events-none absolute -top-[52px] z-10 flex flex-col gap-[3px] whitespace-nowrap py-1.5"
       style={{
         [back ? "right" : "left"]: pinned ? 0 : `${back ? 100 - x : x}%`,
         // The tail is the long side and always points AWAY from the mark, so it
@@ -310,31 +310,75 @@ function Wash({
         background: `linear-gradient(${back ? 270 : 90}deg, ${c}2e 0%, ${c}14 42%, transparent 100%)`,
       }}
     >
-      <span
-        className="font-jetbrains text-[9px] tracking-[0.24em]"
-        style={{ color: c, filter: `drop-shadow(0 0 8px ${c}88)` }}
-      >
-        {over.count > 1 ? `${over.count} × ${KIND[over.kind].label}` : KIND[over.kind].label}
-      </span>
-      <span className="ml-2.5 font-jetbrains text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>
-        {mmss(over.at / 1000)}
-      </span>
-      {KIND[over.kind].relation && (
-        <span className="ml-3 font-jetbrains text-[9px] lowercase" style={{ color: "rgba(255,255,255,0.35)" }}>
-          {KIND[over.kind].relation}
+      {/* ── WHO. The champion, at the top and at the largest size on the card.
+             ⚠️ It leads because it is what gets RECOGNISED: a face is known
+             before a summoner name is read, and this card is looked at for a
+             moment while a video plays behind it. Everything that was on one
+             line before is on two now, and the line that survived intact is
+             this one. */}
+      <div className="flex items-center gap-2">
+        {/* WARNING: every name in the cluster. A pin that swallowed three kills
+            used to print the first one and looked like a mistake: the count
+            said three and the card named one. */}
+        {over.labels.map((l, i) => (
+          // ⚠️ A CLUSTER SHOWS CHAMPIONS ONLY. Three icons, three champions and
+          // three summoner names is wider than the bar it has to sit on, and a
+          // label that leaves the bar has stopped labelling anything. In a
+          // teamfight the champion is the answer anyway — the count above the
+          // mark already says how many.
+          <Who key={i} m={l} patch={patch} names={names} terse={over.labels.length > 1} />
+        ))}
+        {/* Nothing to name — a turret execute, a withheld player, a recording
+            made before marks carried a champion. The row below still says what
+            happened and when, which is the whole card's minimum. */}
+        {!over.labels.length && (
+          <span className="font-chakrapetch text-[13px] font-bold text-white/45">unknown</span>
+        )}
+      </div>
+
+      {/* ── WHAT, and WHEN. The mark's own sign, then the words, quieter than
+             the line above so the two read in order rather than competing. */}
+      <div className="flex items-center gap-1.5">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 14 14"
+          aria-hidden
+          className="shrink-0"
+          style={{ filter: `drop-shadow(0 0 4px ${c}99)` }}
+        >
+          {/* ⚠️ THE SAME DRAWING the mark on the bar uses, from one function.
+              The label points at a mark you can see; giving it a different
+              picture of the same thing would be the one place a reader has to
+              work out that they match. */}
+          {kindShapes(over.kind, c)}
+        </svg>
+        <span className="font-jetbrains text-[9px] tracking-[0.22em]" style={{ color: c }}>
+          {over.count > 1 ? `${over.count} × ${KIND[over.kind].label}` : KIND[over.kind].label}
         </span>
-      )}
-      {/* WARNING: every name in the cluster. A pin that swallowed three kills
-          used to print the first one and looked like a mistake: the count said
-          three and the card named one. */}
-      {over.labels.map((l, i) => (
-        // ⚠️ A CLUSTER SHOWS CHAMPIONS ONLY. Three icons, three champions and
-        // three summoner names is wider than the bar it has to sit on, and a
-        // label that leaves the bar has stopped labelling anything. In a
-        // teamfight the champion is the answer anyway - the count above the
-        // mark already says how many.
-        <Who key={i} m={l} patch={patch} names={names} terse={over.labels.length > 1} />
-      ))}
+        <span className="font-jetbrains text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.4)" }}>
+          {mmss(over.at / 1000)}
+        </span>
+        {/* The direction, in a word — see KIND. Only alongside a name it can
+            point at: "death by" with nobody named is a dangling preposition. */}
+        {KIND[over.kind].relation && over.labels.some((l) => l.name && l.champion) && (
+          <span className="font-jetbrains text-[9px] lowercase" style={{ color: "rgba(255,255,255,0.3)" }}>
+            {KIND[over.kind].relation}
+          </span>
+        )}
+        {/* ⚠️ The summoner name moved DOWN here, out of the champion's line. It
+            is the least recognised thing on the card and it was sitting next to
+            the most. A cluster drops it entirely — three of these is wider than
+            the bar. */}
+        {/* ⚠️ Only when the row above showed a CHAMPION. With no champion that
+            row falls back to this very name, and printing it again here put it
+            on the card twice. */}
+        {over.labels.length === 1 && over.labels[0]?.champion && over.labels[0]?.name && (
+          <span className="font-jetbrains text-[9px]" style={{ color: "rgba(255,255,255,0.55)" }}>
+            {over.labels[0].name}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -361,31 +405,32 @@ function Who({
   m: Mention
   patch: string
   names: Map<string, string>
-  /** Drop the summoner name. Set when the pin holds more than one player. */
+  /** The pin holds more than one player, so the row is tighter. */
   terse?: boolean
 }) {
   return (
-    <span className="ml-2 flex items-center gap-1.5">
+    <span className={`flex items-center gap-1.5 ${terse ? "mr-1.5" : ""}`}>
       {m.champion && (
         <img
           src={`${CDN}/${patch}/img/champion/${m.champion}.png`}
           alt=""
-          className="h-[15px] w-[15px] rounded-[2px]"
+          className="h-[18px] w-[18px] rounded-[2px]"
           style={{ boxShadow: "0 0 0 1px rgba(0,0,0,0.55)" }}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }}
         />
       )}
       {m.champion && (
-        <span className="font-chakrapetch text-[12.5px] font-bold text-white">
+        <span className="font-chakrapetch text-[13.5px] font-bold leading-none text-white">
           {names.get(m.champion) ?? m.champion}
         </span>
       )}
-      {m.name && !(terse && m.champion) && (
-        <span
-          className={`font-jetbrains text-[9px] ${m.champion ? "text-white/45" : "text-white"}`}
-        >
-          {m.name}
-        </span>
+      {/* ⚠️ Only when there is no champion to show instead. The summoner name
+          lives on the row BELOW now — beside the kind and the time, where the
+          least-recognised thing on the card belongs. It appears here only as
+          the fallback for a mark that has no champion at all, so that row one
+          is never empty. */}
+      {!m.champion && m.name && (
+        <span className="font-chakrapetch text-[13px] font-bold text-white/80">{m.name}</span>
       )}
     </span>
   )
@@ -425,6 +470,58 @@ function useChampionNames(mentions: Mention[]): Map<string, string> {
 }
 
 /**
+ * The shapes a mark is drawn from, without the <svg> around them.
+ *
+ * ⚠️ Shared with the hover label, which is the whole reason it is a function and
+ * not markup inside `Mark`. The label names the same moment the mark does, and
+ * two hand-copied drawings of one idea drift the first time either is touched.
+ *
+ * ⚠️ Authored for FOURTEEN units, centred on (7,7). Every caller must give it a
+ * `viewBox="0 0 14 14"`, whatever pixel size it renders at.
+ */
+function kindShapes(kind: Highlight["kind"], colour: string) {
+  // The most numerous thing on the bar and the least worth stopping for, so it
+  // stays the quietest mark there is.
+  if (kind === "assist") return <circle cx="7" cy="7" r="2.6" fill={colour} opacity="0.75" />
+
+  if (kind === "death")
+    return (
+      <>
+        {/* A golem's head: a heavy brow, a slot of dark, and a wide blocky jaw
+            under it. The gap between the two is what makes it read as machine
+            rather than bone — plates that were assembled, not a skull that
+            grew. */}
+        <path d="M2.5 5.5 L4.3 2.4 L9.7 2.4 L11.5 5.5 Z" fill={colour} />
+        <path
+          d="M3.4 6.6 L10.6 6.6 L10.6 9.6 L9 11.7 L5 11.7 L3.4 9.6 Z"
+          fill="none"
+          stroke={colour}
+          strokeWidth="1.15"
+          strokeLinejoin="round"
+        />
+        {/* ⚠️ The eyes are LIT, not coloured, and they are the reason this still
+            reads at fourteen pixels: two bright points under a heavy brow are a
+            face long before the outline around them is legible. */}
+        <g style={{ filter: `drop-shadow(0 0 2.5px ${colour})` }}>
+          <rect x="4.5" y="7.4" width="1.9" height="1.7" fill="#fff5f7" />
+          <rect x="7.6" y="7.4" width="1.9" height="1.7" fill="#fff5f7" />
+        </g>
+      </>
+    )
+
+  return (
+    <>
+      {/* Two blades, and the crossguards that stop an X reading as a
+          multiplication sign. Filled rather than outlined: at this size an
+          outlined blade is two hairlines a pixel apart, which is a smudge. */}
+      <path d="M11.9 1.6 L12.4 3.4 L4.6 11.9 L3.1 10.5 Z" fill={colour} />
+      <path d="M2.1 1.6 L1.6 3.4 L9.4 11.9 L10.9 10.5 Z" fill={colour} opacity="0.92" />
+      <path d="M2 8.2 L5.4 11.6 M12 8.2 L8.6 11.6" stroke={colour} strokeWidth="1.5" strokeLinecap="round" />
+    </>
+  )
+}
+
+/**
  * One moment.
  *
  * A stem standing on the track, with a head whose shape says which way the
@@ -454,7 +551,6 @@ function Mark({
   const { colour } = KIND[p.kind]
   const many = p.count > 1
   const assist = p.kind === "assist"
-  const down = p.kind === "death"
 
   // Room to click that the drawn shape does not need: the head is eight pixels
   // and the target is twenty-two, which is the difference between a bar you
@@ -465,52 +561,9 @@ function Mark({
    * 14-unit box the <svg> below sets, centred on (7,7); a detail that survives
    * at 72px and dies at 14 is a detail that does not exist.
    */
-  const glyph = useMemo(() => {
-    // The most numerous thing on the bar and the least worth stopping for, so
-    // it stays the quietest mark there is.
-    if (assist) return <circle cx="7" cy="7" r="2.6" fill={colour} opacity="0.75" />
+  const glyph = useMemo(() => kindShapes(p.kind, colour), [p.kind, colour])
 
-    if (down)
-      return (
-        <>
-          {/* A golem's head: a heavy brow, a slot of dark, and a wide blocky
-              jaw under it. The gap between the two is what makes it read as
-              machine rather than bone — plates that were assembled, not a
-              skull that grew. */}
-          <path d="M2.5 5.5 L4.3 2.4 L9.7 2.4 L11.5 5.5 Z" fill={colour} />
-          <path
-            d="M3.4 6.6 L10.6 6.6 L10.6 9.6 L9 11.7 L5 11.7 L3.4 9.6 Z"
-            fill="none"
-            stroke={colour}
-            strokeWidth="1.15"
-            strokeLinejoin="round"
-          />
-          {/* ⚠️ The eyes are LIT, not coloured, and they are the reason this
-              still reads at fourteen pixels: two bright points under a heavy
-              brow are a face long before the outline around them is legible. */}
-          <g style={{ filter: `drop-shadow(0 0 2.5px ${colour})` }}>
-            <rect x="4.5" y="7.4" width="1.9" height="1.7" fill="#fff5f7" />
-            <rect x="7.6" y="7.4" width="1.9" height="1.7" fill="#fff5f7" />
-          </g>
-        </>
-      )
 
-    return (
-      <>
-        {/* Two blades, and the crossguards that stop an X reading as a
-            multiplication sign. Filled rather than outlined: at this size an
-            outlined blade is two hairlines a pixel apart, which is a smudge. */}
-        <path d="M11.9 1.6 L12.4 3.4 L4.6 11.9 L3.1 10.5 Z" fill={colour} />
-        <path d="M2.1 1.6 L1.6 3.4 L9.4 11.9 L10.9 10.5 Z" fill={colour} opacity="0.92" />
-        <path
-          d="M2 8.2 L5.4 11.6 M12 8.2 L8.6 11.6"
-          stroke={colour}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </>
-    )
-  }, [assist, down, colour])
 
   // 22px clears a 14px glyph with room to spare, which is what "these are two
   // marks" has to look like at a glance.
