@@ -129,7 +129,7 @@ const AUDIO: { value: AppSettings["captureAudio"]; label: string; note: string }
     note: "Everything the machine plays — game, Discord, music — as one track.",
   },
   { value: "mic", label: "Microphone", note: "Your voice only." },
-  { value: "both", label: "Both", note: "System and microphone, mixed." },
+  { value: "both", label: "Both", note: "System and microphone, mixed into one track." },
 ]
 
 /**

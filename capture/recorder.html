@@ -43,6 +43,7 @@
         "video/webm;codecs=vp8,opus",
       ]
 
+      let mixer = null
       let recorder = null
       let stream = null
       /** Chunks read but not yet handed to the shell. */
@@ -52,6 +53,10 @@
 
       async function start({ sourceId, audio, fps, bitrate }) {
         await stop()
+
+        // The graph that mixes the microphone into the system audio, when both
+        // are wanted. Held so it can be torn down with the recording.
+        mixer = null
 
         const wantsSystem = audio === "system" || audio === "both"
         const wantsMic = audio === "mic" || audio === "both"
@@ -88,7 +93,39 @@
           // without your voice beats no recording.
           try {
             const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
-            mic.getAudioTracks().forEach((t) => stream.addTrack(t))
+
+            /**
+             * ⚠️ MIXED, not added as a second track.
+             *
+             * This used to be `mic.getAudioTracks().forEach((t) => stream.addTrack(t))`,
+             * and the microphone was SILENTLY THROWN AWAY. MediaRecorder writes
+             * exactly ONE audio track and keeps the FIRST one in the stream:
+             * measured on this Electron build, a stream of one video and two
+             * audio tracks produced an mp4 with 2 traks and a webm with 2
+             * TrackEntry, never 3 — with no exception, no `onerror` and nothing
+             * on the console. The loopback is track 0, so "Both" recorded the
+             * system and dropped the voice, while the app's own log said "2
+             * audio track(s)" and Preferences promised "System and microphone,
+             * mixed".
+             *
+             * So mix them for real. Two sources into one destination is one
+             * track, which is the only shape that survives.
+             */
+            const ctx = new AudioContext()
+            const dest = ctx.createMediaStreamDestination()
+
+            const sys = new MediaStream(stream.getAudioTracks())
+            if (sys.getAudioTracks().length) ctx.createMediaStreamSource(sys).connect(dest)
+            ctx.createMediaStreamSource(mic).connect(dest)
+
+            // The originals leave the stream; the mix takes their place.
+            stream.getAudioTracks().forEach((t) => stream.removeTrack(t))
+            dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t))
+
+            // ⚠️ Kept alive for the recording, and closed with it: an
+            // AudioContext that goes out of scope is collected, and the mix
+            // stops without a word.
+            mixer = { ctx, mic }
           } catch (e) {
             ipcRenderer.send("capture:warn", "microphone unavailable: " + String(e).slice(0, 120))
           }
@@ -181,6 +218,13 @@
         // running for nothing.
         stream?.getTracks().forEach((t) => t.stop())
         stream = null
+        // The mix, and the device behind it. Both are stopped by hand for the
+        // same reason the tracks are: nothing else releases them.
+        if (mixer) {
+          mixer.mic.getTracks().forEach((t) => t.stop())
+          try { await mixer.ctx.close() } catch {}
+          mixer = null
+        }
       }
 
       ipcRenderer.on("capture:start", async (_e, opts) => {
