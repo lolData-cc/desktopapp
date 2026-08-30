@@ -188,10 +188,14 @@ export default function MatchDetail({
         {chosen && <Card p={chosen} patch={patch} match={match} rank={chosen.riotId ? ranks[chosen.riotId] ?? null : null} onClose={() => setPicked(null)} />}
         </div>
 
-      {/* Under the pair, which used to be empty space once the two columns
-          were made the same height. */}
-      <MatchInsights board={board} chosen={chosen} patch={patch} />
       </div>
+
+      {/* ⚠️ OUTSIDE .match-stage, and that is the whole point. At wide widths
+          that element is a flex ROW — dropping this inside it made the panel a
+          third column beside the video and the board instead of a band under
+          them, and the recording shrank to a thumbnail to make room. It sits
+          after the row, so the layout above it is untouched. */}
+      <MatchInsights board={board} chosen={chosen} patch={patch} />
 
       {sharing && clip && <ShareClip rec={clip} s={s} onClose={() => setSharing(false)} />}
     </div>
