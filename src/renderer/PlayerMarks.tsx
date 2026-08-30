@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { mmss, type Highlight } from "./types"
 
 /**
@@ -136,41 +136,7 @@ export function Timeline({
         * reads as belonging to that mark and never runs off the left end of the
         * bar at 0:12.
         */}
-      {over && (
-        <div
-          className="clip-arrive pointer-events-none absolute -top-[30px] z-10 flex items-baseline whitespace-nowrap py-1.5 pl-3 pr-16"
-          style={{
-            left: `${pct(over.at)}%`,
-            transform: pct(over.at) > 62 ? "translateX(-100%) scaleX(-1)" : undefined,
-            background: `linear-gradient(90deg, ${KIND[over.kind].colour}2e 0%, ${KIND[over.kind].colour}14 42%, transparent 100%)`,
-          }}
-        >
-          {/* Flipped back upright when the wash itself is mirrored, so a mark
-              near the end of the game does not print its label backwards. */}
-          <span
-            className="flex items-baseline"
-            style={{ transform: pct(over.at) > 62 ? "scaleX(-1)" : undefined }}
-          >
-            <span
-              className="font-jetbrains text-[9px] tracking-[0.24em]"
-              style={{ color: KIND[over.kind].colour, filter: `drop-shadow(0 0 8px ${KIND[over.kind].colour}88)` }}
-            >
-              {over.count > 1 ? `${over.count} × ${KIND[over.kind].label}` : KIND[over.kind].label}
-            </span>
-            <span className="ml-2.5 font-jetbrains text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>
-              {mmss(over.at / 1000)}
-            </span>
-            {/* ⚠️ Every name in the cluster. A pin that swallowed three kills
-                used to print the first one and looked like a mistake: the count
-                said three and the card named one. */}
-            {over.labels.map((l, i) => (
-              <span key={i} className="ml-3 font-chakrapetch text-[12.5px] font-bold text-white">
-                {l}
-              </span>
-            ))}
-          </span>
-        </div>
-      )}
+      {over && <Wash over={over} bar={bar} total={total} />}
 
       <div
         ref={setBar}
@@ -234,6 +200,81 @@ export function Timeline({
           </span>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The label for the mark under the pointer.
+ *
+ * WARNING: a WASH, not a box. Death Stranding 2 almost never puts a label in a
+ * bordered container: it lays a band of colour that is opaque at the leading
+ * edge and fades to nothing across its length, and sets the text on that. A box
+ * with corners here would be the one framed thing on a screen with no frames.
+ *
+ * WARNING: which way it grows is MEASURED, not guessed. It used to flip past a
+ * fixed 62% of the bar, which knows nothing about how wide this particular
+ * label is - so a cluster carrying three names sat at 60%, declined to flip,
+ * and ran off the end of the bar. Its own width is the only thing that can
+ * answer the question, and that is knowable only after it is laid out.
+ *
+ * WARNING: nothing here uses `transform`. The mirroring this replaces was a
+ * `scaleX(-1)` with a second `scaleX(-1)` inside to stand the words back up,
+ * and the outer one never applied - `.clip-arrive` animates `transform`, and a
+ * CSS ANIMATION OVERRIDES AN INLINE STYLE. The wash stayed where it was, the
+ * counter-flip fired alone, and every mark past 62% printed its label in mirror
+ * writing.
+ */
+function Wash({ over, bar, total }: { over: Pin; bar: HTMLDivElement | null; total: number }) {
+  const box = useRef<HTMLDivElement | null>(null)
+  const [back, setBack] = useState(false)
+
+  const x = Math.min(100, Math.max(0, (over.at / 1000 / total) * 100))
+
+  useLayoutEffect(() => {
+    const w = bar?.clientWidth ?? 0
+    const mine = box.current?.getBoundingClientRect().width ?? 0
+    if (!w || !mine) return
+    const at = (x / 100) * w
+    // Forward unless it would not fit - and if it fits neither way, forward,
+    // because running off the END of a bar is easier to read past than running
+    // off the start, where the controls are.
+    setBack(at + mine > w && at - mine >= 0)
+  }, [x, total, bar, over])
+
+  const c = KIND[over.kind].colour
+
+  return (
+    <div
+      ref={box}
+      className="clip-arrive pointer-events-none absolute -top-[30px] z-10 flex items-baseline whitespace-nowrap py-1.5"
+      style={{
+        [back ? "right" : "left"]: `${back ? 100 - x : x}%`,
+        // The tail is the long side and always points AWAY from the mark, so it
+        // still reads as growing out of it.
+        paddingLeft: back ? 64 : 12,
+        paddingRight: back ? 12 : 64,
+        // Opaque at the leading edge, whichever edge the mark is on.
+        background: `linear-gradient(${back ? 270 : 90}deg, ${c}2e 0%, ${c}14 42%, transparent 100%)`,
+      }}
+    >
+      <span
+        className="font-jetbrains text-[9px] tracking-[0.24em]"
+        style={{ color: c, filter: `drop-shadow(0 0 8px ${c}88)` }}
+      >
+        {over.count > 1 ? `${over.count} × ${KIND[over.kind].label}` : KIND[over.kind].label}
+      </span>
+      <span className="ml-2.5 font-jetbrains text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>
+        {mmss(over.at / 1000)}
+      </span>
+      {/* WARNING: every name in the cluster. A pin that swallowed three kills
+          used to print the first one and looked like a mistake: the count said
+          three and the card named one. */}
+      {over.labels.map((l, i) => (
+        <span key={i} className="ml-3 font-chakrapetch text-[12.5px] font-bold text-white">
+          {l}
+        </span>
+      ))}
     </div>
   )
 }
