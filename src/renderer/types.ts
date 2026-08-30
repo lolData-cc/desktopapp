@@ -233,6 +233,11 @@ export type RuneVariant = {
   winrate: number
   share: number
   label: string
+  /** Whose page this is, when it belongs to a PERSON rather than a cohort —
+   *  the one-trick's own page. Mirrors RuneVariant in src/data/runeSource.ts.
+   *  ⚠️ Its absence is meaningful: the other variants are "what most players
+   *  run", and there is nobody to name. */
+  from?: { name: string; tag: string; tier: string; lp: number; region: string }
 }
 
 export type AppState = {

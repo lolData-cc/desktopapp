@@ -659,7 +659,15 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
           Each option is the keystone it actually is, with the secondary tree
           small beside it and the words underneath. A rune page is a picture in
           the client and on the website; it was a word only here. */}
-      <div className={`grid grid-cols-5 gap-1.5 ${locked ? "mt-3" : ""}`}>
+      {/* ⚠️ Six columns when the one-trick's page is there, five when it is
+          not — the grid follows the data rather than the data being trimmed to
+          the grid. Nobody one-tricks most champions in most roles, so the
+          five-column case is still the common one. */}
+      <div
+        className={`grid gap-1.5 ${locked ? "mt-3" : ""} ${
+          r.variants.length > 5 ? "grid-cols-6" : "grid-cols-5"
+        }`}
+      >
         {r.variants.map((variant, i) => {
           const tile = tiles[i]
           const chosen = i === r.chosen
@@ -726,7 +734,25 @@ function RunePanel({ s, locked }: { s: AppState; locked: boolean }) {
           travels, and the ranking of the type says which end it is at. */}
       <p className="ds-late mt-3 font-jetbrains text-[9px] tabular-nums text-flash/30">
         {r.remembered && r.chosen !== 0 && <span className="text-jade/70">your last choice · </span>}
-        {v.share >= 1 ? `${Math.round(v.share)}% of games` : "rarely played"} · {v.games.toLocaleString()} games
+        {/* ⚠️ A page taken from ONE PLAYER says whose it is, and says a
+            different sentence: a share of "all games on this champion" is
+            meaningless for a page only one person runs. Attribution is what
+            makes "highest elo" a fact rather than a boast. */}
+        {v.from ? (
+          <>
+            <span className="text-jade/70">
+              {v.from.name}
+              <span className="text-flash/25">#{v.from.tag}</span>
+            </span>
+            {" · "}
+            {v.from.tier.toLowerCase()} {v.from.lp} LP · {v.games.toLocaleString()} games on this page
+          </>
+        ) : (
+          <>
+            {v.share >= 1 ? `${Math.round(v.share)}% of games` : "rarely played"} ·{" "}
+            {v.games.toLocaleString()} games
+          </>
+        )}
       </p>
 
       <div className="mt-3 flex items-center gap-4">

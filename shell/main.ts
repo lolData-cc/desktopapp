@@ -28,7 +28,7 @@ import { makeClip, revealClip, revealClipFolder, clipsOnDisk, emptyClips, destro
          type ClipRequest } from "./clips"
 import { canUpdate, checkForUpdate, downloadUpdate, initUpdater, installUpdate, type UpdateState } from "./updater"
 import { importPage, pageName, type BuildPage } from "../src/lcu/runes"
-import { championRunes, type RuneVariant } from "../src/data/runeSource"
+import { championRunes, highestEloRunes, type RuneVariant } from "../src/data/runeSource"
 import { chosenFor, rememberChoice, signatureOf, readSession, writeSession, type Session,
          listBuilds, buildFor, saveBuild, setBuildEnabled, deleteBuild, type BuildProfile,
          chosenAll, runesBackfilledFor, markRunesBackfilled,
@@ -520,7 +520,15 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
 
   const ctl = new AbortController()
   runeFetch = ctl
-  const suggestion = await championRunes(champion.key, champion.name, role, ctl.signal).catch(() => null)
+  /**
+   * ⚠️ BOTH AT ONCE. Champion select gives about twenty seconds of usable time,
+   * and asking for the second page only after the first has landed spends that
+   * twice. They are independent questions of two different endpoints.
+   */
+  const [suggestion, otp] = await Promise.all([
+    championRunes(champion.key, champion.name, role, ctl.signal).catch(() => null),
+    highestEloRunes(champion.name, role, ctl.signal).catch(() => null),
+  ])
   if (ctl.signal.aborted) return
   // No pages for this role. Say WHICH role, so the panel can explain itself
   // instead of going blank — and never borrow another lane's runes.
@@ -529,12 +537,44 @@ async function readRunes(champion: Champion | null, role: string | null): Promis
   // Matched by the runes themselves, not by position: variant order is a
   // popularity ranking and it moves between patches, so a stored index would
   // silently start pointing at a different page.
+  /**
+   * The one-trick's page joins the list rather than replacing anything.
+   *
+   * ⚠️ LAST, and never pre-selected. The pages above it are what this champion's
+   * players actually run in this role; this one is what a single very good
+   * player runs, which is a different claim and often a sharper, riskier page.
+   * Offering it is right; defaulting to it would be choosing for somebody.
+   *
+   * ⚠️ Appended only when the endpoint returned a person. It answers 204 when
+   * nobody one-tricks this champion in this role at Master+, which is common and
+   * is not a failure — the option simply is not there, for the same reason the
+   * cross-role fallback was removed: an option that quietly serves another
+   * lane's page is worse than an option that is missing.
+   */
+  const variants: RuneVariant[] = [...suggestion.variants]
+  if (otp) {
+    variants.push({
+      page: otp.page,
+      games: otp.pageGames,
+      winrate: otp.games > 0 ? Math.round((otp.wins / otp.games) * 1000) / 10 : 0,
+      share: 0,
+      label: "Highest Elo",
+      from: {
+        name: otp.from.name,
+        tag: otp.from.tag,
+        tier: otp.from.tier,
+        lp: otp.from.lp,
+        region: otp.from.region,
+      },
+    })
+  }
+
   const want = await chosenFor(champion.name)
-  const found = want ? suggestion.variants.findIndex((v) => signatureOf(v.page) === want) : -1
+  const found = want ? variants.findIndex((v) => signatureOf(v.page) === want) : -1
 
   push({
     runes: {
-      variants: suggestion.variants,
+      variants,
       chosen: found >= 0 ? found : 0,
       remembered: found >= 0,
       pageName: pageName(champion.name, state.patch ?? ""),
