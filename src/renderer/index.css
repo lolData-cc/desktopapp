@@ -945,7 +945,12 @@ body {
   .match-stage {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    /* ⚠️ STRETCH, not flex-start. The two columns are one object seen from two
+       sides — the game and its scoreboard — and ending at different heights made
+       the pair read as two panels that happened to be adjacent, with a ragged
+       hole under the shorter one. The video sets the height; the board fills it
+       and scrolls inside itself when ten rows want more. */
+    align-items: stretch;
     gap: 22px;
   }
 
@@ -975,6 +980,10 @@ body {
        so the floor is fixed and the percentage only lets it grow. */
     flex: 0 0 clamp(620px, 38%, 720px);
     min-width: 0;
+    /* Ten rows are usually taller than the picture beside them. The column
+       keeps the picture's height and takes the overflow itself, rather than
+       dragging the whole page down and leaving the video stranded at the top. */
+    overflow-y: auto;
   }
 
   /* ⚠️ The row already had responsive rules — `lg:block` on the bars,

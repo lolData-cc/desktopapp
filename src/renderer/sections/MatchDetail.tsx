@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import MatchInsights from "./MatchInsights"
 import { championById } from "../../data/champions"
 import Player from "../Player"
 import ShareClip from "../ShareClip"
@@ -186,6 +187,10 @@ export default function MatchDetail({
 
         {chosen && <Card p={chosen} patch={patch} match={match} rank={chosen.riotId ? ranks[chosen.riotId] ?? null : null} onClose={() => setPicked(null)} />}
         </div>
+
+      {/* Under the pair, which used to be empty space once the two columns
+          were made the same height. */}
+      <MatchInsights board={board} chosen={chosen} patch={patch} />
       </div>
 
       {sharing && clip && <ShareClip rec={clip} s={s} onClose={() => setSharing(false)} />}
