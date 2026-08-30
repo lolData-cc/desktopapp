@@ -28,6 +28,7 @@ import { Readable } from "node:stream"
 import { join } from "node:path"
 import { captureFile } from "./paths"
 import { CLIP_SCHEME } from "../src/data/clip"
+import { planAudio, type AudioLayout, type AudioPlan } from "./audioSplit"
 
 export type Highlight = {
   /** Milliseconds from the start of the recording. */
@@ -73,6 +74,24 @@ export type Recording = {
    * request would be answering a question about the file with a setting.
    */
   fps: number
+  /**
+   * How the one audio track is laid out.
+   *
+   * `"split"` means LEFT is the game and RIGHT is Discord, each mono. Anything
+   * else — including ABSENT, which every recording made before this existed is
+   * — means one ordinary mixed track, and the player shows one volume slider
+   * exactly as it always did.
+   */
+  audioLayout?: AudioLayout
+  /**
+   * The loudest either channel ever got, 0–1.
+   *
+   * ⚠️ The only defence against the silent-failure trap. A loopback capture
+   * pointed at the wrong process yields a LIVE track of digital silence, with no
+   * exception and nothing on the console — so "did this work" cannot be asked of
+   * the API and has to be measured off the signal.
+   */
+  audioPeaks?: { game: number; voice: number }
 }
 
 /**
@@ -158,6 +177,18 @@ async function leagueWindow(anyWindow = false): Promise<{ id: string; name: stri
 }
 
 /**
+ * The process the NEXT getDisplayMedia call is allowed to capture.
+ *
+ * ⚠️ ONE AT A TIME, and armed only immediately before the call it answers. Not a
+ * queue: two requests in flight would be answered in whatever order Chromium
+ * asked, and the audio of a game would end up on the channel labelled Discord
+ * with nothing anywhere reporting it. The renderer asks, waits for this to be
+ * armed, then calls — strictly sequential.
+ */
+let pendingAsk: { pid: number; kind: string } | null = null
+let handlerReady = false
+
+/**
  * The invisible window that owns MediaRecorder.
  *
  * ⚠️ Its own window on purpose. MediaRecorder is a DOM API so this must be a
@@ -183,10 +214,55 @@ async function ensureWindow(): Promise<BrowserWindow> {
   })
 
   await win.loadFile(captureFile("recorder.html"))
+
+  /**
+   * ⚠️ Registered ONCE and gated HARD on the recorder's own frame. This handler
+   * is session-wide: without the frame check, any page this app ever loads could
+   * ask for a display-media stream and be handed one.
+   */
+  if (!handlerReady) {
+    handlerReady = true
+    const { session } = await import("electron")
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+      if (!win || win.isDestroyed() || request.frame !== win.webContents.mainFrame) return callback({})
+      const ask = pendingAsk
+      pendingAsk = null
+      if (!ask) return callback({})
+      /**
+       * ⚠️ UNDOCUMENTED, and verified rather than trusted. Electron's typings
+       * admit only `'loopback' | 'loopbackWithMute' | WebFrameMain` for `audio`;
+       * its own source calls this dictionary form an escape hatch not permitted
+       * by the documentation. Measured working on 43.4.1, with a decisive
+       * negative control: the same call aimed at a SILENT process returned a
+       * peak of 0.0000, so the id is genuinely honoured and is not quietly
+       * falling back to the system mix.
+       */
+      callback({ audio: { id: `applicationLoopback:${ask.pid}`, name: ask.kind } as unknown as never })
+    })
+  }
+
   return win
 }
 
 ipcMain.on("capture:ready", () => { ready = true })
+
+/**
+ * The renderer asking permission to capture one process.
+ *
+ * ⚠️ It names a CHANNEL, never a pid. The renderer is a web page; letting it
+ * choose the process would mean building a device id out of something this
+ * module did not verify, and a malformed one makes Chromium `CHECK`-fail while
+ * parsing it. The pids come from the plan made when the recording started.
+ */
+ipcMain.handle("capture:want-audio", (_e, kind: "game" | "voice") => {
+  const pid = kind === "game" ? plan?.gamePid : plan?.voicePid
+  if (!pid || !Number.isInteger(pid) || pid <= 0) return false
+  pendingAsk = { pid, kind }
+  return true
+})
+
+/** The audio plan for the recording in progress. */
+let plan: AudioPlan | null = null
 
 ipcMain.on("capture:warn", (_e, message: string) => {
   console.log("[capture] %s", message)
@@ -214,7 +290,7 @@ ipcMain.on("capture:failed", (_e, message: string) => {
 export async function beginRecording(
   settings: {
     capture: boolean
-    captureAudio: "none" | "system" | "mic" | "both"
+    captureAudio: "none" | "system" | "mic" | "both" | "split"
     captureBudgetGb?: number | null
     captureFps?: number
   },
@@ -235,6 +311,13 @@ export async function beginRecording(
 
   const source = await leagueWindow(anyWindow)
   if (!source) return false
+
+  /**
+   * ⚠️ Made BEFORE the recorder window is asked to start, because it decides
+   * what to ask it for — and it costs about a second of PowerShell, which is a
+   * second spent before the game rather than during it.
+   */
+  plan = await planAudio(settings.captureAudio === "split")
 
   const w = await ensureWindow()
   // The window may still be loading on the very first game.
@@ -273,11 +356,15 @@ export async function beginRecording(
     width: 0,
     height: 0,
     fps: 0,
+    audioLayout: plan.layout,
   }
 
   w.webContents.send("capture:start", {
     sourceId: source.id,
     audio: settings.captureAudio,
+    // What the machine can actually do, which is not always what was asked
+    // for: Windows 10, or Discord simply not running, both land on "stereo".
+    layout: plan.layout,
     fps,
     /**
      * ⚠️ Scaled with the frame rate, not fixed.
@@ -365,7 +452,14 @@ export async function endRecording(): Promise<void> {
   win.webContents.send("capture:stop")
 }
 
-ipcMain.on("capture:stopped", () => { void finish() })
+ipcMain.on("capture:stopped", (_e, info?: { peaks?: { game: number; voice: number } }) => {
+  // ⚠️ Written before finish(), which is what persists the record. A peak of
+  // zero on a "split" recording means that channel captured nothing - the wrong
+  // process, or one that never made a sound - and the player needs to know it
+  // before it offers a slider for it.
+  if (current && info?.peaks) current.audioPeaks = info.peaks
+  void finish()
+})
 
 async function finish(): Promise<void> {
   const rec = current

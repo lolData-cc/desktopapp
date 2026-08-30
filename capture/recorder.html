@@ -44,6 +44,8 @@
       ]
 
       let mixer = null
+      let meters = null
+      let lastPeaks = null
       let recorder = null
       let stream = null
       /** Chunks read but not yet handed to the shell. */
@@ -51,14 +53,18 @@
 
       const pick = () => CODECS.find((t) => MediaRecorder.isTypeSupported(t)) ?? ""
 
-      async function start({ sourceId, audio, fps, bitrate }) {
+      async function start({ sourceId, audio, layout, fps, bitrate }) {
         await stop()
 
         // The graph that mixes the microphone into the system audio, when both
         // are wanted. Held so it can be torn down with the recording.
         mixer = null
 
-        const wantsSystem = audio === "system" || audio === "both"
+        // ⚠️ In split mode the system MIX is exactly what we do not want: the
+        // whole point is two programmes kept apart, and the mix is both of them
+        // already blended past separating.
+        const split = layout === "split"
+        const wantsSystem = !split && (audio === "system" || audio === "both")
         const wantsMic = audio === "mic" || audio === "both"
 
         // The desktop video track, and the system mix alongside it when asked.
@@ -86,6 +92,112 @@
             },
           },
         })
+
+        if (split) {
+          /**
+           * ⚠️ ONE AT A TIME, and each preceded by asking the shell to arm it.
+           * The shell answers the NEXT getDisplayMedia call with one process id
+           * and disarms itself; two calls in flight would be answered in
+           * whichever order Chromium made them, and the game's audio would land
+           * on the channel labelled Discord with nothing reporting it.
+           */
+          const grab = async (kind) => {
+            const armed = await ipcRenderer.invoke("capture:want-audio", kind)
+            if (!armed) return null
+            try {
+              return await navigator.mediaDevices.getDisplayMedia({
+                video: false,
+                /**
+                 * ⚠️ ALL THREE OFF, and this is not tidiness. With the defaults
+                 * Chromium runs echo cancellation, auto gain and noise
+                 * suppression over a LOOPBACK capture — measured, a steady tone
+                 * decayed 16 dB in four seconds. They exist for microphones;
+                 * on a program's own output they are damage.
+                 */
+                audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false },
+              })
+            } catch (e) {
+              ipcRenderer.send("capture:warn", kind + " audio unavailable: " + String(e).slice(0, 120))
+              return null
+            }
+          }
+
+          const game = await grab("game")
+          const voice = await grab("voice")
+
+          if (game && voice) {
+            /**
+             * The two programmes, merged into ONE STEREO TRACK: game LEFT,
+             * Discord RIGHT.
+             *
+             * ⚠️ One track, because MediaRecorder writes exactly one and keeps
+             * the FIRST — measured on this build, a stream with two audio tracks
+             * produces a file with one, silently. A stereo track is the only
+             * shape that carries two programmes through it, and the player
+             * splits the channels back apart on the way out.
+             */
+            const ctx = new AudioContext()
+            const merger = ctx.createChannelMerger(2)
+            const dest = ctx.createMediaStreamDestination()
+
+            const arm = (s, input) => {
+              const src = ctx.createMediaStreamSource(s)
+              // Forced to ONE channel: a stereo source fed into one merger input
+              // would be downmixed anyway, and saying so explicitly is the
+              // difference between a decision and a default.
+              const mono = ctx.createGain()
+              mono.channelCount = 1
+              mono.channelCountMode = "explicit"
+              mono.channelInterpretation = "speakers"
+              src.connect(mono)
+              mono.connect(merger, 0, input)
+              // ⚠️ The only way to know this worked. A loopback pointed at the
+              // wrong process is a LIVE track of digital silence — no error, no
+              // console output — so the question has to be asked of the signal.
+              const an = ctx.createAnalyser()
+              an.fftSize = 512
+              mono.connect(an)
+              return an
+            }
+
+            const anGame = arm(game, 0)
+            const anVoice = arm(voice, 1)
+            merger.connect(dest)
+
+            // Electron's default autoplay policy does not require a gesture, but
+            // a suspended context would record silence, so it is not assumed.
+            try { await ctx.resume() } catch {}
+            if (ctx.state !== "running") {
+              ipcRenderer.send("capture:warn", "audio context did not start: " + ctx.state)
+            }
+
+            dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t))
+            mixer = { ctx, mic: new MediaStream([...game.getTracks(), ...voice.getTracks()]) }
+
+            const buf = new Uint8Array(anGame.fftSize)
+            const peak = { game: 0, voice: 0 }
+            const read = (an) => {
+              an.getByteTimeDomainData(buf)
+              let m = 0
+              for (let i = 0; i < buf.length; i++) m = Math.max(m, Math.abs(buf[i] - 128) / 128)
+              return m
+            }
+            const tick = setInterval(() => {
+              peak.game = Math.max(peak.game, read(anGame))
+              peak.voice = Math.max(peak.voice, read(anVoice))
+            }, 2000)
+            meters = { peak, tick }
+          } else {
+            // One of the two is missing, so there is nothing to keep apart.
+            // Falls back to the mix rather than to half a recording.
+            ;[game, voice].forEach((s) => s?.getTracks().forEach((t) => t.stop()))
+            ipcRenderer.send("capture:warn", "split audio unavailable — recording the mix instead")
+            const mix = await navigator.mediaDevices
+              .getUserMedia({ audio: { mandatory: { chromeMediaSource: "desktop" } }, video: false })
+              .catch(() => null)
+            mix?.getAudioTracks().forEach((t) => stream.addTrack(t))
+          }
+        }
 
         if (wantsMic) {
           // A separate call, because a microphone is a real device and cannot
@@ -157,6 +269,13 @@
         recorder = new MediaRecorder(stream, {
           mimeType,
           videoBitsPerSecond: bitrate,
+          /**
+           * ⚠️ Named, where it never used to be. The default is 128 kbps, and
+           * two UNCORRELATED mono programmes in a joint-stereo frame is the
+           * worst case an encoder gets — the two channels share nothing it can
+           * fold together. Measured: this value is honoured almost exactly.
+           */
+          audioBitsPerSecond: 192000,
         })
 
         /**
@@ -218,6 +337,11 @@
         // running for nothing.
         stream?.getTracks().forEach((t) => t.stop())
         stream = null
+        if (meters) {
+          clearInterval(meters.tick)
+          lastPeaks = meters.peak
+          meters = null
+        }
         // The mix, and the device behind it. Both are stopped by hand for the
         // same reason the tracks are: nothing else releases them.
         if (mixer) {
@@ -238,7 +362,7 @@
 
       ipcRenderer.on("capture:stop", async () => {
         await stop()
-        ipcRenderer.send("capture:stopped")
+        ipcRenderer.send("capture:stopped", lastPeaks ? { peaks: lastPeaks } : undefined)
       })
 
       ipcRenderer.send("capture:ready")

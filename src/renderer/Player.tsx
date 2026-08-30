@@ -2,6 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { CDN, mmss, type Highlight, type Recording } from "./types"
 import { KIND, Timeline, pinsFrom } from "./PlayerMarks"
+import { useSplitAudio, type Channel } from "./useSplitAudio"
+
+/**
+ * The two programmes in a split recording, and the levels set on them.
+ *
+ * ⚠️ Null, not an empty object, when the recording holds one mixed track. The
+ * control grows a second rail from the presence of this and nothing else: a
+ * slider that appears and does nothing is worse than one that never appears.
+ */
+export type Channels = { levels: Record<Channel, number>; set: (ch: Channel, v: number) => void }
 import PlayerDraw, { type Stroke } from "./PlayerDraw"
 
 /**
@@ -97,6 +107,27 @@ export default function Player({
   const [shape, setShape] = useState<number | null>(null)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
+  /**
+   * ⚠️ Per-channel levels, and they exist whether or not this recording has
+   * two channels: a slider the player moved on one game should still be where
+   * they left it on the next, and keeping them here rather than behind the
+   * split makes that free.
+   */
+  const [levels, setLevels] = useState<Record<Channel, number>>({ game: 1, voice: 1 })
+
+  /**
+   * ⚠️ Offered only when the recording SAYS it has two programmes AND both of
+   * them were actually heard. `audioPeaks` is measured off the signal at record
+   * time precisely because a loopback capture aimed at the wrong process is
+   * live silence rather than an error — and a slider for a channel that holds
+   * nothing is worse than no slider at all.
+   */
+  const hasSplit =
+    rec.audioLayout === "split" &&
+    (rec.audioPeaks?.game ?? 0) > 0 &&
+    (rec.audioPeaks?.voice ?? 0) > 0
+
+  const splitAudio = useSplitAudio(video, window.desktop.clipUrl(rec.id), hasSplit)
   const [drawing, setDrawing] = useState(false)
   /**
    * Whether playback has ever been started.
@@ -295,13 +326,23 @@ export default function Player({
     return () => document.removeEventListener("fullscreenchange", on)
   }, [grow])
 
-  // Volume lives on the element; this keeps the two in step.
+  /**
+   * Volume lives on the element — unless a split graph is running, in which
+   * case every level is a gain node and the element is left wide open. Writing
+   * to both would mean two things fighting over one number.
+   */
   useEffect(() => {
     const v = video.current
     if (!v) return
+    if (splitAudio.live) {
+      splitAudio.setMaster(muted ? 0 : volume)
+      splitAudio.set("game", levels.game)
+      splitAudio.set("voice", levels.voice)
+      return
+    }
     v.volume = volume
     v.muted = muted
-  }, [volume, muted])
+  }, [volume, muted, levels, splitAudio.live])
 
   /**
    * ⚠️ A click waits to find out whether it is half of a double.
@@ -407,9 +448,12 @@ export default function Player({
         ...(inline ? { aspectRatio: `${shape || (rec.width || 16) / (rec.height || 9)}` } : null),
       }}
     >
+      {/* ⚠️ NO `src` here. It is assigned in useSplitAudio, after
+          `crossOrigin` — a cross-origin element that has not passed a CORS
+          check makes createMediaElementSource output SILENCE, and React sets
+          attributes in declaration order. */}
       <video
         ref={video}
-        src={window.desktop.clipUrl(rec.id)}
         className="absolute inset-0 h-full w-full object-contain"
         style={{ opacity: ready ? 1 : 0, transition: "opacity 240ms ease" }}
         onClick={onVideoClick}
@@ -623,6 +667,11 @@ export default function Player({
           drawing={drawing}
           muted={muted}
           volume={volume}
+          channels={
+            splitAudio.live
+              ? { levels, set: (ch, v) => setLevels((s) => ({ ...s, [ch]: v })) }
+              : null
+          }
           hasNext={pins.some((p) => p.at > at * 1000 + RUNUP + 400)}
           onToggle={toggle}
           onNext={() => step(1)}
@@ -702,6 +751,7 @@ function Cluster({
   drawing,
   muted,
   volume,
+  channels,
   hasNext,
   onToggle,
   onNext,
@@ -715,6 +765,8 @@ function Cluster({
   drawing: boolean
   muted: boolean
   volume: number
+  /** Present only when this recording really holds two programmes. */
+  channels: Channels | null
   hasNext: boolean
   onToggle: () => void
   onNext: () => void
@@ -730,7 +782,14 @@ function Cluster({
         <path d="M15 5 L19 9" />
       </Glyph>
 
-      <Volume delay={70} muted={muted} volume={volume} onMute={onMute} onVolume={onVolume} />
+      <Volume
+        delay={70}
+        muted={muted}
+        volume={volume}
+        onMute={onMute}
+        onVolume={onVolume}
+        channels={channels}
+      />
 
       <Glyph delay={0} big label={playing ? "Pause" : "Play"} onClick={onToggle}>
         {playing ? (
@@ -888,14 +947,25 @@ function Volume({
   volume,
   onMute,
   onVolume,
+  channels,
 }: {
   delay: number
   muted: boolean
   volume: number
   onMute: () => void
   onVolume: (v: number) => void
+  /** Two programmes to balance, or null for an ordinary recording. */
+  channels: Channels | null
 }) {
   const [open, setOpen] = useState(false)
+  /**
+   * Which rail the pointer is on.
+   *
+   * ⚠️ This is the whole answer to "which one am I about to lower". You find
+   * out by pointing at it, before anything has moved — no mode, no modifier
+   * key, no second click to arm a channel.
+   */
+  const [over, setOver] = useState<Channel | "all" | null>(null)
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null)
   const level = muted ? 0 : volume
 
@@ -914,27 +984,41 @@ function Volume({
       {open && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-1">
           <div
-            className="clip-arrive flex h-[110px] w-[44px] items-center justify-center"
+            className="clip-arrive flex items-stretch justify-center gap-1 py-2"
             style={{
               background: "rgba(1,11,13,0.92)",
               // Hairline, square, and lit from the inside — never an outward glow.
               boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.14), inset 0 0 14px ${JADE}1c`,
             }}
           >
-            {/* ⚠️ A rotated range input rather than a bespoke vertical control:
-                it keeps the keyboard and pointer behaviour the platform already
-                implements correctly, which a div with a drag handler would have
-                to reinvent badly, and only for the mouse. */}
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.02}
+            {/* ⚠️ ONE rail unless the recording really holds two programmes.
+                A control that grows a second slider which does nothing is worse
+                than a control that does not grow. */}
+            <Rail
+              label="all"
               value={level}
-              aria-label="Volume"
-              onChange={(e) => onVolume(Number(e.target.value))}
-              className="clip-volume"
+              lit={over === "all" || !channels}
+              onHover={() => setOver("all")}
+              onChange={onVolume}
             />
+            {channels && (
+              <>
+                <Rail
+                  label="game"
+                  value={channels.levels.game}
+                  lit={over === "game"}
+                  onHover={() => setOver("game")}
+                  onChange={(v) => channels.set("game", v)}
+                />
+                <Rail
+                  label="chat"
+                  value={channels.levels.voice}
+                  lit={over === "voice"}
+                  onHover={() => setOver("voice")}
+                  onChange={(v) => channels.set("voice", v)}
+                />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -955,6 +1039,58 @@ function Volume({
 }
 
 /* ── the one control before anything has been pressed ────────────────────── */
+
+/**
+ * One vertical level, with its name under it.
+ *
+ * ⚠️ A ROTATED RANGE INPUT, not a div with a drag handler: it keeps the
+ * keyboard and pointer behaviour the platform already implements correctly,
+ * which a bespoke control would have to reinvent badly and only for the mouse.
+ *
+ * ⚠️ The label goes from faint to full when the pointer is on the rail. With
+ * three of them side by side, that is what tells you which one you are about to
+ * move — and it happens before you move it.
+ */
+function Rail({
+  label,
+  value,
+  lit,
+  onHover,
+  onChange,
+}: {
+  label: string
+  value: number
+  lit: boolean
+  onHover: () => void
+  onChange: (v: number) => void
+}) {
+  return (
+    <div
+      className="flex w-[38px] flex-col items-center gap-1.5"
+      onMouseEnter={onHover}
+    >
+      <div className="flex h-[96px] items-center justify-center">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.02}
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="clip-volume"
+        />
+      </div>
+      <span
+        className={`font-jetbrains text-[8px] uppercase tracking-[0.16em] transition-colors ${
+          lit ? "text-jade" : "text-flash/30"
+        }`}
+      >
+        {label}
+      </span>
+    </div>
+  )
+}
 
 /**
  * A rhombus with a play mark in it, and nothing else.

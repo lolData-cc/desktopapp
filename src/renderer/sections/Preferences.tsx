@@ -130,6 +130,11 @@ const AUDIO: { value: AppSettings["captureAudio"]; label: string; note: string }
   },
   { value: "mic", label: "Microphone", note: "Your voice only." },
   { value: "both", label: "Both", note: "System and microphone, mixed into one track." },
+  {
+    value: "split",
+    label: "Game + Discord",
+    note: "Recorded apart, so the replay can turn one down without the other.",
+  },
 ]
 
 /**
@@ -257,9 +262,15 @@ function CaptureTab({
               native module; the audio Chromium exposes is one mix. A "game
               only" option here would be a switch that quietly did something
               else. */}
+          {/* ⚠️ Said plainly, and said DIFFERENTLY on a machine that cannot do
+              it. The capture underneath is Windows 11's per-process loopback;
+              no consumer Windows 10 build has the API. An option that is
+              offered and then silently downgraded is worse than one that says
+              why it is not available. */}
           <p className="mt-2.5 max-w-[70ch] font-chakrapetch text-[11.5px] leading-snug text-flash/25">
-            Game and Discord audio cannot be separated — Windows hands out one mixed
-            track, and splitting it is not something this app can do today.
+            Game + Discord needs Windows 11, and both of them running when the game
+            starts. When either is missing the recording falls back to one mixed
+            track — you get the game, just not the two of them apart.
           </p>
         </section>
       )}

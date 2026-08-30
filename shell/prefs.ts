@@ -102,7 +102,7 @@ export type AppSettings = {
    * process-loopback through native code. Offering "game only" or "Discord
    * only" would be a switch that quietly did something else.
    */
-  captureAudio: "none" | "system" | "mic" | "both"
+  captureAudio: "none" | "system" | "mic" | "both" | "split"
   /**
    * How much disk the automatic recordings may use, in gigabytes — or null for
    * no limit at all.

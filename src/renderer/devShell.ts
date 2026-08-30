@@ -569,6 +569,10 @@ const BASE = {
       width: 1920,
       height: 1080,
       fps: 30,
+      // ⚠️ Exercises the two-rail volume control. Both peaks non-zero on
+      // purpose: the player refuses a rail for a channel that captured nothing.
+      audioLayout: "split" as const,
+      audioPeaks: { game: 0.82, voice: 0.44 },
       // ⚠️ These used to read "Lillia → Zed", which is not a shape the app has
       // ever produced: a real mark carries the OTHER player's name on its own,
       // and now the champion they were playing beside it. A fixture that is

@@ -91,6 +91,12 @@ export type Recording = {
   height: number
   /** What the capture actually ran at, read off the track. */
   fps: number
+  /** LEFT is the game and RIGHT is Discord when this is "split". Absent on every
+   *  recording made before split capture existed - see shell/capture.ts, which
+   *  this mirrors. */
+  audioLayout?: "split" | "stereo"
+  /** The loudest either channel reached, 0-1. Zero means it captured nothing. */
+  audioPeaks?: { game: number; voice: number }
 }
 
 /** One card on the loading screen. */
@@ -140,7 +146,10 @@ export type AppSettings = {
   goldReadout: boolean
   loadingBoard: boolean
   capture: boolean
-  captureAudio: "none" | "system" | "mic" | "both"
+  /** "split" keeps the game and Discord apart in one stereo track — see
+   *  shell/audioSplit.ts. It falls back to "system" on any machine or moment
+   *  that cannot do it, so a recording is never lost to it. */
+  captureAudio: "none" | "system" | "mic" | "both" | "split"
   /** Gigabytes of automatic recordings to keep, or null for no limit. */
   captureBudgetGb: number | null
   /** Frames per second to record at. */
