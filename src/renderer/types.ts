@@ -96,7 +96,7 @@ export type Recording = {
 /** One card on the loading screen. */
 /** The sections of the left-hand navigation. Shared because a section can
  *  now be opened from inside another one. */
-export type SectionId = "overview" | "build" | "matches" | "stats" | "ai" | "settings"
+export type SectionId = "overview" | "build" | "matches" | "stats" | "explorer" | "ai" | "settings"
 
 export type LoadingPlayer = {
   name: string

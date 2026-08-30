@@ -1,0 +1,144 @@
+/* explorer.css — node-editor theming + glow animations */
+
+/* the thin dashed core of a glow edge, flowing toward the target */
+.explorer-edge-flow {
+  stroke-dashoffset: 0;
+  animation: edgeFlow 0.85s linear infinite;
+}
+@keyframes edgeFlow {
+  to { stroke-dashoffset: -16; }
+}
+
+/* one-shot "ignition" the moment a wire is connected — the link lights up from
+   source to target, then fades into the steady glow underneath. Plays once on
+   mount (edges are only created on connect) and never restarts on node drag. */
+.explorer-edge-ignite {
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  filter: drop-shadow(0 0 7px rgba(120, 255, 200, 0.95));
+  animation: edgeIgnite 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes edgeIgnite {
+  0%   { stroke-dashoffset: 1; opacity: 0; stroke-width: 5; }
+  30%  { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; stroke-width: 1.5; }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* mobile results sheet — rises up from the bottom edge */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* our custom nodes draw their own glass card — kill the base theme's default
+   node chrome. The "output" type name collides with ReactFlow's built-in
+   output node, whose base CSS paints a white box behind our card. */
+.explorer-flow .react-flow__node-output,
+.explorer-flow .react-flow__node-input,
+.explorer-flow .react-flow__node-default,
+.explorer-flow .react-flow__node-group {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  width: auto;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+/* handles: grow in place + glow on hover. ReactFlow centers each handle on the
+   node edge with a per-side translate (left: -50%,-50% / right: 50%,-50%). The
+   hover scale must KEEP that translate, otherwise the dot drops its centering
+   and jumps down-left. So scale on each side's own axis. */
+.explorer-flow .react-flow__handle {
+  transition: box-shadow 0.15s, transform 0.15s;
+  transform-origin: center;
+}
+.explorer-flow .react-flow__handle:hover {
+  box-shadow: 0 0 12px rgba(0, 217, 146, 0.95) !important;
+}
+.explorer-flow .react-flow__handle-left:hover { transform: translate(-50%, -50%) scale(1.6); }
+.explorer-flow .react-flow__handle-right:hover { transform: translate(50%, -50%) scale(1.6); }
+
+/* a valid target input pulses while a wire is being dragged toward it, so it's
+   obvious where the connection should land. Target handles sit on the left edge
+   (translate -50%,-50%), so the keyframe keeps that translate while scaling. */
+.explorer-flow .react-flow__handle-left.explorer-handle-pulse {
+  animation: handleTargetPulse 0.9s ease-in-out infinite;
+}
+@keyframes handleTargetPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 6px rgba(0, 217, 146, 0.7); }
+  50% { transform: translate(-50%, -50%) scale(1.55); box-shadow: 0 0 18px rgba(0, 217, 146, 1), 0 0 5px rgba(0, 217, 146, 1); }
+}
+.explorer-flow .react-flow__connectionline path,
+.explorer-flow .react-flow__connection-path {
+  stroke: #00d992;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(0, 217, 146, 0.8));
+}
+
+/* selection box */
+.explorer-flow .react-flow__selection {
+  background: rgba(0, 217, 146, 0.06);
+  border: 1px solid rgba(0, 217, 146, 0.4);
+}
+
+/* portaled node-editor popups (dropdowns / combobox / right-click menu) render
+   at <body>, outside .explorer-flow. Kill every stray focus outline (the white
+   rectangle that ignores the rounded corners) and recolor the cmdk underline. */
+.explorer-surface,
+.explorer-surface *,
+.explorer-surface:focus,
+.explorer-surface :focus,
+.explorer-surface :focus-visible {
+  outline: none !important;
+}
+.explorer-surface [cmdk-input-wrapper] {
+  border-bottom-color: rgba(0, 217, 146, 0.18) !important;
+}
+
+/* in-node controls (dropdown triggers, number inputs) carry `nodrag` — kill any
+   browser focus ring so the trigger never flashes a white outline. */
+.explorer-flow .nodrag:focus,
+.explorer-flow .nodrag:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* DEEP DIVE — the result "expands" from the right sheet across the whole page
+   (clip-path wipe, leftward), fluid and linear; then each section fades up. */
+@keyframes deepDiveExpand {
+  from { clip-path: inset(0 0 0 78%); opacity: 0.35; }
+  to   { clip-path: inset(0 0 0 0%); opacity: 1; }
+}
+.deep-section { animation: deepSectionIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes deepSectionIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* snapshots list panel — slides up from the bottom-left controls */
+@keyframes snapPanelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* HOLD-TO-CASCADE — a quick click on a module's ✕ removes just that module;
+   holding it fills this ring (over the press duration, set inline), and when it
+   completes the module AND everything attached upstream of it is removed. The
+   circle is pre-rotated -90° (via the SVG transform attr) so the fill starts at
+   12 o'clock; we animate only the dash offset from full circumference → 0. */
+.explorer-hold-ring {
+  animation: explorerHoldRing linear forwards;
+}
+@keyframes explorerHoldRing {
+  from { stroke-dashoffset: 62.83; } /* 2π·10 = empty */
+  to   { stroke-dashoffset: 0; }     /* full ring */
+}

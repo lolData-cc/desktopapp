@@ -12,6 +12,8 @@
       "bun",
       "node"
     ],
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/renderer/*"] },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
@@ -23,5 +25,12 @@
     "src",
     "shell",
     "scripts"
+  ],
+  "exclude": [
+    "src/renderer/explorer",
+    "src/renderer/ui",
+    "src/renderer/hooks",
+    "src/renderer/constants",
+    "src/renderer/lib"
   ]
 }

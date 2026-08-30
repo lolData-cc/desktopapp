@@ -15,6 +15,10 @@ import { Attached, Waiting } from "./sections/Overview"
 const Matches = lazy(() => import("./sections/Matches"))
 const Stats = lazy(() => import("./sections/Stats"))
 const AiChat = lazy(() => import("./sections/AiChat"))
+// ⚠️ Lazy, and it matters more here than anywhere else: this one pulls in the
+// flow canvas, the charts and the whole ported tree, and nobody who never opens
+// it should pay for that on launch.
+const Explorer = lazy(() => import("./sections/Explorer"))
 const Builds = lazy(() => import("./sections/Builds"))
 const BuildEditor = lazy(() => import("./sections/BuildEditor"))
 const Preferences = lazy(() => import("./sections/Preferences"))
@@ -208,6 +212,11 @@ export default function App() {
             <Matches s={s} />
           ) : section === "stats" ? (
             <Stats s={s} />
+          ) : section === "explorer" ? (
+            // Back lands on Overview: there is no history to pop, and the
+            // section you would most likely want next is the one the app opens
+            // on.
+            <Explorer onBack={() => setSection("overview")} />
           ) : section === "settings" ? (
             <Preferences s={s} />
           ) : (
@@ -553,6 +562,31 @@ function Rail({
           is a rail that sells by ambush — you find out what it costs after
           reaching for it. The separation is the honesty; the crest is the
           shorthand. */}
+      {/* Beside lolData AI rather than among the four above it: both are tools
+          you go to with a question, where the four above report on the game you
+          just played. */}
+      <Plate
+        label="Explorer"
+        active={section === "explorer"}
+        onClick={() => onSection("explorer")}
+        glyph={
+          <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden className="shrink-0">
+            {/* Three nodes and the edges between them: the thing itself, at the
+                size of a glyph. */}
+            <circle cx="3" cy="3.5" r="1.7" fill="currentColor" />
+            <circle cx="10" cy="3.5" r="1.7" fill="currentColor" opacity="0.55" />
+            <circle cx="6.5" cy="10" r="1.7" fill="currentColor" opacity="0.55" />
+            <path
+              d="M4.4 4.4 L5.6 8.4 M8.6 4.4 L7.4 8.4 M4.7 3.5 L8.3 3.5"
+              stroke="currentColor"
+              strokeWidth="1"
+              opacity="0.4"
+              fill="none"
+            />
+          </svg>
+        }
+      />
+
       <AiPlate active={section === "ai"} premium={premium} onClick={() => onSection("ai")} />
 
       <Plate
