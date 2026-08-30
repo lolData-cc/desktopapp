@@ -833,7 +833,17 @@ function MicPicker({
   chosen: string | null
   onPick: (id: string | null) => void
 }) {
-  const name = (d: MediaDeviceInfo, i: number) => d.label || `Input ${i + 1}`
+  /**
+   * The device's name, without the hardware id Chromium appends to it.
+   *
+   * ⚠️ Labels arrive as "Microfono (Yeti Classic) (046d:0ab7)" — the trailing
+   * pair is the USB vendor:product id, which is for machines. It is stripped by
+   * SHAPE rather than by "the last parenthesis": the useful half of that name is
+   * itself in brackets, and a rule that took the last group would turn a Yeti
+   * into a "Microfono".
+   */
+  const name = (d: MediaDeviceInfo, i: number) =>
+    (d.label || "").replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, "").trim() || `Input ${i + 1}`
   const here = devices.findIndex((d) => d.deviceId === chosen)
   const label = chosen && here >= 0 ? name(devices[here]!, here) : "System default"
 
