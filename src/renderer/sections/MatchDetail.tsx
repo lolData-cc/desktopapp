@@ -186,7 +186,6 @@ export default function MatchDetail({
           </>
         )}
 
-        {chosen && <Card p={chosen} patch={patch} match={match} rank={chosen.riotId ? ranks[chosen.riotId] ?? null : null} onClose={() => setPicked(null)} />}
         </div>
 
         </div>
@@ -587,113 +586,6 @@ const Bar = ({ label, value, peak, colour }: { label: string; value: number; pea
     </div>
     <p className="mt-[2px] font-jetbrains text-[8px] uppercase tracking-[0.1em] text-flash/20">{label}</p>
   </div>
-)
-
-/* ── one player, opened ──────────────────────────────────────────────────── */
-
-function Card({
-  p,
-  patch,
-  match,
-  rank,
-  onClose,
-}: {
-  p: MatchPlayer
-  patch: string
-  match: Match
-  rank: PlayerRank | null
-  onClose: () => void
-}) {
-  const [slug, setSlug] = useState<string | null>(null)
-  useEffect(() => {
-    let alive = true
-    void championById(p.championId).then((c) => { if (alive) setSlug(c?.slug ?? null) }).catch(() => undefined)
-    return () => { alive = false }
-  }, [p.championId])
-
-  const mins = Math.max(1, match.durationSeconds / 60)
-  const games = rank ? rank.wins + rank.losses : 0
-
-  return (
-    /* ⚠️ Centred, not top-aligned. The blocks in here are different heights —
-       a 48px portrait, a crest, two three-row tables — so aligning their tops
-       left every one of them sitting at a different height down the panel. */
-    <div className="ds-enter mb-4 flex flex-wrap items-center gap-x-9 gap-y-4 px-4 py-4" style={{ background: "rgba(0,217,146,0.045)", boxShadow: "inset 2px 0 0 0 rgba(0,217,146,0.5)" }}>
-      <div className="flex items-center gap-3">
-        {slug && <img src={`${CDN}/${patch}/img/champion/${slug}.png`} alt="" className="h-12 w-12 rounded-[3px] ring-1 ring-jade/20" />}
-        <div>
-          <p className="font-chakrapetch text-[15px] font-bold leading-tight">{p.name}</p>
-          <p className="font-jetbrains text-[9px] uppercase tracking-[0.14em] text-flash/30">
-            {slug ?? "—"}{p.role ? ` · ${p.role.toLowerCase()}` : ""} · level {p.champLevel}
-          </p>
-        </div>
-      </div>
-
-      {/* ⚠️ The rank, with its record beside it. "Emerald II" alone says
-          nothing about whether they belong there; 148W 133L does. */}
-      <div className="flex items-center gap-2.5">
-        {rank?.tier && (
-          <img
-            src={`${CDRAGON}/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-mini-crests/${rank.tier.toLowerCase()}.svg`}
-            alt=""
-            className="h-9 w-9"
-          />
-        )}
-        <div>
-          {/* ⚠️ Printed as the client writes it. Lowercasing and then applying
-              `capitalize` turned "EMERALD III" into "Emerald Iii", because the
-              rule capitalises every word and a roman numeral is a word. */}
-          <p className="font-jetbrains text-[11px] font-bold uppercase tracking-[0.1em] leading-tight text-flash/85">
-            {rank ? rankLabel(rank) : "unranked"}
-          </p>
-          {games > 0 && (
-            <p className="font-jetbrains text-[9px] tabular-nums text-flash/25">
-              {rank!.wins}W {rank!.losses}L · {Math.round((rank!.wins / games) * 100)}%
-            </p>
-          )}
-        </div>
-      </div>
-
-      <Facts
-        rows={[
-          ["score", `${p.kills} / ${p.deaths} / ${p.assists}`],
-          ["damage dealt", `${short(p.damage)} · ${short(p.damage / mins)} a minute`],
-          ["damage taken", short(p.damageTaken)],
-        ]}
-      />
-      <Facts
-        rows={[
-          ["creep score", `${p.creepScore} · ${(p.creepScore / mins).toFixed(1)} a minute`],
-          ["gold", `${short(p.goldEarned)} · ${short(p.goldEarned / mins)} a minute`],
-          // ⚠️ The ward count only when there IS one. This payload does not
-          // always carry it, and "0 wards placed" beside a vision score of six
-          // is the app asserting something it was never told.
-          ["vision", p.wardsPlaced > 0 ? `${p.visionScore} · ${p.wardsPlaced} wards` : String(p.visionScore)],
-        ]}
-      />
-
-      <button
-        type="button"
-        onClick={onClose}
-        className="win-btn ml-auto h-7 shrink-0 rounded-[3px] px-3 font-jetbrains text-[9px] uppercase tracking-[0.16em] text-flash/35"
-      >
-        close
-      </button>
-    </div>
-  )
-}
-
-const Facts = ({ rows }: { rows: [string, string][] }) => (
-  <table className="border-separate border-spacing-y-[3px]">
-    <tbody>
-      {rows.map(([k, v]) => (
-        <tr key={k}>
-          <td className="pr-5 font-jetbrains text-[9px] uppercase tracking-[0.1em] text-flash/25">{k}</td>
-          <td className="font-chakrapetch text-[12.5px] font-bold tabular-nums text-flash/80">{v}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
 )
 
 const short = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)))
