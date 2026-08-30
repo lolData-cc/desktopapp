@@ -22,12 +22,28 @@ import { championByName } from "../data/champions"
  * like when nobody has decided what it should look like.
  */
 
-export const KIND: Record<Highlight["kind"], { colour: string; label: string }> = {
+export const KIND: Record<
+  Highlight["kind"],
+  { colour: string; label: string; /** Says which way it went, in a word. */ relation?: string }
+> = {
   kill: { colour: "#00d992", label: "kill" },
   multi: { colour: "#FFB615", label: "multikill" },
-  death: { colour: "#ff6286", label: "death" },
-  assist: { colour: "#7f8386", label: "assist" },
+  death: { colour: "#ff6286", label: "death", relation: "by" },
+  assist: { colour: "#7f8386", label: "assist", relation: "on" },
 }
+
+/**
+ * ⚠️ WHO KILLED WHOM IS ALWAYS KNOWN, and the word above is how it gets said.
+ *
+ * Every mark is about YOU - events you are not in are never marked - so the
+ * mark names only the other player, and the kind carries the direction: a kill
+ * names the victim, a death names the killer, an assist names the victim.
+ *
+ * That was true before this word existed and it was still unreadable, because
+ * nothing SAID it: "death 6:42 Kha'Zix" can be read as Kha'Zix having died. The
+ * colour and the glyph both carried the direction and neither of them is a
+ * word. "death by Kha'Zix" cannot be read the wrong way round.
+ */
 
 /**
  * Marks closer together than this are ONE moment.
@@ -303,6 +319,11 @@ function Wash({
       <span className="ml-2.5 font-jetbrains text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>
         {mmss(over.at / 1000)}
       </span>
+      {KIND[over.kind].relation && (
+        <span className="ml-3 font-jetbrains text-[9px] lowercase" style={{ color: "rgba(255,255,255,0.35)" }}>
+          {KIND[over.kind].relation}
+        </span>
+      )}
       {/* WARNING: every name in the cluster. A pin that swallowed three kills
           used to print the first one and looked like a mistake: the count said
           three and the card named one. */}
@@ -344,7 +365,7 @@ function Who({
   terse?: boolean
 }) {
   return (
-    <span className="ml-3 flex items-center gap-1.5">
+    <span className="ml-2 flex items-center gap-1.5">
       {m.champion && (
         <img
           src={`${CDN}/${patch}/img/champion/${m.champion}.png`}

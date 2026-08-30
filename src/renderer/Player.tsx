@@ -487,6 +487,12 @@ export default function Player({
           >
             {KIND[nearest.kind].label}
           </span>
+          {/* The direction, in a word - see KIND in PlayerMarks. */}
+          {KIND[nearest.kind].relation && (
+            <span className="font-jetbrains text-[9px] lowercase text-flash/35">
+              {KIND[nearest.kind].relation}
+            </span>
+          )}
           {/* ⚠️ The champion leads the name here for the same reason it does on
               the timeline: while the fight is on screen, a face is recognised
               and a stranger's summoner name has to be read. The icon is dropped
