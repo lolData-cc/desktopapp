@@ -63,7 +63,15 @@ export function rankLabel(rank: PlayerRank): string {
 }
 
 /** One moment worth jumping to, timestamped against its recording. */
-export type Highlight = { at: number; kind: "kill" | "death" | "assist" | "multi"; label: string }
+export type Highlight = {
+  at: number
+  kind: "kill" | "death" | "assist" | "multi"
+  label: string
+  /** The ddragon slug of what they were playing, e.g. "LeeSin". Absent on
+   *  every recording made before this existed, and on any player Riot would
+   *  not name - see shell/capture.ts, which this mirrors. */
+  champion?: string
+}
 
 /** One recorded game. Mirrors Recording in shell/capture.ts. */
 export type Recording = {

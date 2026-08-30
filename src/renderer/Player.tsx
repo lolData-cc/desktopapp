@@ -487,8 +487,36 @@ export default function Player({
           >
             {KIND[nearest.kind].label}
           </span>
+          {/* ⚠️ The champion leads the name here for the same reason it does on
+              the timeline: while the fight is on screen, a face is recognised
+              and a stranger's summoner name has to be read. The icon is dropped
+              silently when the mark has no champion - an older recording, a
+              turret execute, a player Riot withheld - and the tag is then
+              exactly what it always was. */}
+          {nearest.champion && (
+            <img
+              src={`${CDN}/${patch}/img/champion/${nearest.champion}.png`}
+              alt=""
+              className="h-[17px] w-[17px] rounded-[2px]"
+              style={{ boxShadow: "0 0 0 1px rgba(0,0,0,0.6)" }}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }}
+            />
+          )}
+          {nearest.champion && (
+            <span className="font-chakrapetch text-[12px] font-bold text-flash/80">
+              {nearest.champion}
+            </span>
+          )}
           {nearest.label && (
-            <span className="font-chakrapetch text-[12px] font-bold text-flash/80">{nearest.label}</span>
+            <span
+              className={
+                nearest.champion
+                  ? "font-jetbrains text-[9px] text-flash/40"
+                  : "font-chakrapetch text-[12px] font-bold text-flash/80"
+              }
+            >
+              {nearest.label}
+            </span>
           )}
         </div>
       )}
@@ -602,7 +630,7 @@ export default function Player({
         />
         )}
 
-        <Timeline at={at} total={total} buffered={buffered} pins={pins} onSeek={seek} runup={RUNUP} />
+        <Timeline at={at} total={total} buffered={buffered} pins={pins} onSeek={seek} runup={RUNUP} patch={patch} />
 
         <div className="mt-1.5 flex items-center gap-3" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>
           <Clock at={at} total={total} />

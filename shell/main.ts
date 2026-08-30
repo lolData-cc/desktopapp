@@ -1780,7 +1780,7 @@ async function readGame(): Promise<void> {
 
   readObjective(stats.gameTime, events, players ?? [], me, stats.mapTerrain)
 
-  if (state.recording) markHighlights(events, me, stats.gameTime)
+  if (state.recording) markHighlights(events, me, stats.gameTime, await championIndex(players ?? []))
 
   void readScoreboard(players ?? [], me, myTeam, stats.gameTime)
 }
@@ -1923,6 +1923,59 @@ async function startRecording(championId: string | null, championName: string | 
 }
 
 /**
+ * Champion display name -> ddragon slug, for the life of the process.
+ *
+ * ⚠️ Memoised because `championByName` LINEAR-SCANS ~170 champions, and the
+ * index below is rebuilt on every two-second poll. Ten scans a poll for a
+ * fifty-minute game is 15,000 scans to learn ten answers that never change.
+ */
+const slugByChampion = new Map<string, string>()
+
+/**
+ * Every name a player might be called in the event feed -> the champion they
+ * are playing.
+ *
+ * ⚠️ EVERY SPELLING, and this is the whole difficulty. The formats do NOT agree
+ * across Riot's own endpoints, verified live and written down in
+ * src/data/objectives.ts: `/playerlist` returned the TAGGED "yuumi45#EU1" in
+ * both `riotId` and `summonerName`, while a kill event's `KillerName` is the
+ * bare "yuumi45" with the tag stripped. An index keyed on one spelling resolves
+ * nothing, and it fails in silence - the mark is still written, just without a
+ * champion, so the bug looks like "the data is missing" rather than "the key is
+ * wrong". That is exactly how this repo was caught once already.
+ */
+async function championIndex(players: PlayerSlot[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+
+  for (const p of players) {
+    const shown = p.championName
+    if (!shown) continue
+
+    let slug = slugByChampion.get(shown)
+    if (slug === undefined) {
+      // ⚠️ "" is cached too, so a champion the table cannot resolve - a
+      // localised client - is not looked up again every two seconds forever.
+      slug = (await championByName(shown))?.slug ?? ""
+      slugByChampion.set(shown, slug)
+    }
+    if (!slug) continue
+
+    const add = (n?: string) => {
+      if (!n) return
+      out.set(n, slug as string)
+      const bare = n.split("#")[0]
+      if (bare && bare !== n) out.set(bare, slug as string)
+    }
+    // riotIdGameName first because it is the bare form the event feed uses.
+    add(p.riotIdGameName)
+    add(p.riotId)
+    add(p.summonerName)
+  }
+
+  return out
+}
+
+/**
  * Put the kills, deaths and assists of this game on the recording's timeline.
  *
  * ⚠️ Positioned from the GAME clock, not from ours.
@@ -1937,7 +1990,12 @@ async function startRecording(championId: string | null, championName: string | 
  * it, because right now we know both what the game clock reads and how long we
  * have been recording.
  */
-function markHighlights(events: GameEvent[], me: string | null, gameTime: number): void {
+function markHighlights(
+  events: GameEvent[],
+  me: string | null,
+  gameTime: number,
+  champions: Map<string, string>
+): void {
   if (!me) return
   const now = recordingClock()
   if (now === null) return
@@ -1951,9 +2009,14 @@ function markHighlights(events: GameEvent[], me: string | null, gameTime: number
     const at = e.EventTime * 1000 + offset
     // EventID is Riot's own identity for the event and is stable across polls.
     const key = `k${e.EventID}`
-    if (isMe(e.KillerName)) mark("kill", e.VictimName ?? "", at, key)
-    else if (isMe(e.VictimName)) mark("death", e.KillerName ?? "", at, key)
-    else if (e.Assisters?.some(isMe)) mark("assist", e.VictimName ?? "", at, key)
+    // ⚠️ Fails SOFT. A killer can be a turret or a minion execute, a player can
+    // be withheld by Riot, and a non-English client names champions in its own
+    // language - all of which resolve to nothing. The mark is still made; it
+    // just carries what it always carried.
+    const champ = (n?: string) => (n ? champions.get(n) ?? null : null)
+    if (isMe(e.KillerName)) mark("kill", e.VictimName ?? "", at, key, champ(e.VictimName))
+    else if (isMe(e.VictimName)) mark("death", e.KillerName ?? "", at, key, champ(e.KillerName))
+    else if (e.Assisters?.some(isMe)) mark("assist", e.VictimName ?? "", at, key, champ(e.VictimName))
   }
 }
 

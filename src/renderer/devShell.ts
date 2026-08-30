@@ -569,18 +569,24 @@ const BASE = {
       width: 1920,
       height: 1080,
       fps: 30,
+      // ⚠️ These used to read "Lillia → Zed", which is not a shape the app has
+      // ever produced: a real mark carries the OTHER player's name on its own,
+      // and now the champion they were playing beside it. A fixture that is
+      // richer than production hides exactly the poverty it should expose.
       highlights: [
-        { at: 214_000, kind: "kill", label: "Lillia → Zed" },
-        { at: 402_000, kind: "death", label: "Khazix → Lillia" },
-        { at: 617_000, kind: "kill", label: "Lillia → Nami" },
+        { at: 214_000, kind: "kill", label: "Kirei", champion: "Zed" },
+        { at: 402_000, kind: "death", label: "Sn0wfl4ke", champion: "Khazix" },
+        { at: 617_000, kind: "kill", label: "aqualung", champion: "Nami" },
         // A teamfight: three kills and a death inside ten seconds. Drawn as one
         // pin each way rather than four marks smeared over four pixels.
-        { at: 1_103_000, kind: "kill", label: "Lillia → Ashe" },
-        { at: 1_105_000, kind: "kill", label: "Lillia → Thresh" },
-        { at: 1_108_000, kind: "kill", label: "Lillia → Zed" },
-        { at: 1_110_000, kind: "death", label: "Camille → Lillia" },
-        { at: 1_402_000, kind: "assist", label: "Ashe → Zed" },
-        { at: 1_690_000, kind: "kill", label: "Lillia → Khazix" },
+        { at: 1_103_000, kind: "kill", label: "Frostbite", champion: "Ashe" },
+        { at: 1_105_000, kind: "kill", label: "hooklord", champion: "Thresh" },
+        { at: 1_108_000, kind: "kill", label: "Kirei", champion: "Zed" },
+        { at: 1_110_000, kind: "death", label: "steelcut", champion: "Camille" },
+        { at: 1_402_000, kind: "assist", label: "Kirei", champion: "Zed" },
+        // ⚠️ No champion on purpose: a turret execute, an older recording, a
+        // player Riot withheld. The mark must still draw, and read.
+        { at: 1_690_000, kind: "kill", label: "Sn0wfl4ke" },
       ],
     },
     /**
@@ -607,10 +613,13 @@ const BASE = {
       height: 1080,
       fps: 30,
       highlights: [
-        { at: 2_000, kind: "kill", label: "Nami → Zed" },
-        { at: 4_000, kind: "death", label: "Zed → Nami" },
-        { at: 6_000, kind: "assist", label: "Ashe → Zed" },
-        { at: 8_000, kind: "multi", label: "Double kill" },
+        { at: 2_000, kind: "kill", label: "Kirei", champion: "Zed" },
+        // ⚠️ "Lee Sin", not "LeeSin": the mark stores the SLUG and the name is
+        // resolved for display. This is the case that catches a reader printing
+        // the slug and calling it a name.
+        { at: 4_000, kind: "death", label: "sensei", champion: "LeeSin" },
+        { at: 6_000, kind: "assist", label: "Frostbite", champion: "Ashe" },
+        { at: 8_000, kind: "multi", label: "hooklord", champion: "Thresh" },
       ],
     },
   ],

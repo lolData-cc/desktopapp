@@ -35,6 +35,20 @@ export type Highlight = {
   kind: "kill" | "death" | "assist" | "multi"
   /** Who it involved, when that is worth saying. */
   label: string
+  /**
+   * What they were playing - the ddragon slug, e.g. "LeeSin".
+   *
+   * ⚠️ OPTIONAL, and it has to stay that way. `readIndex` is a bare
+   * `JSON.parse(...) as Recording[]` with no validation and no version, so
+   * every recording already on disk loads with this simply absent. There is no
+   * migration and there must not be one: a required field here would be a type
+   * that lies about what is in the file.
+   *
+   * ⚠️ The SLUG, not the display name and not the numeric id. It is what the
+   * CDN keys champion art on, and it is the one spelling that is stable - the
+   * display name is localised by the game client, and "Lee Sin" is not a path.
+   */
+  champion?: string
 }
 
 export type Recording = {
@@ -317,10 +331,23 @@ ipcMain.on("capture:started", (_e, info: { width: number; height: number; fps: n
  * The dedupe was no defence, because it compared the mark TIMES, and those
  * kept advancing. It has to be the event's own identity.
  */
-export function mark(kind: Highlight["kind"], label: string, at: number, key: string): void {
+export function mark(
+  kind: Highlight["kind"],
+  label: string,
+  at: number,
+  key: string,
+  champion?: string | null
+): void {
   if (!current || marked.has(key)) return
   marked.add(key)
-  current.highlights.push({ at: Math.max(0, Math.round(at)), kind, label })
+  // Written only when it is known: an absent champion and an empty one mean the
+  // same thing to every reader, and one of them does not sit in the file.
+  current.highlights.push({
+    at: Math.max(0, Math.round(at)),
+    kind,
+    label,
+    ...(champion ? { champion } : {}),
+  })
 }
 
 /** Milliseconds into the running recording, right now — or null if there is

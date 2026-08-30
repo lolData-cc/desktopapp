@@ -1,5 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react"
-import { mmss, type Highlight } from "./types"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { CDN, mmss, type Highlight } from "./types"
+import { championByName } from "../data/champions"
 
 /**
  * The timeline, and the marks on it.
@@ -46,7 +47,17 @@ const CLUSTER_MS = 10_000
  * count said three and the card named one. Everyone who was in the fight is in
  * the fight.
  */
-export type Pin = { at: number; kind: Highlight["kind"]; count: number; labels: string[] }
+/**
+ * One player named on a mark, and what they were playing.
+ *
+ * ⚠️ An OBJECT, where this used to be a bare string. `Pin` is a projection of
+ * the marks, and a projection quietly drops anything it was not told to keep -
+ * so a champion added to `Highlight` reaches the file, the index and the tag
+ * over the video, and then stops dead at the timeline.
+ */
+export type Mention = { name: string; champion?: string }
+
+export type Pin = { at: number; kind: Highlight["kind"]; count: number; labels: Mention[] }
 
 export function pinsFrom(marks: Highlight[]): Pin[] {
   const out: Pin[] = []
@@ -55,12 +66,13 @@ export function pinsFrom(marks: Highlight[]): Pin[] {
     // halves of the story, and collapsing them into "4 things happened" throws
     // away which way it went.
     const open = [...out].reverse().find((p) => p.kind === m.kind)
+    const said: Mention[] = m.label || m.champion ? [{ name: m.label, champion: m.champion }] : []
     if (open && m.at - open.at < CLUSTER_MS) {
       open.count++
-      if (m.label) open.labels.push(m.label)
+      open.labels.push(...said)
       continue
     }
-    out.push({ at: m.at, kind: m.kind, count: 1, labels: m.label ? [m.label] : [] })
+    out.push({ at: m.at, kind: m.kind, count: 1, labels: said })
   }
   return out
 }
@@ -72,6 +84,7 @@ export function Timeline({
   pins,
   onSeek,
   runup,
+  patch,
 }: {
   at: number
   total: number
@@ -79,6 +92,10 @@ export function Timeline({
   pins: Pin[]
   onSeek: (seconds: number) => void
   runup: number
+  /** ⚠️ Champion art is served UNDER A PATCH - `/16.16.1/img/champion/Nami.png`.
+   *  There is no unversioned copy; asking for one is a 404 that `onError` then
+   *  hides, which reads as "no icon" rather than "wrong URL". */
+  patch: string
 }) {
   const [hover, setHover] = useState<number | null>(null)
   const [over, setOver] = useState<Pin | null>(null)
@@ -138,7 +155,7 @@ export function Timeline({
         * reads as belonging to that mark and never runs off the left end of the
         * bar at 0:12.
         */}
-      {over && <Wash over={over} bar={bar} total={total} />}
+      {over && <Wash over={over} bar={bar} total={total} patch={patch} />}
 
       <div
         ref={setBar}
@@ -227,22 +244,39 @@ export function Timeline({
  * counter-flip fired alone, and every mark past 62% printed its label in mirror
  * writing.
  */
-function Wash({ over, bar, total }: { over: Pin; bar: HTMLDivElement | null; total: number }) {
+function Wash({
+  over,
+  bar,
+  total,
+  patch,
+}: {
+  over: Pin
+  bar: HTMLDivElement | null
+  total: number
+  patch: string
+}) {
   const box = useRef<HTMLDivElement | null>(null)
   const [back, setBack] = useState(false)
+  /** Fits neither way, so it stands at the start of the bar instead of leaving
+   *  it. Detached from its mark, which is a smaller lie than half a label. */
+  const [pinned, setPinned] = useState(false)
 
   const x = Math.min(100, Math.max(0, (over.at / 1000 / total) * 100))
+  // ⚠️ Declared BEFORE the measurement below, which depends on it: the wash
+  // must not choose which way to grow while it is still a champion name short
+  // of its final width.
+  const names = useChampionNames(over.labels)
 
   useLayoutEffect(() => {
     const w = bar?.clientWidth ?? 0
     const mine = box.current?.getBoundingClientRect().width ?? 0
     if (!w || !mine) return
     const at = (x / 100) * w
-    // Forward unless it would not fit - and if it fits neither way, forward,
-    // because running off the END of a bar is easier to read past than running
-    // off the start, where the controls are.
-    setBack(at + mine > w && at - mine >= 0)
-  }, [x, total, bar, over])
+    const forward = at + mine <= w
+    const backward = at - mine >= 0
+    setBack(!forward && backward)
+    setPinned(!forward && !backward)
+  }, [x, total, bar, over, names])
 
   const c = KIND[over.kind].colour
 
@@ -251,7 +285,7 @@ function Wash({ over, bar, total }: { over: Pin; bar: HTMLDivElement | null; tot
       ref={box}
       className="clip-arrive pointer-events-none absolute -top-[30px] z-10 flex items-baseline whitespace-nowrap py-1.5"
       style={{
-        [back ? "right" : "left"]: `${back ? 100 - x : x}%`,
+        [back ? "right" : "left"]: pinned ? 0 : `${back ? 100 - x : x}%`,
         // The tail is the long side and always points AWAY from the mark, so it
         // still reads as growing out of it.
         paddingLeft: back ? 64 : 12,
@@ -273,12 +307,100 @@ function Wash({ over, bar, total }: { over: Pin; bar: HTMLDivElement | null; tot
           used to print the first one and looked like a mistake: the count said
           three and the card named one. */}
       {over.labels.map((l, i) => (
-        <span key={i} className="ml-3 font-chakrapetch text-[12.5px] font-bold text-white">
-          {l}
-        </span>
+        // ⚠️ A CLUSTER SHOWS CHAMPIONS ONLY. Three icons, three champions and
+        // three summoner names is wider than the bar it has to sit on, and a
+        // label that leaves the bar has stopped labelling anything. In a
+        // teamfight the champion is the answer anyway - the count above the
+        // mark already says how many.
+        <Who key={i} m={l} patch={patch} names={names} terse={over.labels.length > 1} />
       ))}
     </div>
   )
+}
+
+/**
+ * One player on a mark: what they were playing, then who they are.
+ *
+ * ⚠️ The CHAMPION leads. A marker that said only "Caoskhimera" asked you to
+ * remember which of ten strangers that was; the picture answers it before the
+ * word is read, which is the whole reason it is here.
+ *
+ * ⚠️ Everything degrades one step at a time. No champion on the mark - an old
+ * recording, a turret execute, a withheld player - and it is the name alone,
+ * exactly as before. A champion whose display name has not resolved yet shows
+ * the slug, which is the same word for all but a handful of champions. A name
+ * that is empty leaves the champion standing on its own.
+ */
+function Who({
+  m,
+  patch,
+  names,
+  terse,
+}: {
+  m: Mention
+  patch: string
+  names: Map<string, string>
+  /** Drop the summoner name. Set when the pin holds more than one player. */
+  terse?: boolean
+}) {
+  return (
+    <span className="ml-3 flex items-center gap-1.5">
+      {m.champion && (
+        <img
+          src={`${CDN}/${patch}/img/champion/${m.champion}.png`}
+          alt=""
+          className="h-[15px] w-[15px] rounded-[2px]"
+          style={{ boxShadow: "0 0 0 1px rgba(0,0,0,0.55)" }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }}
+        />
+      )}
+      {m.champion && (
+        <span className="font-chakrapetch text-[12.5px] font-bold text-white">
+          {names.get(m.champion) ?? m.champion}
+        </span>
+      )}
+      {m.name && !(terse && m.champion) && (
+        <span
+          className={`font-jetbrains text-[9px] ${m.champion ? "text-white/45" : "text-white"}`}
+        >
+          {m.name}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Slugs -> the names people say out loud.
+ *
+ * ⚠️ The mark stores the SLUG, because that is what the art is keyed on and the
+ * one spelling that does not move. It is not always the name: "LeeSin" is "Lee
+ * Sin" and "Kaisa" is "Kai'Sa". For most champions the two are identical, which
+ * is exactly why printing the slug is a safe thing to do while this resolves,
+ * and a bad thing to settle for.
+ */
+function useChampionNames(mentions: Mention[]): Map<string, string> {
+  const [names, setNames] = useState<Map<string, string>>(new Map())
+  const slugs = mentions.map((m) => m.champion).filter(Boolean) as string[]
+  const key = slugs.join(",")
+
+  useEffect(() => {
+    let alive = true
+    void Promise.all(
+      slugs.map((s) =>
+        championByName(s)
+          .then((c) => [s, c?.name] as const)
+          .catch(() => [s, undefined] as const)
+      )
+    ).then((pairs) => {
+      if (!alive) return
+      setNames(new Map(pairs.filter((p): p is readonly [string, string] => !!p[1])))
+    })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  return names
 }
 
 /**
