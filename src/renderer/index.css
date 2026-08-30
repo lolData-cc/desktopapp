@@ -980,9 +980,28 @@ body {
        so the floor is fixed and the percentage only lets it grow. */
     flex: 0 0 clamp(620px, 38%, 720px);
     min-width: 0;
-    /* Ten rows are usually taller than the picture beside them. The column
-       keeps the picture's height and takes the overflow itself, rather than
-       dragging the whole page down and leaving the video stranded at the top. */
+
+    /* ⚠️ The board must not DRIVE the row's height, only follow it.
+
+       The recording is a 16:9 box — 518 tall at this column width — while ten
+       rows want ~644. With plain stretch the taller one wins, so the row became
+       644 and the video sat in it with 90px of dead space beneath: "the player
+       is shorter than the scoreboard". Making the picture taller would mean
+       cropping it or putting the side bars back, both already rejected.
+
+       So its content is taken out of flow (the inner element is absolute), which
+       leaves this box contributing nothing. `stretch` then gives it exactly the
+       height the picture set, and the rows scroll inside it.
+
+       ⚠️ NOT `height: 0; min-height: 100%`, which was the first attempt: the
+       percentage resolves against a height that depends on this element, and the
+       board collapsed to zero and vanished off the screen. */
+    position: relative;
+  }
+
+  .match-stage-board > .match-stage-board-inner {
+    position: absolute;
+    inset: 0;
     overflow-y: auto;
   }
 
@@ -1153,4 +1172,13 @@ body {
      it: a bead crossing forever is the one thing here that never settles. */
   .standby-run, .standby-spine { animation: none; }
   .standby-ping { animation: none; opacity: 0; }
+}
+
+/* The loading arc in the player card. Two speeds on one element: the ring
+   turns, and the lit arc breathes as it goes, so it reads as something
+   working rather than as a wheel going round. */
+@keyframes cySpin { to { transform: rotate(360deg); } }
+.cy-spin svg { animation: cySpin 1.15s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) {
+  .cy-spin svg { animation-duration: 3s; animation-timing-function: linear; }
 }

@@ -22,6 +22,8 @@ const API = "https://api2.loldata.cc"
 const profileCache = new Map<string, Profile | null>()
 const champCache = new Map<string, ChampCore | null>()
 
+type Recent = { champion: string; win: boolean }
+
 type Profile = {
   name: string
   tag: string
@@ -30,6 +32,9 @@ type Profile = {
   wins: number
   losses: number
   profileIconId: number | null
+  /** Their last ranked games, newest first. Solo and flex only — a normal game
+   *  says nothing about the player you are reading a ranked scoreboard for. */
+  recent: Recent[]
 }
 
 type ChampCore = {
@@ -56,12 +61,14 @@ export default function MatchInsights({
     <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
       <Bars board={board} chosen={chosen} label="damage dealt" pick={(p) => p.damage} />
       <Bars board={board} chosen={chosen} label="damage taken" pick={(p) => p.damageTaken} />
-      <Bars board={board} chosen={chosen} label="gold earned" pick={(p) => p.goldEarned} />
+      {/* The profile takes the third column. Gold was the weakest of the three
+          charts — it tracks damage and CS closely enough to be a third drawing
+          of the same thing — and a card about the player is worth more there. */}
+      <ProfileCard chosen={chosen} />
 
-      <div className="xl:col-span-2">
+      <div className="xl:col-span-3">
         <ChampionCard chosen={chosen} patch={patch} />
       </div>
-      <ProfileCard chosen={chosen} />
     </div>
   )
 }
@@ -189,13 +196,30 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
     let alive = true
     setProfile(undefined)
     const [name, tag] = riot.split("#")
-    void fetch(`${API}/api/summoner`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, tag, region: "euw" }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: any) => {
+    // Two requests, one card. The profile answers "who is this" and the history
+    // answers "what have they been playing"; neither endpoint carries the other.
+    void Promise.all([
+      fetch(`${API}/api/summoner`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, tag, region: "euw" }),
+      }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${API}/api/matches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, tag, region: "euw", offset: 0, limit: 20 }),
+      }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+      .then(([d, h]: any[]) => {
+        // ⚠️ Solo and flex only. A normal or an ARAM says nothing about the
+        // player whose ranked scoreboard you are reading, and mixing them in
+        // would make the row of champions answer a different question.
+        const recent: Recent[] = ((h?.matches ?? []) as any[])
+          .filter((m) => [420, 440].includes(m?.match?.info?.queueId))
+          .slice(0, 10)
+          .map((m) => ({ champion: String(m.championName ?? ""), win: m.win === true }))
+          .filter((r) => r.champion)
+
         const p: Profile | null = d?.summoner
           ? {
               name: d.summoner.name,
@@ -205,6 +229,7 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
               wins: Number(d.summoner.wins) || 0,
               losses: Number(d.summoner.losses) || 0,
               profileIconId: d.summoner.profileIconId ?? null,
+              recent,
             }
           : null
         profileCache.set(riot, p)
@@ -224,7 +249,17 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
   // Riot withholds the identity of some players entirely; that is the answer,
   // not a delay.
   if (!riot) return <Empty title={chosen.name}>Riot does not publish this account.</Empty>
-  if (profile === undefined) return <Empty title={chosen.name}>Reading their profile…</Empty>
+  if (profile === undefined)
+    return (
+      <Panel label="the player">
+        <div className="mt-6 flex flex-col items-center gap-3 pb-3">
+          <Spinner />
+          <p className="font-jetbrains text-[9px] uppercase tracking-[0.24em] text-flash/25">
+            reading {chosen.name}
+          </p>
+        </div>
+      </Panel>
+    )
   if (!profile) return <Empty title={chosen.name}>No profile for this account.</Empty>
 
   const games = profile.wins + profile.losses
@@ -265,6 +300,38 @@ function ProfileCard({ chosen }: { chosen: MatchPlayer | null }) {
           )}
         </Fact>
       </div>
+
+      {/* Their last ranked games, newest first. The border carries the result,
+          so the row reads as a streak at a glance rather than as ten pictures
+          that each have to be decoded. */}
+      {profile.recent.length > 0 && (
+        <>
+          <p className="mt-4 font-jetbrains text-[8.5px] uppercase tracking-[0.2em] text-flash/25">
+            last {profile.recent.length} ranked
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {profile.recent.map((r, i) => (
+              <img
+                key={`${r.champion}-${i}`}
+                src={`${CDN}/img/champion/${r.champion}.png`}
+                alt={r.champion}
+                title={`${r.champion} — ${r.win ? "win" : "loss"}`}
+                loading="lazy"
+                className="h-7 w-7 rounded-[3px] border object-cover"
+                style={{
+                  borderColor: r.win ? "rgba(0,217,146,0.75)" : "rgba(255,98,134,0.7)",
+                  // A hairline of the same colour outside the border, so the
+                  // result reads at a glance without thickening the frame.
+                  boxShadow: r.win
+                    ? "0 0 0 1px rgba(0,217,146,0.16)"
+                    : "0 0 0 1px rgba(255,98,134,0.16)",
+                }}
+                onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden" }}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </Panel>
   )
 }
@@ -419,6 +486,26 @@ function Against({
     </div>
   )
 }
+
+/**
+ * The loading circle: an arc that runs, not a solid ring that spins.
+ *
+ * A full circle turning reads as a generic spinner from any other program. An
+ * arc with a lit head is the same figure the rest of this app draws — light
+ * that travels and dies — and it belongs here without needing a library.
+ */
+const Spinner = () => (
+  <span aria-hidden className="cy-spin relative block h-9 w-9">
+    <svg viewBox="0 0 36 36" className="h-full w-full">
+      <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(0,217,146,0.12)" strokeWidth="1.5" />
+      <circle
+        cx="18" cy="18" r="15.5" fill="none"
+        stroke="#00d992" strokeWidth="1.5" strokeLinecap="round"
+        pathLength={100} strokeDasharray="26 74"
+      />
+    </svg>
+  </span>
+)
 
 /* ── shared bits ─────────────────────────────────────────────────────────── */
 

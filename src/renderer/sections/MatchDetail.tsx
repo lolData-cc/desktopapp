@@ -155,6 +155,7 @@ export default function MatchDetail({
 
         {/* ── the scoreboard ───────────────────────────────────────────── */}
         <div className="match-stage-board">
+          <div className="match-stage-board-inner">
         {!board ? (
           <p className="font-chakrapetch text-[12.5px] text-flash/30">
             The client did not give up the rest of this game's scoreboard.
@@ -188,6 +189,7 @@ export default function MatchDetail({
 
         </div>
 
+          </div>
         </div>
 
         {/* ⚠️ After the ROW but still inside the SCROLLER.

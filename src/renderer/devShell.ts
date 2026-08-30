@@ -35,7 +35,7 @@ const BP = (
  * the ten rows and the player card were all unreachable in a browser.
  */
 const DEV_BOARD = [
-  BP(1, 100, 875, "KR Heartsteel", "TOP", 1, 4, 3, 214, 12400, 15700, 19100, 16, true),
+  BP(1, 100, 875, "Caoskhimera", "TOP", 1, 4, 3, 214, 12400, 15700, 19100, 16, true),
   BP(2, 100, 876, "yuumi45", "JUNGLE", 13, 3, 13, 187, 14200, 46500, 24100, 18, true, true),
   BP(3, 100, 134, "Pretty Hands", "MIDDLE", 14, 3, 11, 240, 15100, 30700, 17300, 16, true),
   BP(4, 100, 201, "Bark for Braum", "BOTTOM", 8, 7, 10, 198, 11800, 34800, 22600, 14, true),
